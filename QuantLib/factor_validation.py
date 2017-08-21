@@ -1,7 +1,7 @@
 import pandas as pd
 import stockFilter
 
-from data_source.base_data_source_h5 import data_source
+from FactorLib.data_source.base_data_source_h5 import data_source
 
 
 # 计算因子的IC值

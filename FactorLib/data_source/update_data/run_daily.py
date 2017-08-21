@@ -1,11 +1,11 @@
 
-from data_source.base_data_source_h5 import data_source
-from data_source.update_data.value_factor import ValueFuncListDaily
-from data_source.update_data.momentum_factor import MomentumFuncListDaily
-from data_source.update_data.liquidity_factor import LiquidityFuncListDaily
-from data_source.update_data.reverse_fator import ReverseFuncListDaily
-from data_source.update_data.time_series_factor import TimeSeriesFuncListDaily
-from data_source.update_data.alternative_factor import AlternativeFuncListDaily
+from ..base_data_source_h5 import data_source
+from ..update_data.value_factor import ValueFuncListDaily
+from ..update_data.momentum_factor import MomentumFuncListDaily
+from ..update_data.liquidity_factor import LiquidityFuncListDaily
+from ..update_data.reverse_fator import ReverseFuncListDaily
+from ..update_data.time_series_factor import TimeSeriesFuncListDaily
+from ..update_data.alternative_factor import AlternativeFuncListDaily
 
 
 def dailyfactors(start, end):
