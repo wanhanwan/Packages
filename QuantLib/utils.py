@@ -1,0 +1,298 @@
+# coding=utf-8
+import pandas as pd
+import numpy as np
+import statsmodels.api as sm
+from scipy.stats import norm
+
+
+def __DropOutlierFixedRate__(data, **kwargs):
+    """以固定比率截断一部分异常值
+
+    参数
+    ----------
+    data: DataFrame
+          [index:IDs,Factor]
+    """
+
+    data = data[kwargs['factor_name']]
+    fixedRatio = kwargs['drop_ratio']
+    quantileMax = data.quantile(1-fixedRatio)
+    quantileMin = data.quantile(fixedRatio)
+
+    if kwargs['drop_mode'] == '截断':
+        after_dropOutlier = data.apply(lambda x: min(x, quantileMax))
+        after_dropOutlier = after_dropOutlier.apply(
+            lambda x: max(x, quantileMin))
+    elif kwargs['drop_mode'] == '剔除':
+        after_dropOutlier = after_dropOutlier.apply(
+            lambda x: np.nan if not (quantileMin < x < quantileMax) else x)
+    after_dropOutlier.rename(data.name+'_after_drop_outlier', inplace=True)
+
+    return pd.concat([data, after_dropOutlier], axis=1)
+
+
+def __DropOutlierMeanVariance__(data, **kwargs):
+    """以均值方差方式截断部分异常值
+
+    参数
+    ----------
+    data: DataFrame
+          [index:IDs,Factor]
+    """
+
+    data = data[kwargs['factor_name']]
+    mean = data.mean()
+    std = data.std()
+    quantileMax = mean + kwargs['alpha'] * std
+    quantileMin = mean - kwargs['alpha'] * std
+
+    if kwargs['drop_mode'] == '截断':
+        after_dropOutlier = data.apply(lambda x: min(x, quantileMax))
+        after_dropOutlier = after_dropOutlier.apply(
+            lambda x: max(x, quantileMin))
+    elif kwargs['drop_mode'] == '剔除':
+        after_dropOutlier = after_dropOutlier.apply(
+            lambda x: np.nan if not (quantileMin < x < quantileMax) else x)
+    after_dropOutlier.rename(data.name+'_after_drop_outlier', inplace=True)
+
+    return pd.concat([data, after_dropOutlier], axis=1)
+
+
+def __DropOutlierMAD__(data, **kwargs):
+    """以MAD方法剔除异常值"""
+
+    data = data[kwargs['factor_name']]
+    median = data.median()
+    MAD = (data - median).abs().median()
+    quantileMax = median + kwargs['alpha'] * MAD
+    quantileMin = median - kwargs['alpha'] * MAD
+
+    if kwargs['drop_mode'] == '截断':
+        after_dropOutlier = data.apply(lambda x: min(x, quantileMax))
+        after_dropOutlier = after_dropOutlier.apply(
+            lambda x: max(x, quantileMin))
+    elif kwargs['drop_mode'] == '剔除':
+        after_dropOutlier = after_dropOutlier.apply(
+            lambda x: np.nan if not (quantileMin < x < quantileMax) else x)
+    after_dropOutlier.rename(data.name+'_after_drop_outlier', inplace=True)
+
+    return pd.concat([data, after_dropOutlier], axis=1)
+
+
+def __DropOutlierBoxPlot__(data, **kwargs):
+    """以BoxPlot方法剔除异常值"""
+
+    data = data[kwargs['factor_name']]
+    Q1 = data.dropna().quantile(0.25)
+    Q3 = data.dropna().quantile(0.75)
+    IQR = Q3 - Q1
+
+    md = data.median()
+    xi = data[data > md].values
+    xj = data[data < md].values
+
+    mc = np.nanmedian(
+        [((x0-md)-(md-x1))/(x0-x1) for x0 in xi for x1 in xj])
+    if mc >= 0:
+        quantileMax = Q3 + 1.5 * np.exp(4 * mc) * IQR
+        quantileMin = Q1 - 1.5 * np.exp(-3.5 * mc) * IQR
+    else:
+        quantileMin = Q1 - 1.5 * np.exp(-4 * mc) * IQR
+        quantileMax = Q3 + 1.5 * np.exp(3.5 * mc) * IQR
+
+    if kwargs['drop_mode'] == '截断':
+        after_dropOutlier = data.apply(lambda x: min(x, quantileMax))
+        after_dropOutlier = after_dropOutlier.apply(
+            lambda x: max(x, quantileMin))
+    elif kwargs['drop_mode'] == '剔除':
+        after_dropOutlier = after_dropOutlier.apply(
+            lambda x: np.nan if not (quantileMin < x < quantileMax) else x)
+    after_dropOutlier.rename(data.name+'_after_drop_outlier', inplace=True)
+
+    return pd.concat([data, after_dropOutlier], axis=1)
+
+
+def DropOutlier(data, factor_name, method='FixedRatio',
+                drop_ratio=0.1, drop_mode='截断', alpha=3, **kwargs):
+    """ 处理异常值函数
+
+    参数
+    ------------
+    data: DataFrame
+          [IDs,date,Factor1,Factor2...]
+    factor_name: str
+          which column to be used
+    method: str
+          drop method:{FixedRatio、Mean-Variance、MAD、BoxPlot}
+    drop_mode: str
+          截断 or 剔除
+    alpha: int
+          alpha倍标准差之外的值视为异常值
+
+    输出
+    -------------
+    DataFrame:[index:[date,IDs],factor1,factor2,...]
+    """
+    if ('date' in data.index.names) and ('IDs' in data.index.names):
+        tempData = data[[factor_name]]
+    else:
+        tempData = data[['date', 'IDs', factor_name]].set_index(['date', 'IDs'])
+    dropFuncs = {'FixedRatio': __DropOutlierFixedRate__,
+                 'Mean-Variance': __DropOutlierMeanVariance__,
+                 'MAD': __DropOutlierMAD__,
+                 'BoxPlot': __DropOutlierBoxPlot__}
+    params = {'drop_ratio': drop_ratio, 'drop_mode': drop_mode, 'alpha': alpha,
+              'factor_name': factor_name}
+
+    afterDropOutlier = tempData.groupby(
+        level=0).apply(dropFuncs[method], **params)
+
+    return afterDropOutlier
+
+
+def __StandardFun__(data0, **kwargs):
+    """横截面标准化函数"""
+    data0 = data0.reset_index().set_index(['IDs'])[[kwargs['factor_name']]]
+    IDNums = len(data0)
+    if kwargs['mean_weight'] is not None:
+        avgWeight = data0[kwargs['mean_weight']]
+    else:
+        avgWeight = pd.Series(
+            np.ones(IDNums)/IDNums, index=data0.index)
+    avgWeightInd = pd.notnull(avgWeight)
+    if kwargs['std_weight'] is not None:
+        stdWeight = data0[kwargs['std_weight']]
+    else:
+        stdWeight = pd.Series(
+            np.ones(IDNums)/IDNums, index=data0.index)
+    stdWeightInd = pd.notnull(stdWeight)
+
+    # 计算横截面均值
+    data0Ind = pd.notnull(data0[kwargs['factor_name']])
+    tempInd = data0Ind & avgWeightInd
+    totalWeight = avgWeight.ix[tempInd].sum()
+    if totalWeight != 0:
+        avg = (data0[kwargs['factor_name']] * avgWeight).sum() / totalWeight
+    else:
+        data0[kwargs['factor_name']+'_after_standard'] = np.nan
+        return data0
+    # 计算截面标准差
+    tempInd = data0Ind & stdWeightInd
+    totalWeight = stdWeight[tempInd].sum()
+    if totalWeight != 0:
+        factor = data0[kwargs['factor_name']]
+        std = np.sqrt(
+            ((factor-factor.mean())**2*stdWeight/totalWeight).sum())
+    else:
+        data0[kwargs['factor_name']+'_after_standard'] = np.nan
+        return data0
+    if std != 0:
+        data0[kwargs['factor_name'] +
+              '_after_standard'] = (data0[kwargs['factor_name']] - avg) / std
+    else:
+        data0[kwargs['factor_name']+'_after_standard'] = 0
+    return data0
+
+def __StandardQTFun__(data):
+    data0 = data.reset_index(level=0, drop=True)
+    NotNAN = pd.notnull(data0)
+    quantile = data0.rank(method='min') / NotNAN.sum()
+    quantile.loc[quantile[data.columns[0]]==1, :] = 1 - 10 ** (-6)
+    data_after_standard = norm.ppf(quantile)
+    return pd.DataFrame(data_after_standard, index=data.index, columns=data.columns)
+
+
+def Standard(data, factor_name, mean_weight=None, std_weight=None, **kwargs):
+    """横截面上标准化数据
+
+    参数
+    ----------
+    data: DataFrame
+          [IDs,date,Factor1,Factor2...]
+    factor_name: str
+          which column to be used
+    mean_weight: str or None
+          如果None，均值权重为等权
+    std_weight: str or None
+          如果None， 标准差权重设为等权
+
+    输出
+    -----------
+    DataFrame:[index:[date,IDs],factor1,factor2,...]
+    """
+    factor_name_list = [factor_name]
+    if mean_weight is not None:
+        factor_name_list += [mean_weight]
+    if std_weight is not None:
+        factor_name_list += [std_weight]
+    tempData = data[
+        ['date', 'IDs']+factor_name_list].set_index(['date', 'IDs'])
+    params = {'factor_name': factor_name,
+              'mean_weight': mean_weight, 'std_weight': std_weight}
+    afterStandard = tempData.groupby(level=0).apply(__StandardFun__, **params)
+    return afterStandard
+
+
+def StandardByQT(data, factor_name):
+    """横截面上分位数标准化
+    参数:
+    ----------------------
+    data: DataFrame
+    [index:date,IDs,data:factor1,factor2,...]
+    """
+    factor_name = [factor_name]
+    after_standard = data[factor_name].groupby(level=0).apply(__StandardQTFun__)
+    return after_standard
+
+
+def Orthogonalize(left_data, right_data, left_name, right_name):
+    """因子正交化
+       因子数据的格式为：[date,IDs,factor1,factor2...]
+    参数
+    --------
+    left_name: str
+        因子1对应的列名
+    right_name: str or list
+        因子2对应的列名，有多个因子时可以使用列表
+    industry: str
+        是否加入行业哑变量，None表示不加入行业因子
+    """
+
+    def OLS(data, left_name):
+        tempData = data.copy()
+        yData = np.array(tempData.pop(left_name))
+        xData = np.array(tempData)
+        NaNInd = pd.notnull(yData) & pd.notnull(xData).all(axis=1)
+        model = sm.OLS(yData, xData, missing='drop')
+        res = model.fit()
+        data[left_name+'_orthogonalized'] = np.nan
+        data.ix[NaNInd, left_name+'_orthogonalized'] = res.resid
+        return data
+
+    factor_1 = left_data[[left_name]]
+    if not isinstance(right_name, list):
+        right_name = [right_name]
+    factor_2 = right_data[right_name]
+    factor = pd.concat([factor_1, factor_2], axis=1)
+    factor['alpha'] = 1  # 加入常数项
+    factor = factor.groupby(level=0).apply(OLS, left_name=left_name)
+    return factor[[left_name+'_orthogonalized']]
+
+
+def Generate_Dummy(category_data, drop_first=True):
+    """哑变量生成函数"""
+    dummy = pd.get_dummies(category_data, drop_first=drop_first)
+    return dummy
+
+
+def ScoringFactors(factor_data, factors, **kwargs):
+    """为每一个因子打分
+    factor_data: DataFrame(index:[date, IDs], data:factors)
+    """
+    # 当只有一个因子时，就不需要处理异常值，因为排序都是一样的。
+    if len(factors) == 1:
+        return factor_data[factors]
+    d = factor_data[factors].apply(lambda x: DropOutlier(x.reset_index(), factor_name=x.name, **kwargs)[x.name+'_after_drop_outlier'])
+    d = d.rename(columns=lambda x:x.replace('_after_drop_outlier', ''))
+    dd = d.apply(lambda x: Standard(x.reset_index(), factor_name=x.name, **kwargs)[x.name+'_after_standard'])
+    return dd.rename(columns=lambda x:x.replace('_after_standard', ''))

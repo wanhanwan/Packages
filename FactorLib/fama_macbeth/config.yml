@@ -1,0 +1,20 @@
+# 为单因子测试添加设置文件
+
+# 回测开始日期
+start_date : '20120501'
+# 回测终止日期
+end_date : '20170330'
+# 待测试因子列表文件
+factor_list_file : 'D:/FactorLib/fama_macbeth/factor_list.py'
+# 因子测试股票池,默认是全A. 其他待选项见const.py文件中MARKET_INDEX_DICT变量
+universe : '全A'  # 申万医药
+# 因子换仓频率
+freq : '1m'
+# 回归公式(默认为None)
+formula : ~
+# 因子测试结果输出路径
+result_file_dir : 'D:/FactorLib/fama_macbeth/output'
+
+
+
+

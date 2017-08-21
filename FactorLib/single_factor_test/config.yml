@@ -1,0 +1,63 @@
+# 为单因子测试添加设置文件
+
+# 回测开始日期
+start_date : '20100129'
+# 回测终止日期
+end_date : '20170628'
+# 待测试因子列表文件
+factor_list_file : 'D:/FactorLib/single_factor_test/factor_list.py'
+# 因子测试股票池,默认是全A. 其他待选项见const.py文件中MARKET_INDEX_DICT变量
+universe : '全A'
+# 因子换仓频率
+freq : '1m'
+# 对比基准,默认为中证500
+benchmark : '000905'
+
+mod :
+    # 处理缺失值
+    missing_value_manage :
+        enabled : true
+        priority : 10  # 优先级，数字越小越先执行
+        lib : 'factor_data_process.missing_value_manage'
+        func : ['delete']
+        kwargs : ~
+    #  处理极端值
+    outlier_manage:
+        enabled : false
+        priority : 20
+        lib : 'factor_data_process.outlier_manage'
+        func : ['delete']
+        kwargs : ~
+    # 去掉一字涨停、停牌、ST的股票
+    untradable_stocks_manage:
+        enabled : true
+        priority : 30
+        lib : 'factor_data_process.untradable_stocks_manage'
+        func : ['drop_untradable_stocks']
+        kwargs : ~
+    # 因子分组
+    grouping_manage:
+        enabled : true
+        priority : 40
+        lib : 'factor_data_process.grouping_manage'
+        func : ['typical']
+        kwargs:
+            total_groups : 10
+            industry_name : '申万二级'
+            float_mv_neutral_groups : 20
+    # 股票列表
+    stocklist_manage:
+        enabled : true
+        priority: 40
+        lib : 'factor_data_process.generate_stocklist'
+        func : ['typical']
+        kwargs:
+            industry_neutral : false
+            industry_name : '中信一级'
+            prc : 0.05
+extra :
+    # 因子持久化
+    persist : true
+
+    # 因子测试结果输出路径
+    result_file_dir : 'D:/factors/全市场_中证500基准_2010年以来/'

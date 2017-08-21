@@ -1,0 +1,9 @@
+__pycache__/
+.DS_Store
+*.xml
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Session Data files
+.RData
