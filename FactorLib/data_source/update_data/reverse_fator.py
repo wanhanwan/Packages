@@ -1,5 +1,5 @@
 """反转类因子"""
-from utils.datetime_func import DateStr2Datetime
+from ...utils.datetime_func import DateStr2Datetime
 
 # 过去6个月高点下来的收益
 def six_month_return_from_high(start, end, **kwargs):

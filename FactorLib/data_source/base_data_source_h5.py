@@ -10,6 +10,7 @@ from .trade_calendar import tc
 from .tseries import resample_func, resample_returns
 from ..utils.datetime_func import DateStr2Datetime
 from ..utils.tool_funcs import parse_industry, get_industry_names, financial_data_reindex, windcode_to_tradecode
+from QuantLib.utils import Generate_Dummy
 
 
 class base_data_source(object):
@@ -109,7 +110,7 @@ class base_data_source(object):
         """
         data_src = '/stocks/' if type == 'stock' else '/indexprices/'
         ret = self.load_factor('daily_returns_%', data_src, start_date=start_date, end_date=end_date, ids=ids) / 100
-        return resample_func(ret, convert_to=freq)
+        return resample_returns(ret, convert_to=freq)
 
     def get_past_ndays_return(self, ids, window, start_date, end_date, type='stock'):
         """计算证券在过去N天的累计收益"""
@@ -385,7 +386,7 @@ class sector(object):
         else:
             temp = self.h5DB.load_factor('cs_level_1', '/indexes/', dates=dates)
             index_members = temp[temp['cs_level_1'] == int(ids[2:])]
-        return  index_members[index_members.index.isin(all_stocks.index)]
+        return index_members[index_members.index.isin(all_stocks.index)]
 
     def get_stock_industry_info(self, ids, industry='中信一级', start_date=None, end_date=None, dates=None):
         """股票行业信息"""
@@ -395,6 +396,17 @@ class sector(object):
         symbol = parse_industry(industry)
         industry_info = self.h5DB.load_factor(symbol, '/indexes/', ids=ids, dates=dates)
         return get_industry_names(symbol, industry_info)
+
+    def get_industry_dummy(self, ids, industry='中信一级', start_date=None, end_date=None, dates=None,
+                           drop_first=True):
+        """股票行业哑变量"""
+        industry_info = self.get_stock_industry_info(None, industry, start_date, end_date, dates)
+        dummy = Generate_Dummy(industry_info, drop_first)
+        if ids is not None:
+            if not isinstance(ids, list):
+                ids = [ids]
+            return dummy.loc[pd.IndexSlice[:, ids], :]
+        return dummy
 
     def get_index_weight(self, ids, start_date=None, end_date=None, dates=None):
         """获取指数个股权重"""

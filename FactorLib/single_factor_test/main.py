@@ -1,11 +1,11 @@
 # 单因子测试主函数
 
-from single_factor_test.config import parse_config
-from utils import AttrDict
-from utils.tool_funcs import deep_update_dict
-from environment import Environment
-from factors.panel_factor import panelFactor
-from utils.mod_handler import (FactorDataProcessModHandler,
+from .config import parse_config
+from ..utils import AttrDict
+from ..utils.tool_funcs import deep_update_dict
+from ..environment import Environment
+from ..factors.panel_factor import panelFactor
+from ..utils.mod_handler import (FactorDataProcessModHandler,
                                FactorPerformanceModHandler,
                                FactorStoreModHandler
                                )

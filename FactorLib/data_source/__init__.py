@@ -31,10 +31,6 @@ def save_insert_to_mysql(df, table_name, engine):
     conn.execute(sql)
 
 
-def save_factor(factor, path):
-    h5.save_factor(factor, path)
-
-
 def get_latest_report_date(dates, report_type=None):
     """特定日期序列的最大报告期"""
     ann_report_dates = _get_report_ann_dt(report_type)
@@ -75,4 +71,3 @@ def _get_report_ann_dt(report_type):
         return ann_report_dates[pd.DatetimeIndex(ann_report_dates['date']).month == 9]
     else:
         return ann_report_dates[pd.DatetimeIndex(ann_report_dates['date']).month == 12]
-

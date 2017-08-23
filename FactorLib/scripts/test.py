@@ -1,7 +1,5 @@
 import os
 import pandas as pd
-from utils.strategy_manager import StrategyManager, update_nav, collect_nav
-from utils.excel_io import write_xlsx
+from FactorLib.data_source.base_data_source_h5 import data_source
 
-
-sm = StrategyManager('D:/data/factor_investment_strategies', 'D:/data/factor_investment_stocklists')
+data_source.sector.get_industry_dummy(ids=None, start_date='20170701', end_date='20170831')

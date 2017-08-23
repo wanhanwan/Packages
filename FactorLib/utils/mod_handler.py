@@ -1,7 +1,7 @@
-from utils.tool_funcs import import_mod, ensure_dir_exists
-from utils.excel_io import save_details_to_excel, save_summary_to_excel, save_stock_list
-from utils import AttrDict
-from factor_performance.plotting import FuncList
+from ..utils.tool_funcs import import_mod, ensure_dir_exists
+from ..utils.excel_io import save_details_to_excel, save_summary_to_excel, save_stock_list
+from ..utils import AttrDict
+from ..factor_performance.plotting import FuncList
 import pandas as pd
 
 class FactorDataProcessModHandler(object):

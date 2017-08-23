@@ -1,8 +1,7 @@
 from WindPy import *
-from data_source import save_factor
-from data_source.base_data_source_h5 import sec, tc
-from utils.tool_funcs import ReportDateAvailable, windcode_to_tradecode, tradecode_to_windcode
-from data_source.update_data.update_h5db_base_data import get_ashare
+from ..base_data_source_h5 import sec, tc, h5
+from ...utils.tool_funcs import ReportDateAvailable, windcode_to_tradecode, tradecode_to_windcode
+from ..update_data.update_h5db_base_data import get_ashare
 import pandas as pd
 
 w.start()
@@ -29,7 +28,7 @@ def update_data(field, start, end, params=None, history=False):
     dates = pd.DatetimeIndex(report_dates, name='date')
     data = pd.DataFrame(l, index=dates, columns=tradecodes).stack().to_frame().rename(columns={0:field})
     data.index.names = ['date', 'IDs']
-    save_factor(data, '/stock_financial_data/')
+    h5.save_factor(data, '/stock_financial_data/')
 
 def update_report_ann_dt(start, end):
     """更新报告期和公告期"""
@@ -46,7 +45,7 @@ def update_report_ann_dt(start, end):
     report_ann_dates = pd.DataFrame(ann_dates, index=dates, columns=tradecodes)
     report_ann_dates = report_ann_dates.stack().to_frame().rename(columns={0:'ann_dt'})
     report_ann_dates.index.names = ['date', 'IDs']
-    save_factor(report_ann_dates, '/stock_financial_data/')
+    h5.save_factor(report_ann_dates, '/stock_financial_data/')
     return
 
 

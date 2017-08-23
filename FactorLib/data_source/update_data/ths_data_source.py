@@ -1,8 +1,8 @@
 import pandas as pd
 from iFinDPy import *
-from const import THS_USERID, THS_PASSWORD, THS_BAR_DEFAULT_PARAMS, CS_INDUSTRY_CODES
-from utils.tool_funcs import tradecode_to_windcode, drop_patch
-from data_source.base_data_source_h5 import sec, tc, h5
+from ...const import THS_USERID, THS_PASSWORD, THS_BAR_DEFAULT_PARAMS, CS_INDUSTRY_CODES
+from ...utils.tool_funcs import tradecode_to_windcode, drop_patch
+from ..base_data_source_h5 import sec, tc, h5
 
 THS_iFinDLogin(THS_USERID, THS_PASSWORD)
 

@@ -2,16 +2,12 @@ import pandas as pd
 import numpy as np
 import os
 from empyrical import stats
-from data_source.base_data_source_h5 import data_source
-from data_source.tseries import resample_returns, resample_func
+from ..data_source.base_data_source_h5 import data_source
+from ..data_source.tseries import resample_returns, resample_func
 from functools import partial
 from datetime import datetime
 from pandas.tseries.offsets import MonthBegin, QuarterBegin, YearBegin
-from utils.datetime_func import (GetDatetimeLastDayOfMonth,
-                                 GetDatetimeLastDayOfYear,
-                                 GetDatetimeLastDayOfWeek,
-                                 GetDatetimeLastDay)
-from factors import load_factor
+from ..factors import load_factor
 
 
 class Analyzer(object):

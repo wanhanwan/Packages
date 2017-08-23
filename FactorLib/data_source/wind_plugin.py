@@ -1,15 +1,15 @@
 # wind插件API
 from WindPy import *
-from data_source import data_api
-from data_source.base_data_source_h5 import h5
-from utils.tool_funcs import tradecode_to_windcode, drop_patch
-from const import MARKET_INDEX_WINDCODE
+from . import data_api
+from .base_data_source_h5 import h5
+from ..utils.tool_funcs import tradecode_to_windcode, drop_patch
+from ..const import MARKET_INDEX_WINDCODE
 import pandas as pd
 import xlrd
 import os
 
-current_path = os.path.abspath('.')
-workbook_path = os.sep.join(current_path.split(os.sep)[:2] + ['resource', 'wind_addin.xlsx'])
+current_path = os.path.abspath(os.path.dirname(__file__)+'/../resource')
+workbook_path = os.path.join(current_path, 'wind_addin.xlsx')
 
 argInfoWB = xlrd.open_workbook(workbook_path) 
 argInfo = pd.read_excel(argInfoWB,sheetname='ArgInfo',engine='xlrd')

@@ -1,11 +1,11 @@
-from utils.stocklist_manager import StockListManager
-from single_factor_test.config import parse_config
-from utils import AttrDict
+from .stocklist_manager import StockListManager
+from ..single_factor_test.config import parse_config
+from ..utils import AttrDict
 from datetime import datetime
-from data_source.base_data_source_h5 import tc, h5
-from data_source.wind_plugin import realtime_quote, get_history_bar
-from utils.tool_funcs import windcode_to_tradecode, import_module
-from factor_performance.analyzer import Analyzer
+from ..data_source.base_data_source_h5 import tc, h5
+from ..data_source.wind_plugin import realtime_quote, get_history_bar
+from ..utils.tool_funcs import windcode_to_tradecode, import_module
+from ..factor_performance.analyzer import Analyzer
 import pandas as pd
 import numpy as np
 import os
@@ -283,9 +283,9 @@ def update_nav(start, end):
 
 
 def collect_nav(mailling=False):
-    from const import CS_INDUSTRY_DICT, MARKET_INDEX_DICT
-    from utils.excel_io import write_xlsx
-    from utils.tool_funcs import ensure_dir_exists
+    from ..const import CS_INDUSTRY_DICT, MARKET_INDEX_DICT
+    from .excel_io import write_xlsx
+    from .tool_funcs import ensure_dir_exists
     df = pd.DataFrame()
     sm = StrategyManager('D:/data/factor_investment_strategies', 'D:/data/factor_investment_stocklists')
     for i, f in sm._strategy_dict['name'].iteritems():

@@ -1,6 +1,6 @@
 from openpyxl.styles import Font
 from openpyxl import Workbook
-from utils.tool_funcs import write_df_to_excel, tradecode_to_windcode
+from ..utils.tool_funcs import write_df_to_excel, tradecode_to_windcode
 import os
 import pandas as pd
 

@@ -1,7 +1,7 @@
 from .factor import factor
-from factor_portfolio import FactorGroups
-from factor_performance.fund_performance import LongShortReturn, FactorGroupReturn
-from factor_performance.ic_analyser import IC_Analyzer
+from ..factor_portfolio import FactorGroups
+from ..factor_performance.fund_performance import LongShortReturn, FactorGroupReturn
+from ..factor_performance.ic_analyser import IC_Analyzer
 import pandas as pd
 
 class panelFactor(factor):

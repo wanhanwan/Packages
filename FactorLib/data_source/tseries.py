@@ -76,7 +76,7 @@ def resample_func(data, convert_to, func):
         if 'IDs' in data.index.names:
             data = data.reset_index(level='IDs')
         else:
-            data = data.reset_index(level=1)
+            raise KeyError("No index column named IDs")
         is_mul = True
         p = data.groupby('IDs', group_keys=False).resample(
             rule=offset, closed='right', label='right').agg(func)
@@ -85,9 +85,33 @@ def resample_func(data, convert_to, func):
     else:
         raise ValueError("The index of data must be MultiIndex or DatetimeIndex")
     if is_mul:
-        p = p.swaplevel().sort_index()
+        p = p.set_index('IDs', append=True).sort_index()
     if len(func) > 1 and isinstance(func, dict):
         p = p.swaplevel().unstack()
     if offset.onOffset(data.index[-1]) and _is_nan(p.iloc[-1]):
         p = p.iloc[:-1]
     return p
+
+
+def date_shift(dataframe, shift):
+    """
+    数据框的时间漂移。
+
+    当数据框的索引是MultiIndex时，函数会先把数据框进行unstack再进行shift
+    :param dataframe: 数据框
+
+    :param shift: 漂移步长
+
+    :return: dataframe
+
+    """
+
+    mul = False
+    if isinstance(dataframe.index, pd.MultiIndex):
+        dataframe = dataframe.unstack()
+        mul = True
+    dataframe = dataframe.shift(shift)
+    if mul:
+        return dataframe.stack()
+    else:
+        return dataframe

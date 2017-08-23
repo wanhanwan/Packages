@@ -1,5 +1,5 @@
 """一些工具函数"""
-from const import (INDUSTRY_NAME_DICT,
+from FactorLib.const import (INDUSTRY_NAME_DICT,
                    SW_INDUSTRY_DICT,
                    CS_INDUSTRY_DICT,
                    SW_INDUSTRY_DICT_REVERSE,

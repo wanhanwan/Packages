@@ -1,6 +1,6 @@
-from data_source.base_data_source_h5 import data_source, sec, h5, tc
-from utils.disk_persist_provider import DiskPersistProvider
-from factor_performance.ic_analyser import IC_Calculator
+from .data_source.base_data_source_h5 import data_source, sec, h5, tc
+from .utils.disk_persist_provider import DiskPersistProvider
+from .factor_performance.ic_analyser import IC_Calculator
 import pandas as pd
 import os
 

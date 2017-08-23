@@ -1,10 +1,7 @@
-import pandas as pd
-import numpy as np
-from factor_performance.toolfuncs import *
+from .toolfuncs import *
 from empyrical import stats
 from scipy import stats as stats_scp
 import pyfolio as pf
-import pickle
 '''给定收益率序列，计算相关指标'''
 
 

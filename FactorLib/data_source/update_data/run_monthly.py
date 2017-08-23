@@ -1,10 +1,10 @@
-from data_source.base_data_source_h5 import data_source
+from FactorLib.data_source.base_data_source_h5 import data_source
 from .value_factor import ValueFuncListMonthly
 from .momentum_factor import MomentumFuncListMonthly
-from liquidity_factor import LiquidityFuncListMonthly
-from reverse_fator import ReverseFuncListMonthly
-from time_series_factor import TimeSeriesFuncListMonthly
-from alternative_factor import AlternativeFuncListMonthly
+from .liquidity_factor import LiquidityFuncListMonthly
+from .reverse_fator import ReverseFuncListMonthly
+from .time_series_factor import TimeSeriesFuncListMonthly
+from .alternative_factor import AlternativeFuncListMonthly
 
 
 def monthlyfactors(start, end):
