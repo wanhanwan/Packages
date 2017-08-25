@@ -484,6 +484,7 @@ class sector(object):
 
 
 h5 = H5DB("D:/data/h5")
+riskDB = H5DB("D:/data/risk_model")
 sec = sector(h5, tc)
 data_source = base_data_source(sec)
 

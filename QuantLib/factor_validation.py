@@ -11,11 +11,17 @@ def cal_ic(factor_data, factor_name, window='1m', rank=False, stock_validation=N
     每一期的因子值与下一期的股票股票收益率做相关性检验(IC)
 
     :param factor_data:dataframe 因子数据
+
     :param factor_name: 因子名称
+
     :param window: offset, IC值的时间窗口
+
     :param rank: 若为True，返回RankIC
+
     :param stock_validation: str: 剔除非法股票, 支持stockFilter中定义的函数名
+
     :return: ic
+
     """
     def corr(data, rank):
         if rank:
