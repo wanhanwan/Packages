@@ -51,6 +51,14 @@ def get_history_bar(field_names, start_date, end_date, id_type='stock', **kwargs
     return data
 
 
+def get_wsd(field_names, start_date, end_date, **kwargs):
+    all_days = data_api.tc.get_trade_days(start_date, end_date)
+    all_ids = data_api.get_history_ashare(all_days).index.levels[1].unique()
+    all_ids = list(map(tradecode_to_windcode, all_ids))
+    data = _load_wsd_data(all_ids, field_names, start_date, end_date, **kwargs)
+    return data
+
+
 # WSQ实时行情接口
 def realtime_quote(fieldnames, ids=None):
     if not isinstance(fieldnames, list):

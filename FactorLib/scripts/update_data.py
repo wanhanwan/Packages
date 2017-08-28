@@ -4,7 +4,8 @@ from FactorLib.data_source.update_data.update_h5db_base_data import (onlist,
                                                            update_trade_status,
                                                            update_idx_weight,
                                                            update_industry_name,
-                                                           update_industry_index_prices)
+                                                           update_industry_index_prices,
+                                                           update_stock_constest)
 from FactorLib.data_source.update_data.run_daily import dailyfactors
 from FactorLib.data_source.wind_financial_data_api import update
 from FactorLib.data_source.base_data_source_h5 import h5
@@ -16,8 +17,8 @@ import pandas as pd
 import os
 from FactorLib.data_source.base_data_source_h5 import tc
 
-latest_update_date_0 = '20170823'
-latest_update_date_1 = '20170823'
+latest_update_date_0 = '20170825'
+latest_update_date_1 = '20170825'
 
 UpdateFuncs = [onlist,
                update_price,
@@ -25,7 +26,8 @@ UpdateFuncs = [onlist,
                update_trade_status,
                update_idx_weight,
                update_industry_name,
-               update_industry_index_prices
+               update_industry_index_prices,
+               update_stock_constest
                ]
 
 flag0 = 0

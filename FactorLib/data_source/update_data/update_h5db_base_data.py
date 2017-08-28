@@ -6,7 +6,7 @@ from WindPy import *
 from FactorLib.utils.tool_funcs import get_industry_code, ReportDateAvailable, windcode_to_tradecode
 from FactorLib.utils.datetime_func import DateStr2Datetime
 from FactorLib.data_source.base_data_source_h5 import h5, sec
-from FactorLib.data_source.wind_plugin import get_history_bar
+from FactorLib.data_source.wind_plugin import get_history_bar, get_wsd
 from FactorLib.data_source.data_api import get_trade_days, trade_day_offset
 from FactorLib.data_source.update_data import index_members, sector_members, index_weights, industry_classes
 
@@ -125,6 +125,18 @@ def update_price(start, end):
     h5.save_factor(data,'/indexprices/')
 
 
+def update_stock_constest(start, end):
+    field_names = "west_netprofit_FY1 west_netprofit_FY2 west_netprofit_FY3"
+    data = get_wsd(field_names.split(), start, end) / 10000
+    data.columns = ['netprofit_fy0', 'netprofit_fy1', 'netprofit_fy2']
+    h5.save_factor(data, '/stock_est/')
+
+    field_names = "west_eps_FY1 west_eps_FY2 west_eps_FY3"
+    data = get_wsd(field_names.split(), start, end)
+    data.columns = ['eps_fy0', 'eps_fy1', 'eps_fy2']
+    h5.save_factor(data, '/stock_est/')
+
+
 def update_sector(start, end):
     """更新成分股信息"""
 
@@ -177,25 +189,6 @@ def update_trade_status(start, end):
     h5.save_factor(trade_status, '/trade_status/')
 
 
-def _update_data(field, start, end, params=None):
-    stocks = get_ashare(end)
-    report_dates = ReportDateAvailable(start, end)
-    _ = []
-    if params is not None:
-        param = params + ";Period=Q;Days=Alldays"
-    else:
-        param = "Period=Q;Days=Alldays"
-    for date in report_dates:
-        d = w.wsd(stocks, field, date, date, param)
-        data = d.Data[0]
-        _.append(data)
-    tradecodes = [windcode_to_tradecode(x) for x in stocks]
-    dates = pd.DatetimeIndex(report_dates, name='date')
-    data = pd.DataFrame(_, index=dates, columns=tradecodes).stack().to_frame().rename(columns={0:field})
-    data.index.names = ['date', 'IDs']
-    save_factor(data, '/stock_financial_data/')
-
-
 def update_industry_index_prices(start, end):
     from ..update_data.ths_data_source import _updateHistoryBar
     from ...const import CS_INDUSTRY_CODES
@@ -205,4 +198,4 @@ def update_industry_index_prices(start, end):
 
 
 if __name__ == '__main__':
-    update_price('20170818', '20170818')
+    update_stock_constest('20170520', '20170827')
