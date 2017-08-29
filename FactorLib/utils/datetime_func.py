@@ -167,3 +167,24 @@ def GetDatetimeLastDay(idx_datetime, freq, use_trading=True):
         return pd.DatetimeIndex(lastdays, name='date')
     lastdays = s.groupby(pd.TimeGrouper(freq=freq)).max()
     return pd.DatetimeIndex(lastdays, name='date').dropna().drop_duplicates()
+
+
+def DateRange2Dates(func):
+    """
+    函数装饰器。
+
+    把func中的时间参数(start_date, end_date, dates)都转成dates。
+
+    """
+    def wrapper(*args, **kwargs):
+        start = kwargs.get('start_date')
+        end = kwargs.get('end_date')
+        dates = kwargs.get('dates')
+        d = tc.get_trade_days(start, end)
+        if dates is not None:
+            dates = list(set(dates).intersection(set(d)))
+        kwargs.pop('start_date')
+        kwargs.pop('end_date')
+        kwargs.pop('dates')
+        return func(*args, dates=dates, **kwargs)
+    return wrapper

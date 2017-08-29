@@ -5,8 +5,8 @@
 from multiprocessing import Lock
 from ..data_source.trade_calendar import trade_calendar, as_timestamp
 import pandas as pd
+from ..utils.datetime_func import DateRange2Dates
 tc = trade_calendar()
-
 
 class RiskModelDataSourceOnH5(object):
     def __init__(self, h5_db, lock=None):
@@ -16,6 +16,10 @@ class RiskModelDataSourceOnH5(object):
         self.all_ids = None
         self.factor_dict = {}
         self.factor_names = []
+        self.cache_data = {}            # 缓存数据
+        self.max_cache_num = 0          # 最大缓存数量
+        self.cached_factor_num = 0      # 已经缓存的因子数量
+        self.factor_read_num = None     # 因子的读取次数
 
     def set_dimension(self, dates, ids):
         """设置日期和股票"""
@@ -69,3 +73,26 @@ class RiskModelDataSourceOnH5(object):
         self.all_ids = list(self.all_ids)
         self.factor_dict = factor_dict
         self.factor_names = list(factor_dict)
+        self.factor_read_num = pd.Series([0]*len(self.factor_names), index=self.factor_names)
+
+    @DateRange2Dates
+    def get_factor_data(self, factor_name, start_date=None, end_date=None, ids=None, dates=None):
+        """获得单因子的数据"""
+        if self.max_cache_num == 0: #无缓存机制
+            return self.h5_db.load_factor(factor_name, self.factor_dict[factor_name], dates=self.all_dates,
+                                          ids=self.all_ids)
+        factor_data = self.cache_data.get(factor_name)
+        self.factor_read_num[factor_name] += 1
+        if factor_data is None: #因子尚未进入缓存
+            if self.cached_factor_num < self.max_cache_num:
+                self.cached_factor_num += 1
+                factor_data = self.h5_db.load_factor(factor_name, self.factor_dict[factor_name], dates=self.all_dates,
+                                                     ids=self.all_ids)
+                self.cache_data[factor_name] = factor_data
+            else:
+
+
+
+
+
+
