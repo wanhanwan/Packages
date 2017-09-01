@@ -43,6 +43,7 @@ class H5DB(object):
         except Exception as e:
             print(e)
             pass
+        self._update_info()
     
     # 重命名因子
     def rename_factor(self, old_name, new_name, factor_dir):

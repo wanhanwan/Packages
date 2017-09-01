@@ -14,15 +14,22 @@ CS_INDUSTRY_DICT = {'CI005001':'石油石化','CI005002':'煤炭','CI005003':'�
                     'CI005016':'家电','CI005017':'纺织服装','CI005018':'医药','CI005019':'食品饮料','CI005020':'农林牧渔',
                     'CI005021':'银行','CI005022':'非银行金融','CI005023':'房地产','CI005024':'交通运输','CI005025':'电子元器件',
                     'CI005026':'通信','CI005027':'计算机','CI005028':'传媒','CI005029':'综合'}
+
+WIND_INDUSTRY_DICT = {'882002':'材料', '882001':'能源','882003':'工业','882004':'可选消费','882005':'日常消费',
+                      '882006':'医疗保健', '882007':'金融', '882008':'信息技术', '882009':'电信服务',
+                      '882010':'公用事业', '882011':'房地产'}
+WIND_INDUSTRY_DICT_REVERSE = {WIND_INDUSTRY_DICT[x]:x for x in WIND_INDUSTRY_DICT}
+
 CS_INDUSTRY_DICT_REVERSE = {CS_INDUSTRY_DICT[x]: x for x in CS_INDUSTRY_DICT}
-CS_INDUSTRY_CODES = [x+".CI" for x in CS_INDUSTRY_DICT]
+CS_INDUSTRY_CODES = [x+".WI" for x in CS_INDUSTRY_DICT]
 
 MARKET_INDEX_DICT = {'000905':'中证500','000300':'沪深300','000906':'中证800','881001':'万得全A','000001':'上证综指',
                      '000016':'上证50','399102':'创业板综', '000991': '中证全指医药','guoqigaige_index':'国企改革概念',
                      '101001':'非周期指数', '000808':'申万医药生物','101002':'强周期指数','101003':'非周期成长指数',
                      '101004':'非周期指数弱'}
 
-INDUSTRY_NAME_DICT = {'中信一级':'cs_level_1','申万一级':'sw_level_1', '中信二级': 'cs_level_2', '申万一级': 'sw_level_2'}
+INDUSTRY_NAME_DICT = {'中信一级':'cs_level_1','申万一级':'sw_level_1', '中信二级': 'cs_level_2', '申万一级': 'sw_level_2',
+                      '万得一级':'wind_level_1'}
 
 MARKET_INDEX_WINDCODE = {"中证500":"000905.SH",
                          "沪深300":"000300.SH",

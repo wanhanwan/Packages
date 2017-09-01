@@ -3,7 +3,8 @@ from FactorLib.const import (INDUSTRY_NAME_DICT,
                    SW_INDUSTRY_DICT,
                    CS_INDUSTRY_DICT,
                    SW_INDUSTRY_DICT_REVERSE,
-                   CS_INDUSTRY_DICT_REVERSE
+                   CS_INDUSTRY_DICT_REVERSE,
+                   WIND_INDUSTRY_DICT_REVERSE
                    )
 import pandas as pd
 import os
@@ -124,10 +125,15 @@ def get_industry_code(industry_symbol, industry_info):
         industry_info.dropna(inplace=True)
         industry_info[industry_symbol] = industry_info[industry_symbol].str[:6].astype('int32')
         return industry_info[[industry_symbol]]
-    else:
+    elif industry_symbol == 'cs_level_1':
         industry_info[industry_symbol] = industry_info['industry_code'].map(CS_INDUSTRY_DICT_REVERSE)
         industry_info.dropna(inplace=True)
         industry_info[industry_symbol] = industry_info[industry_symbol].str[2:].astype('int32')
+        return industry_info[[industry_symbol]]
+    elif industry_symbol == 'wind_level_1':
+        industry_info[industry_symbol] = industry_info['industry_code'].map(WIND_INDUSTRY_DICT_REVERSE)
+        industry_info.dropna(inplace=True)
+        industry_info[industry_symbol] = industry_info[industry_symbol].str[:6].astype('int32')
         return industry_info[[industry_symbol]]
 
 

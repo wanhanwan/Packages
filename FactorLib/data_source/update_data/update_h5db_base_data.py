@@ -6,7 +6,7 @@ from WindPy import *
 from FactorLib.utils.tool_funcs import get_industry_code, ReportDateAvailable, windcode_to_tradecode
 from FactorLib.utils.datetime_func import DateStr2Datetime
 from FactorLib.data_source.base_data_source_h5 import h5, sec
-from FactorLib.data_source.wind_plugin import get_history_bar, get_wsd
+from FactorLib.data_source.wind_plugin import get_history_bar, get_wsd, _load_wsd_data
 from FactorLib.data_source.data_api import get_trade_days, trade_day_offset
 from FactorLib.data_source.update_data import index_members, sector_members, index_weights, industry_classes
 
@@ -190,10 +190,10 @@ def update_trade_status(start, end):
 
 
 def update_industry_index_prices(start, end):
-    from ..update_data.ths_data_source import _updateHistoryBar
     from ...const import CS_INDUSTRY_CODES
-    fields = ['open', 'high', 'low', 'close', 'changeper', 'volume']
-    data = _updateHistoryBar(CS_INDUSTRY_CODES, start, end, fields, 1)
+    fields = ['open', 'high', 'low', 'close', 'pct_chg', 'volume']
+    data = _load_wsd_data(CS_INDUSTRY_CODES, fields, start, end).astype('float32')
+    data['volume'] /= 100
     h5.save_factor(data, '/indexprices/cs_level_1/')
 
 
