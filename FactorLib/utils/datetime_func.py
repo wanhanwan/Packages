@@ -180,9 +180,11 @@ def DateRange2Dates(func):
         start = kwargs.get('start_date')
         end = kwargs.get('end_date')
         dates = kwargs.get('dates')
-        d = tc.get_trade_days(start, end)
+        d = tc.get_trade_days(start, end, retstr="%Y%m%d")
         if dates is not None:
             dates = list(set(dates).intersection(set(d)))
+        else:
+            dates = d
         kwargs.pop('start_date')
         kwargs.pop('end_date')
         kwargs.pop('dates')

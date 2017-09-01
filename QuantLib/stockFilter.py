@@ -99,3 +99,4 @@ def typical(stocklist):
 
 def typical_add_latest_st(stocklist, st_months):
     return _drop_latest_st(typical(stocklist), st_months)
+

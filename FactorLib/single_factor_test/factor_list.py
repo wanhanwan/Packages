@@ -156,5 +156,42 @@ factor_list_style = [StyleFactor_GM, StyleFactor_GrowthFactor, StyleFactor_Momen
 self_defined = [bp_div_median, ep_div_median, float_mkt_value, six_month_highest_returns,
                iffr, return_60d, turnover_adjust_total_mkt_value]
 
+
+# BARRA因子
+BETA = ('BETA', '/barra/', 1)
+BLEV = ('BLEV', '/barra/', 1)
+BTOP = ('BTOP', '/barra/', 1)
+CETOP = ('CETOP', '/barra/', 1)
+CMRA = ('CMRA', '/barra/', 1)
+DASTD = ('DASTD', '/barra/', 1)
+DTOA = ('DTOA', '/barra/', 1)
+EGRLF = ('EGRLF', '/barra/', 1)
+EGRO = ('EGRO', '/barra/', 1)
+EGRSF = ('EGRSF', '/barra/', 1)
+EPFWD = ('EPFWD', '/barra/', 1)
+ETOP = ('ETOP', '/barra/', 1)
+HSIGMA = ('HSIGMA', '/barra/', 1)
+LNCAP = ('LNCAP', '/barra/', 1)
+MLEV = ('MLEV', '/barra/', 1)
+RSTR = ('RSTR', '/barra/', 1)
+SGRO = ('SGRO', '/barra/', 1)
+STOA = ('STOA', '/barra/', 1)
+STOQ = ('STOQ', '/barra/', 1)
+STOM = ('STOM', '/barra/', 1)
+
+
+# 行业因子
+cs_level_1 = ('cs_level_1', '/indexes/', 1)
+cs_level_2 = ('cs_level_2', '/indexes/', 1)
+sw_level_1 = ('sw_level_1', '/indexes/', 1)
+sw_level_2 = ('sw_level_2', '/indexes/', 1)
+
+
+BARRA = [BETA, BLEV, BTOP, CETOP, CMRA,
+         DASTD, DTOA, EGRLF, EGRO, EGRSF,
+         EPFWD, ETOP, HSIGMA, LNCAP, MLEV,
+         RSTR, SGRO, STOA, STOQ, STOM]
+
+
 factor_list = factor_list_growth + factor_list_momentum + factor_list_quality + factor_list_sentiment + \
     factor_list_style + factor_list_technical + factor_list_value + self_defined

@@ -8,6 +8,7 @@ import pandas as pd
 from ..utils.datetime_func import DateRange2Dates
 tc = trade_calendar()
 
+
 class RiskModelDataSourceOnH5(object):
     def __init__(self, h5_db, lock=None):
         self.h5_db = h5_db
@@ -78,18 +79,42 @@ class RiskModelDataSourceOnH5(object):
     @DateRange2Dates
     def get_factor_data(self, factor_name, start_date=None, end_date=None, ids=None, dates=None):
         """获得单因子的数据"""
-        if self.max_cache_num == 0: #无缓存机制
-            return self.h5_db.load_factor(factor_name, self.factor_dict[factor_name], dates=self.all_dates,
-                                          ids=self.all_ids)
+        if self.max_cache_num == 0:     # 无缓存机制
+            self.multiprocess_lock.acquire()
+            data = self.h5_db.load_factor(factor_name, self.factor_dict[factor_name], dates=dates, ids=ids)
+            self.multiprocess_lock.release()
+            return data
         factor_data = self.cache_data.get(factor_name)
         self.factor_read_num[factor_name] += 1
-        if factor_data is None: #因子尚未进入缓存
+        if factor_data is None:     # 因子尚未进入缓存
             if self.cached_factor_num < self.max_cache_num:
                 self.cached_factor_num += 1
+                self.multiprocess_lock.acquire()
                 factor_data = self.h5_db.load_factor(factor_name, self.factor_dict[factor_name], dates=self.all_dates,
                                                      ids=self.all_ids)
+                self.multiprocess_lock.release()
                 self.cache_data[factor_name] = factor_data
-            else:
+            else:   # 当前缓存因子数大于等于最大缓存因子数，那么检查最小读取次数的因子
+                cached_factor_read_nums = self.factor_read_num[self.cache_data.keys()]
+                min_read_idx = cached_factor_read_nums.argmin()
+                self.multiprocess_lock.acquire()
+                if cached_factor_read_nums.iloc[min_read_idx] < self.factor_read_num[factor_name]:
+                    factor_data = self.h5_db.load_factor(factor_name, self.factor_dict[factor_name],
+                                                         dates=self.all_dates, ids=self.all_ids)
+                    self.cache_data.pop(cached_factor_read_nums.index[min_read_idx])
+                    self.cache_data[factor_name] = factor_data
+                else:
+                    data = self.h5_db.load_factor(factor_name, self.factor_dict[factor_name], dates=dates, ids=ids)
+                    self.multiprocess_lock.release()
+                    return data
+                self.multiprocess_lock.release()
+        if ids is not None:
+            if not isinstance(ids, list):
+                ids = [ids]
+        factor_data = factor_data.loc[(dates, ids), :]
+        return factor_data
+
+
 
 
 

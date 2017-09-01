@@ -51,10 +51,33 @@ def __DropOutlierMeanVariance__(data, **kwargs):
         after_dropOutlier = after_dropOutlier.apply(
             lambda x: max(x, quantileMin))
     elif kwargs['drop_mode'] == '剔除':
-        after_dropOutlier = after_dropOutlier.apply(
+        after_dropOutlier = data.apply(
             lambda x: np.nan if not (quantileMin < x < quantileMax) else x)
     after_dropOutlier.rename(data.name+'_after_drop_outlier', inplace=True)
 
+    return pd.concat([data, after_dropOutlier], axis=1)
+
+
+def __DropOutlierBarra__(data, **kwargs):
+    """
+    以barra方式去掉极端值，使用该方法之前需要先把数据标准化
+    :param data: 标准化之后的因子值
+    :param kwargs:
+    :return: new_data
+    """
+    data = data[kwargs['factor_name']]
+    s_plus = max(0.0, min(1.0, 0.5 / (data.max() - 3)))
+    s_minus = max(0.0, min(1.0, 0.5 / (-3 - data.min())))
+
+    def func(x):
+
+        if x > 3.:
+            return 3. * (1. - s_plus) + x * s_plus
+        elif x < -3.:
+            return -3. * (1. - s_minus) + x * s_minus
+        else:
+            return x
+    after_dropOutlier = data.apply(func).rename(data.name+'_after_drop_outlier')
     return pd.concat([data, after_dropOutlier], axis=1)
 
 
@@ -137,10 +160,13 @@ def DropOutlier(data, factor_name, method='FixedRatio',
         tempData = data[[factor_name]]
     else:
         tempData = data[['date', 'IDs', factor_name]].set_index(['date', 'IDs'])
+
     dropFuncs = {'FixedRatio': __DropOutlierFixedRate__,
                  'Mean-Variance': __DropOutlierMeanVariance__,
                  'MAD': __DropOutlierMAD__,
-                 'BoxPlot': __DropOutlierBoxPlot__}
+                 'BoxPlot': __DropOutlierBoxPlot__,
+                 'Barra':__DropOutlierBarra__}
+
     params = {'drop_ratio': drop_ratio, 'drop_mode': drop_mode, 'alpha': alpha,
               'factor_name': factor_name}
 
@@ -278,6 +304,111 @@ def Orthogonalize(left_data, right_data, left_name, right_name):
     factor = factor.groupby(level=0).apply(OLS, left_name=left_name)
     return factor[[left_name+'_orthogonalized']]
 
+
+def Fillna_Barra(factor_data, factor_names, ref_name, classify_name):
+    """
+    Barra缺失值填充， 具体方法如下：
+
+        1. 按照分类因子(classify_name)将股票分类，分类因子通常是一级行业因子
+        2. 在每一类股票里使用参考变量(ref_name)对待填充因子进行回归，缺失值被回归
+           拟合值替代。参考变量通常是流通市值。
+
+    :param factor_data: pandas.dataframe
+
+    :param factor_names: list
+        带填充因子名称。因子名称必须是factor_data中列的子集
+    :param ref_name: str
+        参考变量，通常是流通市值,必须是factor_data中列的子集
+    :param classify_name: str
+        分类变量，通常是中信一级行业，必须是factor_data中列的子集
+    :return: pandas.dataframe
+
+    """
+    factor_tofill = factor_data[factor_names].copy()
+    class_factor = factor_data[[classify_name]]
+    ref_factor = np.log(factor_data[[ref_name]])
+    all_dates = factor_tofill.index.get_level_values(0).unique()
+    for idate in all_dates:
+        iclass_data = class_factor.loc[idate, classify_name]
+        iref_data = ref_factor.loc[idate, :]
+        for ifactor in factor_names:
+            ifactor_data = factor_tofill.loc[idate, ifactor]
+            not_nan_idx = pd.notnull(ifactor_data)
+            not_nan_idx_sum = not_nan_idx.sum()
+            if not not_nan_idx.all():   # 存在缺失值
+                for ijclass in iclass_data[~not_nan_idx].unique():
+                    ij_not_na = not_nan_idx & (iclass_data == ijclass)
+                    ij_na = (~not_nan_idx) & (iclass_data == ijclass)
+                    x = iref_data[ij_not_na]
+                    y = ifactor_data[ij_not_na]
+                    x_mean = x.mean()
+                    y_mean = y.mean()
+                    beta = ((x*y).sum()-not_nan_idx_sum*x_mean*y_mean)/((x**2).sum()-not_nan_idx_sum*x_mean**2)
+                    alpha = y_mean - x_mean*beta
+                    ifactor_data[ij_na] = alpha+beta*iref_data[ij_na]
+    return factor_tofill
+
+
+def Join_Factors(factor_data, merge_names, new_name, weight=None):
+    """
+    合并因子,按照权重进行加总。只将非缺失的因子的权重重新归一合成。
+
+    :param factor_data: pandas.dataframe
+
+    :param merge_names: list
+        待合并因子名称，必须是data_frame中列的子集
+    :param new_name: str
+        合成因子名称
+    :param weight: list or None
+        待合并因子的权重
+    :return: new_data
+
+    """
+    if not isinstance(merge_names, str):
+        merge_names = [merge_names]
+    if weight is None:
+        weight = np.array([1 / len(merge_names)] * len(merge_names))
+    else:
+        total_weight = sum(weight)
+        weight = [iweight/total_weight for iweight in weight]
+    weight_array = np.array([weight]*len(factor_data))
+    na_ind = factor_data[merge_names].isnull().values
+    weight_array[na_ind] = 0
+    weight_array = weight_array / weight_array.sum(axis=1)[:, np.newaxis]
+    new_values = np.nansum(factor_data[merge_names].values * weight_array, axis=1)
+    return pd.DataFrame(new_values, index=factor_data.index, columns=[new_name])
+
+
+def NonLinearSize(factor_data, factor_name, new_name):
+    """
+    BARRA 非线性市值因子
+    :param factor_data: pandas.dataframe
+
+    :param factor_name: str
+        市值因子
+    :param new_name: str
+        新因子名
+    :return: new_data
+
+    """
+    nl_size = factor_data[factor_name].copy()
+    all_dates = nl_size.index.get_level_values(0).unqiue()
+    for date in all_dates:
+        inl_size = nl_size[factor_name].loc[date]
+        inl_size_cube = inl_size ** 3
+        temp_ind = pd.notnull(inl_size)
+        inl_size = inl_size[temp_ind]
+        inl_size_cube = inl_size_cube[temp_ind]
+
+        nlen = len(inl_size)
+        x_mean = inl_size.mean()
+        y_mean = inl_size_cube.mean()
+        beta = ((inl_size*inl_size_cube).sum()-nlen*x_mean*y_mean)/((inl_size**2).sum()-nlen*x_mean**2)
+        alpha = y_mean - x_mean*beta
+        iresi = inl_size_cube - alpha - beta*inl_size
+        inl_size.loc[temp_ind] = iresi
+    nl_size.columns = new_name
+    return nl_size
 
 def Generate_Dummy(category_data, drop_first=True):
     """哑变量生成函数"""
