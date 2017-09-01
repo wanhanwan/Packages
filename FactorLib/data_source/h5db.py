@@ -43,11 +43,12 @@ class H5DB(object):
         except Exception as e:
             print(e)
             pass
+        self._update_info()
     
     # 重命名因子
     def rename_factor(self, old_name, new_name, factor_dir):
         factor_path = self.abs_factor_path(factor_dir, old_name)
-        factor_data = pd.read_hdf(factor_path, old_name)
+        factor_data = pd.read_hdf(factor_path, old_name).to_frame().rename(columns={old_name: new_name}).to_panel()
         temp_factor_path = self.abs_factor_path(factor_dir, new_name)
         factor_data.to_hdf(temp_factor_path, new_name, complevel=9, complib='blosc')
         self.delete_factor(old_name, factor_dir)
@@ -58,7 +59,7 @@ class H5DB(object):
             os.makedirs(self.data_path+factor_dir)
     
     #因子的时间区间
-    def t_date_range(self, factor_name, factor_path):
+    def get_date_range(self, factor_name, factor_path):
         panel = pd.read_hdf(self.abs_factor_path(factor_path, factor_name))
         min_date = Datetime2DateStr(panel.major_axis.min())
         max_date = Datetime2DateStr(panel.major_axis.max())
