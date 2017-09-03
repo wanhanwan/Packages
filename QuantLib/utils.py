@@ -178,46 +178,46 @@ def DropOutlier(data, factor_name, method='FixedRatio',
 
 def __StandardFun__(data0, **kwargs):
     """横截面标准化函数"""
-    data0 = data0.reset_index().set_index(['IDs'])[[kwargs['factor_name']]]
-    IDNums = len(data0)
+    data_to_standard = data0.reset_index().set_index(['IDs'])[[kwargs['factor_name']]]
+    IDNums = len(data_to_standard)
     if kwargs['mean_weight'] is not None:
-        avgWeight = data0[kwargs['mean_weight']]
+        avgWeight = data0.reset_index().set_index(['IDs'])[kwargs['mean_weight']]
     else:
         avgWeight = pd.Series(
-            np.ones(IDNums)/IDNums, index=data0.index)
+            np.ones(IDNums)/IDNums, index=data_to_standard.index)
     avgWeightInd = pd.notnull(avgWeight)
     if kwargs['std_weight'] is not None:
-        stdWeight = data0[kwargs['std_weight']]
+        stdWeight = data0.reset_index().set_index(['IDs'])[kwargs['std_weight']]
     else:
         stdWeight = pd.Series(
-            np.ones(IDNums)/IDNums, index=data0.index)
+            np.ones(IDNums)/IDNums, index=data_to_standard.index)
     stdWeightInd = pd.notnull(stdWeight)
 
     # 计算横截面均值
-    data0Ind = pd.notnull(data0[kwargs['factor_name']])
-    tempInd = data0Ind & avgWeightInd
+    data_to_standardInd = pd.notnull(data_to_standard[kwargs['factor_name']])
+    tempInd = data_to_standardInd & avgWeightInd
     totalWeight = avgWeight.ix[tempInd].sum()
     if totalWeight != 0:
-        avg = (data0[kwargs['factor_name']] * avgWeight).sum() / totalWeight
+        avg = (data_to_standard[kwargs['factor_name']] * avgWeight).sum() / totalWeight
     else:
-        data0[kwargs['factor_name']+'_after_standard'] = np.nan
-        return data0
+        data_to_standard[kwargs['factor_name']+'_after_standard'] = np.nan
+        return data_to_standard
     # 计算截面标准差
-    tempInd = data0Ind & stdWeightInd
+    tempInd = data_to_standardInd & stdWeightInd
     totalWeight = stdWeight[tempInd].sum()
     if totalWeight != 0:
-        factor = data0[kwargs['factor_name']]
+        factor = data_to_standard[kwargs['factor_name']]
         std = np.sqrt(
             ((factor-factor.mean())**2*stdWeight/totalWeight).sum())
     else:
-        data0[kwargs['factor_name']+'_after_standard'] = np.nan
-        return data0
+        data_to_standard[kwargs['factor_name']+'_after_standard'] = np.nan
+        return data_to_standard
     if std != 0:
-        data0[kwargs['factor_name'] +
-              '_after_standard'] = (data0[kwargs['factor_name']] - avg) / std
+        data_to_standard[kwargs['factor_name'] +
+              '_after_standard'] = (data_to_standard[kwargs['factor_name']] - avg) / std
     else:
-        data0[kwargs['factor_name']+'_after_standard'] = 0
-    return data0
+        data_to_standard[kwargs['factor_name']+'_after_standard'] = 0
+    return data_to_standard
 
 def __StandardQTFun__(data):
     data0 = data.reset_index(level=0, drop=True)
@@ -273,7 +273,7 @@ def StandardByQT(data, factor_name):
 
 def Orthogonalize(left_data, right_data, left_name, right_name):
     """因子正交化
-       因子数据的格式为：[date,IDs,factor1,factor2...]
+       因子数据的格式为：[index(date,IDs),factor1,factor2...]
     参数
     --------
     left_name: str
@@ -317,20 +317,20 @@ def Fillna_Barra(factor_data, factor_names, ref_name, classify_name):
 
     :param factor_names: list
         带填充因子名称。因子名称必须是factor_data中列的子集
-    :param ref_name: str
+    :param ref_name: 1元素的list
         参考变量，通常是流通市值,必须是factor_data中列的子集
-    :param classify_name: str
+    :param classify_name: 1元素的list
         分类变量，通常是中信一级行业，必须是factor_data中列的子集
     :return: pandas.dataframe
 
     """
     factor_tofill = factor_data[factor_names].copy()
-    class_factor = factor_data[[classify_name]]
-    ref_factor = np.log(factor_data[[ref_name]])
+    class_factor = factor_data[classify_name]
+    ref_factor = np.log(factor_data[ref_name])
     all_dates = factor_tofill.index.get_level_values(0).unique()
     for idate in all_dates:
-        iclass_data = class_factor.loc[idate, classify_name]
-        iref_data = ref_factor.loc[idate, :]
+        iclass_data = class_factor.loc[idate, classify_name[0]]
+        iref_data = ref_factor.loc[idate, ref_name[0]]
         for ifactor in factor_names:
             ifactor_data = factor_tofill.loc[idate, ifactor]
             not_nan_idx = pd.notnull(ifactor_data)
@@ -345,7 +345,7 @@ def Fillna_Barra(factor_data, factor_names, ref_name, classify_name):
                     y_mean = y.mean()
                     beta = ((x*y).sum()-not_nan_idx_sum*x_mean*y_mean)/((x**2).sum()-not_nan_idx_sum*x_mean**2)
                     alpha = y_mean - x_mean*beta
-                    ifactor_data[ij_na] = alpha+beta*iref_data[ij_na]
+                    ifactor_data.loc[ij_na] = alpha+beta*iref_data[ij_na]
     return factor_tofill
 
 
@@ -364,7 +364,7 @@ def Join_Factors(factor_data, merge_names, new_name, weight=None):
     :return: new_data
 
     """
-    if not isinstance(merge_names, str):
+    if isinstance(merge_names, str):
         merge_names = [merge_names]
     if weight is None:
         weight = np.array([1 / len(merge_names)] * len(merge_names))
@@ -392,20 +392,20 @@ def NonLinearSize(factor_data, factor_name, new_name):
 
     """
     nl_size = factor_data[factor_name].copy()
-    all_dates = nl_size.index.get_level_values(0).unqiue()
+    all_dates = nl_size.index.get_level_values(0).unique()
     for date in all_dates:
-        inl_size = nl_size[factor_name].loc[date]
+        inl_size = nl_size.loc[date]
         inl_size_cube = inl_size ** 3
         temp_ind = pd.notnull(inl_size)
-        inl_size = inl_size[temp_ind]
-        inl_size_cube = inl_size_cube[temp_ind]
+        inl_size_not_na = inl_size[temp_ind]
+        inl_size_cube_not_na = inl_size_cube[temp_ind]
 
-        nlen = len(inl_size)
-        x_mean = inl_size.mean()
-        y_mean = inl_size_cube.mean()
-        beta = ((inl_size*inl_size_cube).sum()-nlen*x_mean*y_mean)/((inl_size**2).sum()-nlen*x_mean**2)
+        nlen = len(inl_size_not_na)
+        x_mean = inl_size_not_na.mean()
+        y_mean = inl_size_cube_not_na.mean()
+        beta = ((inl_size_not_na*inl_size_cube_not_na).sum()-nlen*x_mean*y_mean)/((inl_size_not_na**2).sum()-nlen*x_mean**2)
         alpha = y_mean - x_mean*beta
-        iresi = inl_size_cube - alpha - beta*inl_size
+        iresi = inl_size_cube_not_na - alpha - beta*inl_size_not_na
         inl_size.loc[temp_ind] = iresi
     nl_size.columns = new_name
     return nl_size

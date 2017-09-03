@@ -3,7 +3,7 @@
    2. 支持提前设置因子列表，设置完成之后可以直接调用prepare_data函数提取数据
 """
 from multiprocessing import Lock
-from ..data_source.trade_calendar import trade_calendar, as_timestamp
+from ..data_source.trade_calendar import trade_calendar
 import pandas as pd
 from ..utils.datetime_func import DateRange2Dates
 tc = trade_calendar()
@@ -22,10 +22,11 @@ class RiskModelDataSourceOnH5(object):
         self.cached_factor_num = 0      # 已经缓存的因子数量
         self.factor_read_num = None     # 因子的读取次数
 
-    def set_dimension(self, dates, ids):
+    def set_dimension(self, idx):
         """设置日期和股票"""
-        self.all_ids = ids
-        self.all_dates = pd.DatetimeIndex(dates).tolist()
+        self.idx = idx
+        self.all_ids = idx.index.get_level_values(1).unique().tolist()
+        self.all_dates = idx.index.get_level_values(0).unique().tolist()
 
     def set_multiprocess_lock(self, lock):
         self.multiprocess_lock = Lock() if lock is None else lock
@@ -39,7 +40,7 @@ class RiskModelDataSourceOnH5(object):
         """
         factor_dict = {}
         for factor in table_factor:
-            factor_dict[factor(0)] = factor(1)
+            factor_dict[factor[0]] = factor[1]
 
         if prepare_id_date:
             for fname, fpath in factor_dict.items():
@@ -57,21 +58,21 @@ class RiskModelDataSourceOnH5(object):
                     self.all_ids = set(s)
                 self.multiprocess_lock.release()
 
-        if (start is None) and (end is None):
+        if dates is not None:
             dates = pd.DatetimeIndex(dates)
         else:
-            dates = tc.get_trade_days(start, end)
+            dates = tc.get_trade_days(start, end, retstr=None)
         if self.all_dates is not None:
             self.all_dates = set(self.all_dates).intersection(set(dates))
         else:
             self.all_dates = set(dates)
-        self.all_dates = list(self.all_dates)
+        self.all_dates = sorted(list(self.all_dates))
 
         if self.all_ids is None:
             self.all_ids = list(ids)
-        else:
+        elif ids is not None:
             self.all_ids = set(self.all_ids).intersection(set(ids))
-        self.all_ids = list(self.all_ids)
+        self.all_ids = sorted(list(self.all_ids))
         self.factor_dict = factor_dict
         self.factor_names = list(factor_dict)
         self.factor_read_num = pd.Series([0]*len(self.factor_names), index=self.factor_names)
@@ -79,11 +80,12 @@ class RiskModelDataSourceOnH5(object):
     @DateRange2Dates
     def get_factor_data(self, factor_name, start_date=None, end_date=None, ids=None, dates=None):
         """获得单因子的数据"""
+        idx = self.idx[self.idx.index.get_level_values(0).isin(dates)]
         if self.max_cache_num == 0:     # 无缓存机制
             self.multiprocess_lock.acquire()
             data = self.h5_db.load_factor(factor_name, self.factor_dict[factor_name], dates=dates, ids=ids)
             self.multiprocess_lock.release()
-            return data
+            return data.reindex(idx.index)
         factor_data = self.cache_data.get(factor_name)
         self.factor_read_num[factor_name] += 1
         if factor_data is None:     # 因子尚未进入缓存
@@ -106,18 +108,11 @@ class RiskModelDataSourceOnH5(object):
                 else:
                     data = self.h5_db.load_factor(factor_name, self.factor_dict[factor_name], dates=dates, ids=ids)
                     self.multiprocess_lock.release()
-                    return data
+                    return data.reindex(idx.index)
                 self.multiprocess_lock.release()
-        if ids is not None:
-            if not isinstance(ids, list):
-                ids = [ids]
-        factor_data = factor_data.loc[(dates, ids), :]
-        return factor_data
+        return factor_data.reindex(idx.index)
 
-
-
-
-
-
-
-
+    def save_factor(self, data, path):
+        self.multiprocess_lock.acquire()
+        self.h5_db.save_factor(data, path)
+        self.multiprocess_lock.release()

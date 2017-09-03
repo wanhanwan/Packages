@@ -191,3 +191,13 @@ def deep_update_dict(from_dict, to_dict):
             deep_update_dict(value, to_dict[key])
         else:
             to_dict[key] = value
+
+
+# 把整数n平均分成m份
+def distribute_equal(n, m):
+    Quotient = n // m
+    Remainder = n % m
+    Res = [Quotient] * m
+    for i in range(Remainder):
+        Res[i] += 1
+    return Res
