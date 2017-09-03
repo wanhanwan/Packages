@@ -95,7 +95,7 @@ def __DropOutlierMAD__(data, **kwargs):
         after_dropOutlier = after_dropOutlier.apply(
             lambda x: max(x, quantileMin))
     elif kwargs['drop_mode'] == '剔除':
-        after_dropOutlier = after_dropOutlier.apply(
+        after_dropOutlier = data.apply(
             lambda x: np.nan if not (quantileMin < x < quantileMax) else x)
     after_dropOutlier.rename(data.name+'_after_drop_outlier', inplace=True)
 
