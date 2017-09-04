@@ -5,7 +5,7 @@ import pandas as pd
 def drop_untradable_stocks(factor, **kwargs):
     """去掉不可以交易的股票"""
     old_data = factor.data
-    stocklist = pd.DataFrame([[1]*len(factor)], columns=['a'], index=factor.index)
+    stocklist = pd.DataFrame([1]*len(old_data), columns=['a'], index=old_data.index)
     new_stocks = stockFilter.typical(stocklist)
     factor.data = old_data.reindex(new_stocks.index)
 

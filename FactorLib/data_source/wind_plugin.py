@@ -94,6 +94,8 @@ def _parse_args(args,**kwargs):
 
 def _bar_to_dataframe(data):
     """把windAPI数据转换成dataframe"""
+    if data.ErrorCode != 0:
+        raise ValueError(str(data.ErrorCode))
     ids = list(map(drop_patch, data.Codes))
     dates = [x.date() for x in data.Times]
     col = pd.Index(ids, name='IDs')

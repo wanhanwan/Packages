@@ -5,7 +5,7 @@
 import numpy as np
 import pandas as pd
 
-from utils.tool_funcs import parse_industry
+from ..utils.tool_funcs import parse_industry
 
 def _add_group_id(factor_data,factor_name,n_groups,ascending=True):
     """给因子数据加入组号

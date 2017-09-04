@@ -88,11 +88,25 @@ def ep_divide_median(start, end, **kwargs):
     data_source.h5DB.save_factor(ep[['ep_divide_median']], '/stock_value/')
 
 
-ValueFuncListDaily = [pe_ttm, pe, pb, bp, ep, bp_divide_median, ep_divide_median]
+def epfwd(start, end, **kwargs):
+    """
+    barra中EPFWD因子
+    未来12个月的净利润 / 总市值
+
+    """
+    data_source = kwargs['data_source']
+    dates = data_source.trade_calendar.get_trade_days(start, end)
+    mv = data_source.load_factor('total_mkt_value', '/stocks/', dates=dates) * 10000
+    efwd = data_source.load_factor('netprofit_ftm', '/stock_est/', dates=dates)
+    new_factor = (efwd['netprofit_ftm'] / mv['total_mkt_value']).to_frame('EPFWD')
+    data_source.h5DB.save_factor(new_factor, '/barra/descriptors/')
+
+
+ValueFuncListDaily = [pe_ttm, pe, pb, bp, ep, bp_divide_median, ep_divide_median, epfwd]
 ValueFuncListMonthly = []
 
 
 if __name__ == '__main__':
-    from data_source import data_source
-    bp_divide_median('20170701', '20170731', data_source=data_source)
-    ep_divide_median('20170701', '20170731', data_source=data_source)
+    from FactorLib.data_source.base_data_source_h5 import data_source
+    bp('20170630', '20170904', data_source=data_source)
+    bp_divide_median('20170630', '20170904', data_source=data_source)

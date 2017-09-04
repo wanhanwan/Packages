@@ -1,6 +1,6 @@
 """生成股票列表"""
-from data_source import data_source
-from utils.tool_funcs import parse_industry
+from ..data_source.base_data_source_h5 import data_source
+from ..utils.tool_funcs import parse_industry
 import pandas as pd
 
 
@@ -11,7 +11,7 @@ def typical(factor, name, direction=None, industry_neutral=True, benchmark=None,
         industry_str = parse_industry(industry_name)
 
         all_ids = factor_data['IDs'].unique().tolist()
-        all_dates = factor_data['date'].unique().tolist()
+        all_dates = pd.DatetimeIndex(factor_data['date'].unique()).tolist()
 
         # 个股的行业信息与因子数据匹配
         industry_info = data_source.sector.get_stock_industry_info(

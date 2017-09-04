@@ -2,10 +2,12 @@
 
 """从兴业因子数据中读取因子，保存成h5格式"""
 
-from data_source import h5
+from FactorLib.data_source.base_data_source_h5 import h5
 import pandas as pd
 import os
-root = 'D:/data/XYData20170731/XYData'
+
+
+root = r'G:\data\xydata_history_zip\XYData20170831'
 dirs = [x for x in os.listdir(root) if x not in ['基础数据']]
 for d in dirs:
     print(d)
@@ -18,4 +20,4 @@ for d in dirs:
         data.columns = data.columns.str[:6]
         data = data.stack().to_frame().rename_axis(['date', 'IDs']). \
             rename_axis({0: file[:-4].replace('-', '_')}, axis=1)
-        h5.save_factor(data, xy_path[22:])
+        h5.save_factor(data, '/XYData/%s/'%d)

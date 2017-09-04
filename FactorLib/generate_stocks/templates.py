@@ -1,13 +1,13 @@
-from utils import AttrDict
-from single_factor_test.config import parse_config
-from data_source import data_source
-from single_factor_test.factor_list import *
-from single_factor_test.selfDefinedFactors import *
-from utils.disk_persist_provider import DiskPersistProvider
+from ..utils import AttrDict
+from ..single_factor_test.config import parse_config
+from ..data_source.base_data_source_h5 import data_source
+from ..single_factor_test.factor_list import *
+from ..single_factor_test.selfDefinedFactors import *
+from ..utils.disk_persist_provider import DiskPersistProvider
 from datetime import datetime
-from utils.tool_funcs import tradecode_to_windcode
+from ..utils.tool_funcs import tradecode_to_windcode
 import os
-from generate_stocks import funcs, stocklist
+from ..generate_stocks import funcs, stocklist
 import pandas as pd
 
 
@@ -36,12 +36,16 @@ class AbstractStockGenerator(object):
         pass
 
     def _update_stocks(self, start, end):
+        """
+        注：新生成的股票列表只会增量更新，不会对旧的股票列表进行修改。
+        """
         stocks = self.generate_stocks(start, end).reset_index(level=1)
         stocks['IDs'] = stocks['IDs'].apply(tradecode_to_windcode)
         if os.path.isfile(self.config.stocklist.output):
-            raw = pd.read_csv(self.config.stocklist.output).set_index('date')
+            csvf = open(self.config.stocklist.output)
+            raw = pd.read_csv(csvf, converters={'date': lambda x: datetime.strptime(x, "%Y-%m-%d")}).set_index('date')
+            stocks = stocks[~stocks.index.isin(raw.index)]
             new = raw.append(stocks)
-            new = new[~new.index.duplicated(keep='last')].reset_index()
             new.reset_index().to_csv(self.config.stocklist.output, float_format="%.4f", index=False)
         else:
             stocks.reset_index().to_csv(self.config.stocklist.output, float_format="%.4f", index=False)

@@ -126,14 +126,22 @@ def update_price(start, end):
 
 
 def update_stock_constest(start, end):
+    # 净利润
     field_names = "west_netprofit_FY1 west_netprofit_FY2 west_netprofit_FY3"
     data = get_wsd(field_names.split(), start, end) / 10000
     data.columns = ['netprofit_fy0', 'netprofit_fy1', 'netprofit_fy2']
     h5.save_factor(data, '/stock_est/')
 
+    # eps
     field_names = "west_eps_FY1 west_eps_FY2 west_eps_FY3"
     data = get_wsd(field_names.split(), start, end)
     data.columns = ['eps_fy0', 'eps_fy1', 'eps_fy2']
+    h5.save_factor(data, '/stock_est/')
+
+    # 净利润（最新12个月）
+    field_names = "west_netprofit_FTM"
+    data = get_wsd(field_names.split(), start, end)
+    data.columns = ['netprofit_ftm']
     h5.save_factor(data, '/stock_est/')
 
 
@@ -198,4 +206,4 @@ def update_industry_index_prices(start, end):
 
 
 if __name__ == '__main__':
-    update_stock_constest('20170520', '20170827')
+    update_idx_weight('20170814', '20170903')

@@ -1,7 +1,7 @@
-from data_source.base_data_source_h5 import data_source
-from riskmodel import stockpool
+from ..data_source.base_data_source_h5 import data_source
+from ..riskmodel import stockpool
 from QuantLib.utils import DropOutlier, Standard, ScoringFactors
-from utils.tool_funcs import parse_industry
+from ..utils.tool_funcs import parse_industry
 import numpy as np
 import pandas as pd
 

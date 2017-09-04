@@ -21,7 +21,9 @@ FINANCIAL_BASE_FIELD = {
     '营业利润': 'opprofit',
     '净资产收益率TTM': 'roe_ttm2',
     '归属母公司股东的净利润TTM': 'netprofit_ttm2',
-    '净利润':'net_profit_is',
+    '归属母公司股东的净利润': 'np_belongto_parcomsh',
+    '归属母公司股东的净资产': 'eqy_belongto_parcomsh',
+    '净利润': 'net_profit_is',
     '经营活动产生的现金流量净额': 'net_cash_flows_oper_act'
 }
 

@@ -224,6 +224,7 @@ class StrategyManager(object):
 
     # 运行回测
     def run_backtest(self, start, end, strategy_id=None, strategy_name=None):
+        self.backup()
         if strategy_id is not None:
             strategy_name = self.strategy_name(strategy_id)
         cwd = os.getcwd()
@@ -257,7 +258,7 @@ class StrategyManager(object):
     # back up
     def backup(self):
         from filemanager import zip_dir
-        mtime = datetime.fromtimestamp(os.path.getmtime(self._strategy_path)).strftime("%Y%m%d")
+        mtime = datetime.date().strftime("%Y%m%d")
         cwd = os.getcwd()
         os.chdir(os.path.abspath(self._strategy_path+'/../strategy_backup'))
         zip_dir(self._strategy_path, "copy_of_%s_%s.zip"%(os.path.split(self._strategy_path)[1], mtime))

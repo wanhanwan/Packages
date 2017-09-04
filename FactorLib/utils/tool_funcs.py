@@ -107,7 +107,7 @@ def get_industry_names(industry_symbol, industry_info):
 
 def get_industry_code(industry_symbol, industry_info):
     if industry_symbol in ['sw_level_2', 'cs_level_2']:
-        level_2_excel = "D:/FactorLib" + os.sep + "resource" + os.sep + "level_2_industry_dict.xlsx"
+        level_2_excel = "D:/Packages/FactorLib" + os.sep + "resource" + os.sep + "level_2_industry_dict.xlsx"
         level_2_dict = pd.read_excel(level_2_excel, sheetname=industry_symbol, header=0)
     industry_info.columns = ['industry_code']
     if industry_symbol == 'cs_level_2':
@@ -193,8 +193,8 @@ def deep_update_dict(from_dict, to_dict):
             to_dict[key] = value
 
 
-# 把整数n平均分成m份
 def distribute_equal(n, m):
+    """把整数n平均分成m份"""
     Quotient = n // m
     Remainder = n % m
     Res = [Quotient] * m
