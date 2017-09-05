@@ -53,6 +53,10 @@ class Analyzer(object):
         return (1 + self.active_return).cumprod()
 
     @property
+    def benchmark_nav(self):
+        return (1 + self.benchmark_return).cumprod()
+
+    @property
     def abs_annual_return(self):
         return stats.annual_return(self.portfolio_return)
 

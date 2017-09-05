@@ -9,8 +9,8 @@
 bp = ('bp','/stock_value/', 1)
 ep = ('ep', '/stock_value/', 1)
 bp_standard = ('bp_standard', '/stock_value/', 1)
-bp_div_median = ('bp_divide_median', '/stock_value/', 1)
-ep_div_median = ('ep_divide_median', '/stock_value/', 1)
+bp_divide_median = ('bp_divide_median', '/stock_value/', 1)
+ep_divide_median = ('ep_divide_median', '/stock_value/', 1)
 relative_pe = ('relative_pe', '/lg_factor/', -1)
 float_mkt_value = ('float_mkt_value', '/stocks/', -1)
 
@@ -153,7 +153,7 @@ factor_list_style = [StyleFactor_GM, StyleFactor_GrowthFactor, StyleFactor_Momen
                StyleFactor_TB_adjM, StyleFactor_TradingBehaviorFactor, StyleFactor_ValueFactor,StyleFactor_VG,
                StyleFactor_VGS, StyleFactor_VGS_TB, StyleFactor_VGS_TBadjM, StyleFactor_VS]
 
-self_defined = [bp_div_median, ep_div_median, float_mkt_value, six_month_highest_returns,
+self_defined = [bp_divide_median, bp_divide_median, float_mkt_value, six_month_highest_returns,
                iffr, return_60d, turnover_adjust_total_mkt_value]
 
 

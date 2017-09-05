@@ -3,7 +3,6 @@ from ..single_factor_test.config import parse_config
 from ..utils import AttrDict
 from datetime import datetime
 from ..data_source.base_data_source_h5 import tc, h5
-from ..data_source.wind_plugin import realtime_quote, get_history_bar
 from ..utils.tool_funcs import windcode_to_tradecode, import_module
 from ..factor_performance.analyzer import Analyzer
 import pandas as pd
@@ -198,6 +197,7 @@ class StrategyManager(object):
 
     # 生成交易指令
     def generate_tradeorder(self, strategy_id, capital, realtime=False):
+        from ..data_source.wind_plugin import realtime_quote, get_history_bar
         idx = pd.IndexSlice
         today = tc.get_latest_trade_days(datetime.today().strftime('%Y%m%d'))
         stocks = self.latest_position(strategy_id=strategy_id)
