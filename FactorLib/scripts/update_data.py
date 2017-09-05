@@ -17,8 +17,8 @@ import pandas as pd
 import os
 from FactorLib.data_source.base_data_source_h5 import tc
 
-latest_update_date_0 = '20170830'
-latest_update_date_1 = '20170830'
+latest_update_date_0 = '20170904'
+latest_update_date_1 = '20170904'
 
 UpdateFuncs = [
                onlist,
@@ -43,11 +43,11 @@ while 1:
         start = tc.tradeDayOffset(latest_update_date_0, 1)
         end = datetime.today().strftime('%Y%m%d')
         # end = '20170831'
-        # for iFunc in UpdateFuncs:
-        #     iFunc(start, end)
-        # update.update_all(start, end)
-        # dailyfactors(start, end)
-        # h5.snapshot(pd.date_range(start, end), 'base_factor', mail=True)
+        for iFunc in UpdateFuncs:
+            iFunc(start, end)
+        update.update_all(start, end)
+        dailyfactors(start, end)
+        h5.snapshot(pd.date_range(start, end), 'base_factor', mail=True)
         flag0 = 0
         latest_update_date_0 = datetime.today().strftime("%Y%m%d")
         run(r"D:\factors\全市场_中证500基准_2010年以来\update\config.yml",

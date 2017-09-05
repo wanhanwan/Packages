@@ -258,7 +258,7 @@ class StrategyManager(object):
     # back up
     def backup(self):
         from filemanager import zip_dir
-        mtime = datetime.date().strftime("%Y%m%d")
+        mtime = datetime.today().strftime("%Y%m%d")
         cwd = os.getcwd()
         os.chdir(os.path.abspath(self._strategy_path+'/../strategy_backup'))
         zip_dir(self._strategy_path, "copy_of_%s_%s.zip"%(os.path.split(self._strategy_path)[1], mtime))
@@ -302,7 +302,7 @@ def collect_nav(mailling=False):
     indexreturns = (h5.load_factor('daily_returns_%', '/indexprices/', dates=[maxdate]) / 100).reset_index()
     indexreturns.insert(0, 'name', indexreturns['IDs'].map(MARKET_INDEX_DICT))
     indexreturns = indexreturns.set_index(['date', 'IDs'])
-    industry_returns = (h5.load_factor('changeper', '/indexprices/cs_level_1/', dates=[maxdate]) / 100).reset_index()
+    industry_returns = (h5.load_factor('pct_chg', '/indexprices/cs_level_1/', dates=[maxdate]) / 100).reset_index()
     industry_returns.insert(0, 'name', industry_returns['IDs'].map(CS_INDUSTRY_DICT))
     industry_returns = industry_returns.set_index(['date', 'IDs'])
     ensure_dir_exists("D:/data/strategy_performance/%s"%maxdate)
