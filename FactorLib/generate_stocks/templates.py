@@ -5,7 +5,7 @@ from ..single_factor_test.factor_list import *
 from ..single_factor_test.selfDefinedFactors import *
 from ..utils.disk_persist_provider import DiskPersistProvider
 from datetime import datetime
-from ..utils.tool_funcs import tradecode_to_windcode
+from ..utils.tool_funcs import tradecode_to_windcode, ensure_dir_exists
 import os
 from ..generate_stocks import funcs, stocklist
 import pandas as pd
@@ -15,6 +15,7 @@ class AbstractStockGenerator(object):
     def __init__(self):
         self.config = None
         self.temp_path = os.path.join(os.getcwd(), 'temp')
+        ensure_dir_exists(self.temp_path)
         self.persist_provider = DiskPersistProvider(self.temp_path)
 
     def _prepare_config(self, **kwargs):

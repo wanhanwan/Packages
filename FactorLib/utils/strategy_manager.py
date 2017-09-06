@@ -224,13 +224,13 @@ class StrategyManager(object):
 
     # 运行回测
     def run_backtest(self, start, end, strategy_id=None, strategy_name=None):
-        self.backup()
+        # self.backup()
         if strategy_id is not None:
             strategy_name = self.strategy_name(strategy_id)
         cwd = os.getcwd()
         os.chdir(os.path.join(self._strategy_path, strategy_name))
         if not os.path.isdir('backtest'):
-            from scripts import strategy_bttest_templates
+            from FactorLib.scripts import strategy_bttest_templates
             src = strategy_bttest_templates.__path__.__dict__['_path'][-1]
             shutil.copytree(src, os.getcwd()+'/backtest')
             # os.rename('strategy_bttest_templates', 'backtest')
@@ -238,6 +238,10 @@ class StrategyManager(object):
             self.strategy_stocklist(strategy_name=strategy_name)['stocklist_name'])
         script = os.path.abspath('./backtest/run.py')
         start = datetime.strptime(start, '%Y%m%d').strftime('%Y-%m-%d')
+        latest_date = self.latest_nav_date(strategy_name=strategy_name)
+        if latest_date is not None:
+            start = tc.tradeDayOffset(self.latest_nav_date(strategy_name=strategy_name), 1,
+                                      incl_on_offset_today=False, retstr=None).strftime('%Y-%m-%d')
         end = datetime.strptime(end, '%Y%m%d').strftime('%Y-%m-%d')
         os.system("python %s -s %s -e %s -f %s" % (script, start, end, stocklist_path))
         self.analyze_return(strategy_name)
@@ -252,7 +256,9 @@ class StrategyManager(object):
         analyzer = self.performance_analyser(strategy_name=strategy_name)
         max_date = self.latest_nav_date(strategy_name=strategy_name)
         if analyzer is not None:
-            analyzer.returns_sheet(max_date).to_csv("returns_sheet.csv", index=False, float_format='%.4f')
+            return_sheet = analyzer.returns_sheet(max_date)
+            return_sheet.insert(0, '最新日期', max_date)
+            return_sheet.to_csv("returns_sheet.csv", index=False, float_format='%.4f')
         os.chdir(cwd)
 
     # back up
@@ -280,6 +286,12 @@ def update_nav(start, end):
     sm.backup()
     for i, f in sm._strategy_dict['name'].iteritems():
         sm.run_backtest(start, end, strategy_name=f)
+        # 对策略进行二次检查，确保回测完成
+        date = sm.latest_nav_date(strategy_name=f)
+        if date is None:
+            sm.run_backtest(start, end, strategy_name=f)
+        elif date < tc.tradeDayOffset(end, 0, retstr=None):
+            sm.run_backtest(start, end, strategy_name=f)
     return
 
 
@@ -291,14 +303,12 @@ def collect_nav(mailling=False):
     sm = StrategyManager('D:/data/factor_investment_strategies', 'D:/data/factor_investment_stocklists')
     for i, f in sm._strategy_dict['name'].iteritems():
         if os.path.isfile(os.path.join(sm._strategy_path, f+'/backtest/returns_sheet.csv')):
-            date = sm.latest_nav_date(strategy_name=f)
             ff = open(os.path.join(sm._strategy_path, f+'/backtest/returns_sheet.csv'))
             returns = pd.read_csv(ff)
-            returns['最新日期'] = date
             returns.insert(0, '策略名称', f)
             df = df.append(returns)
     df = df.set_index('最新日期')
-    maxdate = df.index.max().strftime("%Y%m%d")
+    maxdate = df.index.max().replace('-','')
     indexreturns = (h5.load_factor('daily_returns_%', '/indexprices/', dates=[maxdate]) / 100).reset_index()
     indexreturns.insert(0, 'name', indexreturns['IDs'].map(MARKET_INDEX_DICT))
     indexreturns = indexreturns.set_index(['date', 'IDs'])
