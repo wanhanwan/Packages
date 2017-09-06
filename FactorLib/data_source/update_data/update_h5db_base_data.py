@@ -88,6 +88,14 @@ def onlist(start, end):
     h5.save_factor(list_date, '/stocks/')
     h5.save_factor(backdoordate, '/stocks/')
 
+def stockname(start, end):
+    d = get_ashare(end)
+    idx = pd.MultiIndex.from_product([[DateStr2Datetime("19000101")], [x[:6] for x in d]],
+                                     names=['date', 'IDs'])
+    data = w.wsd(d, "sec_name", end, end, "")
+    name = data.Data[0]
+    name = pd.DataFrame(name, index=idx, columns=['name'])
+    h5.save_factor(name, '/stocks/')
 
 def update_price(start, end):
     """更新价量行情数据"""
@@ -206,4 +214,4 @@ def update_industry_index_prices(start, end):
 
 
 if __name__ == '__main__':
-    update_idx_weight('20170814', '20170903')
+    stockname('20170905','20170905')

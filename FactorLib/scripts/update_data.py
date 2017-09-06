@@ -45,7 +45,7 @@ while 1:
         print("即将更新因子数据...")
         start = tc.tradeDayOffset(latest_update_date_0, 1)
         end = datetime.today().strftime('%Y%m%d')
-        # end = '20170831'
+        end = '20170831'
         for iFunc in UpdateFuncs:
             iFunc(start, end)
         update.update_all(start, end)
