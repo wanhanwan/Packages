@@ -262,8 +262,7 @@ class FactorAnalyzer(Analyzer):
 
 
 if __name__ == '__main__':
-    # analyzer = Analyzer(r"D:\data\factor_investment_strategies\兴业风格_价值\backtest\BTresult.pkl",
-    #                     benchmark_name='000905')
-    ff = FactorAnalyzer(r"D:\factors\全市场_过去12个月\bp_divide_median\bp_divide_median.pkl")
-    a = ff.resample_ls_return_of('1m')
-    b = ff.abs_yearly_performance
+    analyzer = Analyzer(r"D:\data\factor_investment_strategies\兴业风格_价值\backtest\BTresult.pkl",
+                        benchmark_name='000905')
+    # ff = FactorAnalyzer(r"D:\factors\全市场_过去12个月\bp_divide_median\bp_divide_median.pkl")
+    a = analyzer.portfolio_weights('20170830')

@@ -8,6 +8,7 @@ from bokeh.models.widgets import DataTable, PreText, TableColumn, Select, Number
 from FactorLib.visualization.data_provider import StrategyPerformanceResultProvider, SingleStrategyResultProvider
 from fastcache import clru_cache
 from datetime import datetime, timedelta
+from FactorLib.data_source.trade_calendar import as_timestamp
 
 output_file("viwer.html")
 
@@ -80,33 +81,34 @@ update_stats()
 
 # Tab Three
 def yesterday():
-    return datetime.now() - timedelta(1)
-datepicker = DatePicker(title='Date', min_date=datetime(2007, 1, 1), max_date=datetime.now(), value=yesterday())
+    return datetime.now() - timedelta(days=1)
+datepicker = DatePicker(title='Date', min_date=datetime(2007, 1, 1), max_date=datetime.now(), value=yesterday().date())
 strategy_select_tb3 = Select(title='strategy', value=strategy_data_provider.all_strategies[0],
                              options=strategy_data_provider.all_strategies)
 positions = ColumnDataSource(data=dict(
     IDs=[], Weight=[], cs_level_1=[], wind_level_1=[], name=[], list_date=[], daily_return=[]))
 
 columns_tb3 = []
-for c in positions.column_names():
+for c in positions.column_names:
     if c in ['IDs', 'cs_level_1', 'wind_level_1', 'name', 'list_date']:
         columns_tb3.append(TableColumn(field=c, title=c))
     else:
         columns_tb3.append(TableColumn(field=c, title=c, formatter=NumberFormatter(format='0.00%')))
-table_tb3 = DataTable(source=positions, columns=columns_tb3, width=1200, height=1000)
+table_tb3 = DataTable(source=positions, columns=columns_tb3, width=1000, height=600)
 
 
 def update_data_tb3():
     strategy = strategy_select_tb3.value
-    date = datepicker.value.strftime("%Y%m%d")
+    date = as_timestamp(datepicker.value)
     data = strategy_data_provider.load_positions(date, strategy)
+    # print(data)
     positions.data = positions.from_df(data)
 datepicker.on_change('value', lambda attr, old, new: update_data_tb3())
 strategy_select_tb3.on_change('value', lambda attr, old, new: update_data_tb3())
 update_data_tb3()
 
-controls = widgetbox(datepicker, strategy_select_tb3)
-tab3 = Panel(child=column(controls, table_tb3), title='POSITIONS')
+controls_tb3 = widgetbox(datepicker, strategy_select_tb3)
+tab3 = Panel(child=column(controls_tb3, widgetbox(table_tb3)), title='POSITIONS')
 
 # set layout
 tabs = Tabs(tabs=[tab1, tab2, tab3])

@@ -77,8 +77,8 @@ class SingleStrategyResultProvider(object):
     def load_positions(self, date, strategy):
         latest_trade_date = data_source.trade_calendar.tradeDayOffset(date, 0)
         analyzer = self.get_analyzer(strategy)
-        stock_weight = analyzer.portfolio_weights(latest_trade_date)
+        stock_weight = analyzer.portfolio_weights(latest_trade_date).reset_index(level=0, drop=True)
         stock_info = self.load_stock_info(latest_trade_date).reset_index(level=0, drop=True)
-        stock_return = self.load_stock_return(date).reset_index(level=0, drop=True).rename(
+        stock_return = self.load_stock_return(latest_trade_date).reset_index(level=0, drop=True).rename(
             columns={'daily_returns_%': 'daily_return'})
         return pd.concat([stock_weight, stock_info, stock_return], axis=1, join='inner')
