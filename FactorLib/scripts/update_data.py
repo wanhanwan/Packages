@@ -5,7 +5,9 @@ from FactorLib.data_source.update_data.update_h5db_base_data import (onlist,
                                                            update_idx_weight,
                                                            update_industry_name,
                                                            update_industry_index_prices,
-                                                           update_stock_constest)
+                                                           update_stock_constest,
+                                                           stockname
+                                                                    )
 from FactorLib.data_source.update_data.run_daily import dailyfactors
 from FactorLib.data_source.wind_financial_data_api import update
 from FactorLib.data_source.base_data_source_h5 import h5
@@ -28,7 +30,8 @@ UpdateFuncs = [
                update_idx_weight,
                update_industry_name,
                update_industry_index_prices,
-               update_stock_constest
+               update_stock_constest,
+               stockname
                ]
 
 flag0 = 0

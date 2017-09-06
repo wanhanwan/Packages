@@ -5,6 +5,7 @@
 """
 
 from FactorLib.factor_performance.analyzer import Analyzer
+from FactorLib.data_source.base_data_source_h5 import data_source
 import pandas as pd
 import fastcache
 import os
@@ -47,6 +48,7 @@ class SingleStrategyResultProvider(object):
         self.strategy_summary = summary_df
         self.all_strategies = summary_df['name'].tolist()
 
+    @fastcache.clru_cache()
     def get_analyzer(self, strategy):
         pkl_path = os.path.join(self.root_path, "%s/backtest/BTresult.pkl"%strategy)
         benchmark_name = self.strategy_summary.loc[self.strategy_summary.name==strategy, 'benchmark'].iloc[0]
@@ -62,3 +64,21 @@ class SingleStrategyResultProvider(object):
     @fastcache.clru_cache()
     def load_info(self, strategy):
         return str(self.strategy_summary.loc[self.strategy_summary.name==strategy, :].iloc[0])
+
+    @fastcache.clru_cache()
+    def load_stock_info(self, date):
+        return data_source.sector.get_stock_info(ids=None, date=date)
+
+    @fastcache.clru_cache()
+    def load_stock_return(self, date):
+        return data_source.load_factor('daily_returns_%', '/stocks/', dates=[date]) / 100
+
+    @fastcache.clru_cache()
+    def load_positions(self, date, strategy):
+        latest_trade_date = data_source.trade_calendar.tradeDayOffset(date, 0)
+        analyzer = self.get_analyzer(strategy)
+        stock_weight = analyzer.portfolio_weights(latest_trade_date)
+        stock_info = self.load_stock_info(latest_trade_date).reset_index(level=0, drop=True)
+        stock_return = self.load_stock_return(date).reset_index(level=0, drop=True).rename(
+            columns={'daily_returns_%': 'daily_return'})
+        return pd.concat([stock_weight, stock_info, stock_return], axis=1, join='inner')
