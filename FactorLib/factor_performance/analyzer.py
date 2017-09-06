@@ -70,7 +70,7 @@ class Analyzer(object):
 
     @property
     def rel_total_return(self):
-        return stats.cum_returns_final(self.active_return) - stats.cum_returns_final(self.benchmark_return)
+        return stats.cum_returns_final(self.portfolio_return) - stats.cum_returns_final(self.benchmark_return)
 
     @property
     def abs_annual_volatility(self):
