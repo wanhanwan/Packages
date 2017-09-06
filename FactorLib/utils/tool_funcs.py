@@ -4,7 +4,8 @@ from FactorLib.const import (INDUSTRY_NAME_DICT,
                    CS_INDUSTRY_DICT,
                    SW_INDUSTRY_DICT_REVERSE,
                    CS_INDUSTRY_DICT_REVERSE,
-                   WIND_INDUSTRY_DICT_REVERSE
+                   WIND_INDUSTRY_DICT_REVERSE,
+                   WIND_INDUSTRY_DICT
                    )
 import pandas as pd
 import os
@@ -16,10 +17,7 @@ def dict_reverse(_dict):
 
 
 def parse_industry(industry):
-    if industry[:2] == '中信':
-        return INDUSTRY_NAME_DICT['中信一级']
-    else:
-        return INDUSTRY_NAME_DICT['申万一级']
+    return INDUSTRY_NAME_DICT[industry]
 
 
 def anti_parse_industry(industry):
@@ -91,13 +89,16 @@ def get_industry_names(industry_symbol, industry_info):
     elif industry_symbol == 'cs_level_1':
         series = pd.Series(CS_INDUSTRY_DICT).to_frame().rename(columns={0: industry_symbol})
         series.index = [int(x[2:]) for x in series.index]
+    elif industry_symbol == 'wind_level_1':
+        series = pd.Series(WIND_INDUSTRY_DICT).to_frame().rename(columns={0: industry_symbol})
+        series.index = [float(x) for x in series.index]
     elif industry_symbol == 'cs_level_2':
-        level_2_excel = os.path.abspath(os.path.abspath("..") +'/..') + os.sep + "resource" + os.sep + "level_2_industry_dict.xlsx"
+        level_2_excel = os.path.abspath(os.path.dirname(__file__) +'/..') + os.sep + "resource" + os.sep + "level_2_industry_dict.xlsx"
         level_2_dict = pd.read_excel(level_2_excel, sheetname=industry_symbol, header=0)
         level_2_dict['Code'] = level_2_dict['Code'].apply(lambda x: int(x[2:]))
         series = level_2_dict.set_index('Code').rename(columns={'Name': industry_symbol})
     elif industry_symbol == 'sw_level_2':
-        level_2_excel = os.path.abspath(os.path.abspath("..") +'/..') + os.sep + "resource" + os.sep + "level_2_industry_dict.xlsx"
+        level_2_excel = os.path.abspath(os.path.dirname(__file__) +'/..') + os.sep + "resource" + os.sep + "level_2_industry_dict.xlsx"
         level_2_dict = pd.read_excel(level_2_excel, sheetname=industry_symbol, header=0)
         level_2_dict['Code'] = level_2_dict['Code'].apply(int)
         series = level_2_dict.set_index('Code').rename(columns={'Name': industry_symbol})

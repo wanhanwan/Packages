@@ -458,17 +458,19 @@ class sector(object):
 
     def get_stock_info(self, ids, date):
         """获得上市公司的信息。
-        信息包括公司代码、公司简称、上市日期、所属行业(中信一级)"""
-        if not isinstance(date,list):
+        信息包括公司代码、公司简称、上市日期、所属行业(中信一级,wind一级)"""
+        if not isinstance(date, list):
             date = [date]
         if (not isinstance(ids, list)) and (ids is not None):
             ids = [ids]
-        factors = {'/stocks/': ['Name', 'list_date']}
+        factors = {'/stocks/': ['name', 'list_date']}
         stock_name_listdate = self.h5DB.load_factors(factors, ids=ids)
-        stock_name_listdate = stock_name_listdate.reset_index(level=0,drop=True)
+        stock_name_listdate = stock_name_listdate.reset_index(level=0, drop=True)
 
         stock_members = self.get_stock_industry_info(ids, dates=date).swaplevel()
-        stock_info = pd.merge(stock_members,stock_name_listdate,left_index=True, right_index=True,how='left')
+        stocks_members_wind = self.get_stock_industry_info(ids, dates=date, industry='万得一级').swaplevel()
+        members = pd.concat([stock_members, stocks_members_wind], axis=1)
+        stock_info = pd.merge(members, stock_name_listdate, left_index=True, right_index=True, how='left')
         stock_info = stock_info.swaplevel()
         return stock_info
 
