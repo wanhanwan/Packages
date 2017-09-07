@@ -1,6 +1,7 @@
 from openpyxl.styles import Font
 from openpyxl import Workbook
 from ..utils.tool_funcs import write_df_to_excel, tradecode_to_windcode
+from ..single_factor_test.factor_list import factor_direction
 import os
 import pandas as pd
 
@@ -99,12 +100,14 @@ def save_details_to_excel(factor,file_path, env):
     file_name = file_path + os.sep+ factor.name + '_details.xlsx'
     wb.save(filename=file_name)
 
+
 def save_summary_to_excel(factors, file_path, env, method='typical'):
     """按照兴业证券的简要模板存储"""
     factor_names = []
     ic_series = []
     long_short = []
     long_only = []
+    direction = pd.Series(factor_direction, name='direction').to_frame()
     for factor in factors:
         factor_names.append(factor.name)
         ic_series.append(factor.ic_series.describe())
@@ -112,9 +115,12 @@ def save_summary_to_excel(factors, file_path, env, method='typical'):
         long_short.append(factor.long_short_return.long_short_returns[method].get_summary())
     factor_name_dict = {x: factor_names[x] for x in range(len(factor_names))}
     ic_series = pd.concat(ic_series, axis=1).rename_axis(factor_name_dict, axis='columns').T
+    ic_series = ic_series.join(direction)
     long_only = pd.concat(long_only, axis=1).rename_axis(factor_name_dict, axis='columns').T
+    long_only = long_only.join(direction)
     long_short = pd.concat(long_short, axis=1).rename_axis(factor_name_dict, axis='columns').T
-    
+    long_short = long_short.join(direction)
+
     wb = Workbook()
     active_sheet = wb.active
     active_sheet.title = "IC"
@@ -125,7 +131,8 @@ def save_summary_to_excel(factors, file_path, env, method='typical'):
     write_df_to_excel(active_sheet, (1, 1), long_short)
     file_name = file_path + os.sep + 'summary.xlsx'
     wb.save(filename=file_name)
-    
+
+
 def save_stock_list(factor, file_path, env):
     """
     存储股票列表

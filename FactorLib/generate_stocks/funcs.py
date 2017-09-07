@@ -1,7 +1,7 @@
 from ..data_source.base_data_source_h5 import data_source
 from ..riskmodel import stockpool
 from QuantLib.utils import DropOutlier, Standard, ScoringFactors
-from ..utils.tool_funcs import parse_industry
+from ..utils.tool_funcs import parse_industry, tradecode_to_windcode
 import numpy as np
 import pandas as pd
 
@@ -65,6 +65,39 @@ def _to_factordict(factors):
             _dict[factor[1]].append(factor[0])
         direction[factor[0]] = factor[2]
     return _dict, direction
+
+
+def generate_wind_pms_template(stocklist, save_path):
+    """
+    根据股票列表生成wind调仓模板
+
+    wind调仓模板的格式如下：
+        column1：证券代码 column2：持仓权重 column3: 成本价格 column4：调整日期 column5：证券类型
+    :param stocklist: pandas.dataframe
+        股票列表的格式 index[date IDs] column[Weight]
+    :param save_path: str
+        excel保存路径
+    :return: excel
+
+    """
+    columnmap = {'date':'调整日期', 'IDs':'证券代码', 'close':'成本价格', 'Weight':'持仓权重'}
+    close_price = data_source.load_factor('close', '/stocks/', idx=stocklist.index)
+    temp = pd.concat([stocklist, close_price], axis=1).reset_index().rename(columns=columnmap)
+    temp['证券类型'] = '股票'
+    temp['证券代码'] = temp['证券代码'].apply(tradecode_to_windcode)
+    temp = temp[['证券代码', '持仓权重', '成本价格', '调整日期', '证券类型']]
+    writer = pd.ExcelWriter(save_path, datetime_format='yyyy/mm/dd')
+    temp.to_excel(writer, "Sheet1", index=False)
+
+
+def generate_stocklist_txt(stocklist, save_path):
+    """把股票列表中的股票导入到txt文件"""
+
+    IDs = stocklist.index.get_level_values(1).unique().tolist()
+    IDs = [tradecode_to_windcode(x)+'\n' for x in IDs]
+
+    with open(save_path, 'w') as f:
+        f.writelines(IDs)
 
 
 if __name__ == "__main__":

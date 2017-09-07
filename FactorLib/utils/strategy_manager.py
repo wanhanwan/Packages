@@ -195,6 +195,38 @@ class StrategyManager(object):
             max_date = self._strategy_dict[self._strategy_dict.id==strategy_id]['latest_rebalance_date']
         return self._stocklist_manager.get_position(stocklist_info['stocklist_name'], max_date)
 
+    def genetate_wind_pms_template(self, start, end, strategy_name=None, strategy_id=None):
+        """生成wind pms 模块调仓模板"""
+        from ..generate_stocks.funcs import generate_wind_pms_template
+        if strategy_id is not None:
+            strategy_name = self.strategy_name(strategy_id)
+        freq = self.get_attribute('rebalance_frequence', strategy_name=strategy_name)
+        all_dates = tc.get_trade_days(start, end, freq=freq)
+        cwd = os.getcwd()
+        os.chdir(os.path.join(self._strategy_path, strategy_name + '/backtest'))
+        analyzer = self.performance_analyser(strategy_name=strategy_name)
+        positions = []
+        for date in all_dates:
+            position = analyzer.portfolio_weights(date)
+            positions.append(position)
+        positions = pd.concat(positions)
+        generate_wind_pms_template(positions, "%s_wind_pms.xlsx"%strategy_name)
+        os.chdir(cwd)
+        return
+
+    def generate_stocklist_txt(self, date, strategy_name=None, strategy_id=None):
+        """生成股票列表持仓文本文件"""
+        from ..generate_stocks.funcs import generate_stocklist_txt
+        if strategy_id is not None:
+            strategy_name = self.strategy_name(strategy_id)
+        cwd = os.getcwd()
+        os.chdir(os.path.join(self._strategy_path, strategy_name + '/backtest'))
+        analyzer = self.performance_analyser(strategy_name=strategy_name)
+        position = analyzer.portfolio_weights(date)
+        generate_stocklist_txt(position, "stocks_%s.txt"%date)
+        os.chdir(cwd)
+        return
+
     # 生成交易指令
     def generate_tradeorder(self, strategy_id, capital, realtime=False):
         from ..data_source.wind_plugin import realtime_quote, get_history_bar

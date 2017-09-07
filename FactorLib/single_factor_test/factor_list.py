@@ -114,8 +114,8 @@ StyleFactor_VGS_TBadjM = ('StyleFactor_VGS_TBadjM', '/XYData/StyleFactor/', 1)
 StyleFactor_VS = ('StyleFactor_VS', '/XYData/StyleFactor/', 1)
 
 # Others
-ivr = ('FamaFrenchFactor_IVR', '/XYData/Others/', -1)
-rv = ('RVFactor_RV', '/XYData/Others/', 1)
+FamaFrenchFactor_IVR = ('FamaFrenchFactor_IVR', '/XYData/Others/', -1)
+RVFactor_RV = ('RVFactor_RV', '/XYData/Others/', 1)
 SpreadBiasFactor_SpreadBias_120D = ('SpreadBiasFactor_SpreadBias_120D', '/XYData/Others/', 1)
 ValueBiasFactor_EP_DR = ('ValueBiasFactor_EP_DR', '/XYData/Others/', 1)
 ValueBiasFactor_SP_DR = ('ValueBiasFactor_SP_DR', '/XYData/Others/', 1)
@@ -154,7 +154,10 @@ factor_list_style = [StyleFactor_GM, StyleFactor_GrowthFactor, StyleFactor_Momen
                StyleFactor_VGS, StyleFactor_VGS_TB, StyleFactor_VGS_TBadjM, StyleFactor_VS]
 
 self_defined = [bp_divide_median, bp_divide_median, float_mkt_value, six_month_highest_returns,
-               iffr, return_60d, turnover_adjust_total_mkt_value]
+                iffr, return_60d, turnover_adjust_total_mkt_value]
+
+factor_list_others = [FamaFrenchFactor_IVR, RVFactor_RV, SpreadBiasFactor_SpreadBias_120D, ValueBiasFactor_EP_DR,
+                      ValueBiasFactor_BP_DR, ValueBiasFactor_SP_DR, VWAPPFactor_VWAPP_OLS]
 
 
 # BARRA因子
@@ -196,3 +199,5 @@ BARRA = [BETA, BLEV, BTOP, CETOP, CMRA,
 
 factor_list = factor_list_growth + factor_list_momentum + factor_list_quality + factor_list_sentiment + \
     factor_list_style + factor_list_technical + factor_list_value + self_defined
+
+factor_direction = {x[0]: x[2] for x in factor_list}
