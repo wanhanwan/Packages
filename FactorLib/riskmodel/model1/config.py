@@ -89,6 +89,7 @@ funcs.append(func_description)
 # 存储信息
 save_info = {
     'factor_to_save': ['BETA','RSTR','VOLATILITY','BTOP','LIQUIDITY','EARNING','GROWTH','LEVERAGE','LNCAP','NLSIZE'],
+    'industry_factor': 'wind_level_1',
     'factor_save_path': '/barra/factors/',
     'run_type': 'M',
     'split_length': 75,

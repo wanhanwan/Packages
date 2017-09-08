@@ -19,8 +19,8 @@ import pandas as pd
 import os
 from FactorLib.data_source.base_data_source_h5 import tc
 
-latest_update_date_0 = '20170905'
-latest_update_date_1 = '20170905'
+latest_update_date_0 = '20170906'
+latest_update_date_1 = '20170906'
 
 UpdateFuncs = [
                onlist,

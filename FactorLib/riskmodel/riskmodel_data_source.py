@@ -5,16 +5,23 @@
 from multiprocessing import Lock
 from ..data_source.trade_calendar import trade_calendar
 import pandas as pd
+import numpy as np
 from ..utils.datetime_func import DateRange2Dates
+from ..utils.disk_persist_provider import DiskPersistProvider
+from ..utils.tool_funcs import ensure_dir_exists
+from .stockpool import get_estu
 tc = trade_calendar()
 
 
 class RiskModelDataSourceOnH5(object):
     def __init__(self, h5_db, lock=None):
         self.h5_db = h5_db
+        self.name = None
         self.set_multiprocess_lock(lock)
         self.all_dates = None
         self.all_ids = None
+        self.idx = None
+        self.estu_config = {}
         self.factor_dict = {}
         self.factor_names = []
         self.cache_data = {}            # 缓存数据
@@ -22,11 +29,22 @@ class RiskModelDataSourceOnH5(object):
         self.cached_factor_num = 0      # 已经缓存的因子数量
         self.factor_read_num = None     # 因子的读取次数
 
+    def set_name(self, name):
+        self.name = name
+
     def set_dimension(self, idx):
         """设置日期和股票"""
         self.idx = idx
         self.all_ids = idx.index.get_level_values(1).unique().tolist()
         self.all_dates = idx.index.get_level_values(0).unique().tolist()
+
+    def set_estu_config(self, estu_config):
+        self.estu_config = estu_config
+
+    def update_estu(self, dates):
+        stocklist = get_estu(dates, self.estu_config)
+        stocklist = stocklist[stocklist.iloc[0, :] == 1]
+        self.set_dimension(stocklist)
 
     def set_multiprocess_lock(self, lock):
         self.multiprocess_lock = Lock() if lock is None else lock
@@ -36,7 +54,7 @@ class RiskModelDataSourceOnH5(object):
         """
             准备因子列表生成数据源，若prepare_id_date为TRUE，则更新self.all_dates、
         self.all_ids为所有factors的交集.
-            table_fator的原始格式是[(name, path, direction)...]，转换成factor_dict{name:path}
+            table_factor的原始格式是[(name, path, direction)...]，转换成factor_dict{name:path}
         """
         factor_dict = {}
         for factor in table_factor:
@@ -81,6 +99,8 @@ class RiskModelDataSourceOnH5(object):
     def get_factor_data(self, factor_name, start_date=None, end_date=None, ids=None, dates=None):
         """获得单因子的数据"""
         idx = self.idx[self.idx.index.get_level_values(0).isin(dates)]
+        if ids is not None:
+            idx = self.idx.loc[pd.IndexSlice[:, ids], :]
         if self.max_cache_num == 0:     # 无缓存机制
             self.multiprocess_lock.acquire()
             data = self.h5_db.load_factor(factor_name, self.factor_dict[factor_name], dates=dates, ids=ids)
@@ -111,6 +131,51 @@ class RiskModelDataSourceOnH5(object):
                     return data.reindex(idx.index)
                 self.multiprocess_lock.release()
         return factor_data.reindex(idx.index)
+
+    @DateRange2Dates
+    def get_data(self, factor_names, start_date=None, end_date=None, ids=None, dates=None):
+        """加载因子数据到一个dataframe里"""
+        frame = []
+        for ifactor in factor_names:
+            ifactor_data = self.get_factor_data(ifactor, dates=dates, ids=ids)
+            frame.append(ifactor_data)
+        data = pd.concat(frame, axis=1)
+        return data
+
+    def get_factor_unique_data(self, factor_name, start_date=None, end_date=None, ids=None, dates=None):
+        """提取因子unique数据"""
+        factor_data = self.get_factor_data(factor_name,start_date, end_date, ids, dates)
+        return factor_data[factor_name].unique().tolist()
+
+    def save_info(self, path="D/data/riskmodel/datasources"):
+        """保存数据源信息"""
+        ensure_dir_exists(path)
+        dumper = DiskPersistProvider(persist_path=path)
+        info = {
+            'name': self.name,
+            'all_dates': self.all_dates,
+            'all_ids': self.all_ids,
+            'idx': self.idx,
+            'factor_dict': self.factor_dict,
+            'factor_names': self.factor_names,
+            'max_cache_num': self.max_cache_num,
+            'estu_config': self.estu_config
+        }
+        dumper.dump(info, name=self.name)
+
+    def load_info(self, name, path="D/data/riskmodel/datasources"):
+        """加载数据源信息"""
+        dumper = DiskPersistProvider(persist_path=path)
+        info = dumper.load(name)
+        self.name = info['name']
+        self.all_dates = info['all_dates']
+        self.all_ids = info['all_ids']
+        self.idx = info['idx']
+        self.factor_dict = info['factor_dict']
+        self.factor_names = info['factor_names']
+        self.max_cache_num = info['max_cache_num']
+        self.estu_config = info['estu_config']
+        self.factor_read_num = pd.Series(np.zeros(len(self.factor_names)), index=self.factor_names)
 
     def save_factor(self, data, path):
         self.multiprocess_lock.acquire()

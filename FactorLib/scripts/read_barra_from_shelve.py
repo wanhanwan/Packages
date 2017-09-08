@@ -15,7 +15,7 @@ fields = ['BETA', 'BLEV', 'BTOP', 'CETOP', 'CMRA', 'DASTD', 'DTOA',
           'EGRO', 'ETOP', 'HSIGMA', 'LNCAP', 'MLEV', 'RSTR', 'SGRO',
           'STOA', 'STOM', 'STOQ']
 
-file_name = r"D:\data\barra\barra_%d"%2016
+file_name = r"D:\data\barra\barra_%d"%2017
 
 with closing(shelve.open(file_name)) as f:
     for key in f.keys():

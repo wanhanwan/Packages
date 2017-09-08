@@ -9,8 +9,9 @@ from .h5db import H5DB
 from .trade_calendar import tc
 from .tseries import resample_func, resample_returns
 from ..utils.datetime_func import DateStr2Datetime
-from ..utils.tool_funcs import parse_industry, get_industry_names, financial_data_reindex, windcode_to_tradecode
+from ..utils.tool_funcs import parse_industry, financial_data_reindex, windcode_to_tradecode
 from QuantLib.utils import Generate_Dummy
+from .converter import IndustryConverter
 
 
 class base_data_source(object):
@@ -395,7 +396,7 @@ class sector(object):
             dates = [dates]
         symbol = parse_industry(industry)
         industry_info = self.h5DB.load_factor(symbol, '/indexes/', ids=ids, dates=dates)
-        return get_industry_names(symbol, industry_info)
+        return IndustryConverter.convert(symbol, industry_info[symbol]).to_frame()
 
     def get_industry_dummy(self, ids, industry='中信一级', start_date=None, end_date=None, dates=None,
                            drop_first=True):
