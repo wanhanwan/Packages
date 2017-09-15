@@ -10,6 +10,7 @@ from ..utils.datetime_func import DateRange2Dates
 from ..utils.disk_persist_provider import DiskPersistProvider
 from ..utils.tool_funcs import ensure_dir_exists
 from .stockpool import get_estu
+from warnings import warn
 tc = trade_calendar()
 
 
@@ -21,7 +22,7 @@ class RiskModelDataSourceOnH5(object):
         self.all_dates = None
         self.all_ids = None
         self.idx = None
-        self.estu_config = {}
+        self.estu_name = None
         self.factor_dict = {}
         self.factor_names = []
         self.cache_data = {}            # 缓存数据
@@ -38,13 +39,15 @@ class RiskModelDataSourceOnH5(object):
         self.all_ids = idx.index.get_level_values(1).unique().tolist()
         self.all_dates = idx.index.get_level_values(0).unique().tolist()
 
-    def set_estu_config(self, estu_config):
-        self.estu_config = estu_config
+    def set_estu(self, estu_name):
+        self.estu_name = estu_name
 
     def update_estu(self, dates):
-        stocklist = get_estu(dates, self.estu_config)
-        stocklist = stocklist[stocklist.iloc[0, :] == 1]
-        self.set_dimension(stocklist)
+        self.multiprocess_lock.acquire()
+        stocklist = self.h5_db.load_factor(self.estu_name, '/indexes/', dates=dates)
+        self.multiprocess_lock.release()
+        stocklist = stocklist[stocklist.iloc[:, 0] == 1]
+        return stocklist
 
     def set_multiprocess_lock(self, lock):
         self.multiprocess_lock = Lock() if lock is None else lock
@@ -96,11 +99,14 @@ class RiskModelDataSourceOnH5(object):
         self.factor_read_num = pd.Series([0]*len(self.factor_names), index=self.factor_names)
 
     @DateRange2Dates
-    def get_factor_data(self, factor_name, start_date=None, end_date=None, ids=None, dates=None):
+    def get_factor_data(self, factor_name, start_date=None, end_date=None, ids=None, dates=None, idx=None):
         """获得单因子的数据"""
-        idx = self.idx[self.idx.index.get_level_values(0).isin(dates)]
+        if idx is None:
+            idx = self.idx[self.idx.index.get_level_values(0).isin(dates)]
+        else:
+            idx = idx[idx.index.get_level_values(0).isin(dates)]
         if ids is not None:
-            idx = self.idx.loc[pd.IndexSlice[:, ids], :]
+            idx = idx.loc[pd.IndexSlice[:, ids], :]
         if self.max_cache_num == 0:     # 无缓存机制
             self.multiprocess_lock.acquire()
             data = self.h5_db.load_factor(factor_name, self.factor_dict[factor_name], dates=dates, ids=ids)
@@ -112,8 +118,7 @@ class RiskModelDataSourceOnH5(object):
             if self.cached_factor_num < self.max_cache_num:
                 self.cached_factor_num += 1
                 self.multiprocess_lock.acquire()
-                factor_data = self.h5_db.load_factor(factor_name, self.factor_dict[factor_name], dates=self.all_dates,
-                                                     ids=self.all_ids)
+                factor_data = self.h5_db.load_factor(factor_name, self.factor_dict[factor_name])
                 self.multiprocess_lock.release()
                 self.cache_data[factor_name] = factor_data
             else:   # 当前缓存因子数大于等于最大缓存因子数，那么检查最小读取次数的因子
@@ -121,8 +126,7 @@ class RiskModelDataSourceOnH5(object):
                 min_read_idx = cached_factor_read_nums.argmin()
                 self.multiprocess_lock.acquire()
                 if cached_factor_read_nums.iloc[min_read_idx] < self.factor_read_num[factor_name]:
-                    factor_data = self.h5_db.load_factor(factor_name, self.factor_dict[factor_name],
-                                                         dates=self.all_dates, ids=self.all_ids)
+                    factor_data = self.h5_db.load_factor(factor_name, self.factor_dict[factor_name])
                     self.cache_data.pop(cached_factor_read_nums.index[min_read_idx])
                     self.cache_data[factor_name] = factor_data
                 else:
@@ -133,11 +137,11 @@ class RiskModelDataSourceOnH5(object):
         return factor_data.reindex(idx.index)
 
     @DateRange2Dates
-    def get_data(self, factor_names, start_date=None, end_date=None, ids=None, dates=None):
+    def get_data(self, factor_names, start_date=None, end_date=None, ids=None, dates=None, idx=None):
         """加载因子数据到一个dataframe里"""
         frame = []
         for ifactor in factor_names:
-            ifactor_data = self.get_factor_data(ifactor, dates=dates, ids=ids)
+            ifactor_data = self.get_factor_data(ifactor, dates=dates, ids=ids, idx=idx)
             frame.append(ifactor_data)
         data = pd.concat(frame, axis=1)
         return data
@@ -159,7 +163,7 @@ class RiskModelDataSourceOnH5(object):
             'factor_dict': self.factor_dict,
             'factor_names': self.factor_names,
             'max_cache_num': self.max_cache_num,
-            'estu_config': self.estu_config
+            'estu_name': self.estu_name
         }
         dumper.dump(info, name=self.name)
 
@@ -174,7 +178,7 @@ class RiskModelDataSourceOnH5(object):
         self.factor_dict = info['factor_dict']
         self.factor_names = info['factor_names']
         self.max_cache_num = info['max_cache_num']
-        self.estu_config = info['estu_config']
+        self.estu_name = info['estu_name']
         self.factor_read_num = pd.Series(np.zeros(len(self.factor_names)), index=self.factor_names)
 
     def save_factor(self, data, path):
