@@ -5,7 +5,7 @@ import statsmodels.api as sm
 from statsmodels.sandbox.rls import RLS
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 from ..utils.tool_funcs import searchNameInStrList
-from .riskmodel_data_source import RiskModelDataSourceOnH5
+from .riskmodel_data_source import RiskModelDataSourceOnH5, RiskDataSource
 from ..data_source.base_data_source_h5 import h5, tc
 from ..data_source.converter import IndustryConverter
 from ..utils.datetime_func import DateRange2Dates
@@ -24,13 +24,16 @@ class BarraModel(object):
         data_source = RiskModelDataSourceOnH5(h5_db=h5)
         data_source.load_info('DS-Barra', model_path)
         self.data_source = data_source
-        self.factor_return = None       # 记录因子收益率
-        self.resid_return = None        # 记录残差收益率
-        self.rsquared = None            # 记录拟合优度
-        self.adjust_rsquared = None     # 记录调整的拟合优度
-        self.tvalue = None              # 记录T统计量
-        self.fvalue = None              # 记录F统计量
-        self.vifvalue = None                 # 记录方差膨胀系数
+        self.riskdb = RiskDataSource(self.name)
+        self.factor_return = None           # 记录因子收益率
+        self.resid_return = None            # 记录残差收益率
+        self.rsquared = None                # 记录拟合优度
+        self.adjust_rsquared = None         # 记录调整的拟合优度
+        self.tvalue = None                  # 记录T统计量
+        self.fvalue = None                  # 记录F统计量
+        self.vifvalue = None                # 记录方差膨胀系数
+        self.factor_riskmatrix = {}         # 记录因子收益率协方差矩阵
+        self.specific_riskmatrix = {}       # 记录特质收益率协方差矩阵
 
     def getFactorReturnArgs(self):
         """初始化参数"""
@@ -331,16 +334,8 @@ class BarraModel(object):
                 self.adjust_rsquared.loc[idate] = 0
         return 1
 
-    def save_regress_results(self, save_path):
-        from ..utils.disk_persist_provider import DiskPersistProvider
-        persist = DiskPersistProvider(save_path)
-        d = {
-            'factor_return': self.factor_return,
-            'resid_return': self.resid_return,
-            'tvalue': self.tvalue,
-            'rsquared': self.rsquared,
-            'adjust_rsquared': self.adjust_rsquared,
-            'fvalue': self.fvalue,
-            'vif': self.vifvalue
-        }
-        persist.dump(d, self.name)
+    def save_regress_results(self):
+        self.riskdb.save_data(tvalue=self.tvalue, fvalue=self.fvalue, rsquared=self.rsquared,
+                              adjust_rsquared=self.adjust_rsquared, vifs=self.vifvalue,
+                              factor_return=self.factor_return, resid_return=self.resid_return,
+                              factor_riskmatrix=self.factor_riskmatrix, specific_riskmatrix=self.specific_riskmatrix)
