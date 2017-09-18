@@ -216,7 +216,8 @@ class RiskDataSource(object):
         if not self.check_file_exists('factor_return.h5'):
             ret = self.h5_db.load_factor('factor_return', self._h5_dir, dates=dates)
         else:
-            raise FileNotFoundError("因子收益率文件不存在！")
+            print(FileNotFoundError("因子收益率文件不存在！"))
+            return pd.DataFrame()
         return ret['factor_return'].unstack()
 
     @DateRange2Dates
@@ -226,7 +227,8 @@ class RiskDataSource(object):
         if not self.check_file_exists('factor_return.h5'):
             ret = self.h5_db.load_factor('factor_return', self._h5_dir, dates=dates, ids=factor_name)
         else:
-            raise FileNotFoundError("因子收益率文件不存在！")
+            print(FileNotFoundError("因子收益率文件不存在！"))
+            return pd.DataFrame()
         return ret['factor_return'].unstack()
 
     def load_snapshot_return(self, date):

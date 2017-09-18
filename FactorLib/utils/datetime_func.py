@@ -183,6 +183,7 @@ def DateRange2Dates(func):
         d = tc.get_trade_days(start, end, retstr=None)
         if dates is not None:
             dates = list(set(dates).intersection(set(d)))
+            dates.sort()
         else:
             dates = d
         kwargs = {k:v for k,v in kwargs.items() if k not in ['start_date','end_date','dates']}
