@@ -166,7 +166,7 @@ class BarraModel(object):
     def getResgressWeight(self, ids=None, start_date=None, end_date=None, dates=None, percentile=0.95, idx=None):
         """计算回归权重"""
         weight = self.data_source.get_factor_data(self.genFactorReturnArgs['回归权重因子'], start_date=start_date,
-                                                  end_date=end_date, ids=ids, dates=None, idx=idx)
+                                                  end_date=end_date, ids=ids, dates=dates, idx=idx)
         weight = np.sqrt(weight).astype('float32')
         weight_sum_perdate = weight.groupby(level=0).sum()
         weight = weight / weight_sum_perdate

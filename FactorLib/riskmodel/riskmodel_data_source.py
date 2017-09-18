@@ -3,7 +3,7 @@
    2. 支持提前设置因子列表，设置完成之后可以直接调用prepare_data函数提取数据
 """
 from multiprocessing import Lock
-from ..data_source.trade_calendar import trade_calendar
+from ..data_source.trade_calendar import trade_calendar,as_timestamp
 from ..data_source.base_data_source_h5 import H5DB
 import pandas as pd
 import numpy as np
@@ -198,6 +198,7 @@ class RiskDataSource(object):
         self._dspath = path.join(RiskDataSource.root_dir, self._name)
         self._h5_dir = '/%s/'%self._name
         self.h5_db = H5DB(data_path=self._dspath)
+        self.persist_helper = DiskPersistProvider(self._h5_dir)
         ensure_dir_exists(self._dspath)
         self.initialize()
 
@@ -249,16 +250,15 @@ class RiskDataSource(object):
     @DateRange2Dates
     def load_factor_riskmatrix(self, start_date=None, end_date=None, dates=None):
         dates_str = [x.strftime("%Y%m%d") for x in dates]
-        matrixes = []
+        matrixes = {}
         for i, date in enumerate(dates_str):
             csv_file = path.join(self._dspath, 'factorRisk/%s.csv'%date)
             if path.isfile(csv_file):
                 matrix = pd.read_csv(csv_file, index_col=0, header=0)
-                matrix.index = pd.MultiIndex.from_product([[dates[i], matrix.index]], names=['date', 'IDs'])
-                matrixes.append(matrix)
+                matrixes[dates[i]] = matrix
             else:
                 warn("%s 风险矩阵不存在！"%date)
-        return pd.concat(matrixes)
+        return matrixes
 
     @DateRange2Dates
     def load_specific_riskmatrix(self, start_date=None, end_date=None, dates=None):
@@ -329,6 +329,19 @@ class RiskDataSource(object):
             for k, v in kwargs['specific_riskmatrix']:
                 date = k.strftime("%Y%m%d")
                 v.to_csv(path.join(save_dir, "%s.csv"%date))
+        return
+
+    def load_others(self, name):
+        """
+        使用.pkl文件，加载其他数据
+
+        """
+        obj = self.persist_helper.load(name)
+        return obj
+
+    def save_other(self, name, **kwargs):
+        """使用.pkl文件，序列化对象"""
+        self.persist_helper.dump(kwargs, name)
         return
 
 
