@@ -1,10 +1,12 @@
 import pandas as pd
 import numpy as np
+import statsmodels.api as sm
 from ..data_source.base_data_source_h5 import tc
 from ..data_source.trade_calendar import as_timestamp
 from ..data_source.tseries import move_dtindex
 from fastcache import clru_cache
 from scipy import linalg
+
 
 
 @clru_cache()
@@ -139,7 +141,7 @@ def calSpecificCovMat(factor_returns, date_ind, predict_window, ac_widow, half_l
             varmatrix[i] = np.sum(var * coef)
     if predict_window > ac_widow + 1:
         varmatrix = varmatrix * predict_window / (N+1)
-    return varmatrix
+    return pd.Series(varmatrix, index=factor_returns.columns)
 
 
 def calBlendingParam(factor_returns, date_ind, rollback_len=360):
@@ -165,7 +167,26 @@ def calBlendingParam(factor_returns, date_ind, rollback_len=360):
 
 
 def calStrucStd(gamma, ts_std, date, factor_data, industry_data, weight_data):
+    """
+    建立特异性风险结构化模型
+    :param gamma: blending paramters
+    :param ts_std: time-series std
+    :param date: current date
+    :param factor_data: style factor data
+    :param industry_data: industry dummies
+    :param weight_data: regression weight
+    :return:
+    """
     ids = gamma[gamma == 1].index.tolist()
+    ifactor_data = factor_data.loc[date].reindex(ids).values
+    iindustry_data = industry_data.loc[date].reindex(ids).values
+    iweight = weight_data.loc[date].reindex(ids).values
+    iweight = np.sqrt(iweight / iweight.sum())
+    y = np.log(ts_std[ids].values) * iweight
+    x = np.vstack((ifactor_data, iindustry_data))
+    x = sm.add_constant(x)
+    result = sm.OLS(y, x[:, :-1]).fit()
+
 
 
 

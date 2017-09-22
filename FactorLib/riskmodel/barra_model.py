@@ -104,6 +104,14 @@ class BarraModel(object):
             self.genFactorReturnArgs['忽略行业'] = []
             self.all_factors = ['Market'] + self.genFactorReturnArgs['风格因子'] + self.all_industries
 
+    def setStrucStdFactor(self, factors):
+        """
+        设置结构化风险模型回归因子
+        :param factor: list-like
+        :return:
+        """
+        self.strucstd_factors = [x for x in factors if x in self.genFactorReturnArgs['风格因子']]
+
     def getStyleFactorData(self, ids=None, start_date=None, end_date=None, dates=None, idx=None):
         """获得风格因子数据"""
         if idx is not None:
@@ -172,7 +180,7 @@ class BarraModel(object):
         weight = weight / weight_sum_perdate
         quantile_weight_perdate = weight.groupby(level=0).quantile(percentile)
         weight, quantile_weight_perdate = weight.align(quantile_weight_perdate, axis=0, level=0)
-        weight.loc[quantile_weight_perdate.iloc[:,0] < weight.iloc[:, 0]] = quantile_weight_perdate
+        weight.loc[quantile_weight_perdate.iloc[:, 0] < weight.iloc[:, 0]] = quantile_weight_perdate
         return weight
 
     def getIndustryMarketValue(self, industry_dummy):
