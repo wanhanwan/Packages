@@ -190,6 +190,50 @@ class RiskModelDataSourceOnH5(object):
 
 
 class RiskDataSource(object):
+    """
+    风险数据库数据源，包括风险因子收益率、风险因子收益协方差矩阵、股票特质收益率、股票特质收益协方差矩阵、
+    截面回归的统计量、原始的风险因子收益协方差矩阵(调整前)、 原始的特质收益协方差矩阵(调整前)。每一个数据库对应一个文件夹。
+
+    文件夹的结构：
+    =============
+    RiskDataSource:
+        factorRisk:
+            factorRisk1.csv
+            factorRisk2.csv
+            ...
+        specificRisk:
+            specificRisk1.csv
+            specificRisk2.csv
+            ...
+        rawFactorRisk:
+            rawFactorRisk1.csv
+            rawFactorRisk2.csv
+            ...
+        rawSpecificRisk:
+            rawSpecificRisk1.csv
+            rawSpecificRisk2.csv
+            ...
+        factor_return.h5
+        regress_stats.h5
+        resid_return.h5
+
+    文件存储的格式:
+    =============
+    风险因子收益率：h5
+        DataFrame(index:[date IDs], columns:[factor_return])
+    风险因子收益协方差矩阵: csv
+        每日一个csv文件，以 YYYYMMDD 命名。文件内的数据格式：第一列和第一行是因子名称
+    股票特质(残差)收益率: h5
+        DataFrame(index:[date IDs], columns:[resid_return])
+    股票特质收益协方差矩阵: csv
+        每日一个csv文件，以YYYYMMDD命名。文件内数据格式: 第一列和第一行是股票代码
+    截面回归统计量: h5
+        DataFrame(index:[date stats_name], columns:[regress_stats])
+    原始的风险因子收益协方差矩阵(调整前)
+        每日一个csv文件，以 YYYYMMDD 命名。文件内的数据格式：第一列和第一行是因子名称
+    原始的特质收益协方差矩阵(调整前)
+        每日一个csv文件，以YYYYMMDD命名。文件内数据格式: 第一列和第一行是股票代码
+    """
     root_dir = default_riskds_root
     h5_db = H5DB(data_path=default_riskds_root)
 
