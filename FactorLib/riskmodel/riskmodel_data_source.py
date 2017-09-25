@@ -198,28 +198,28 @@ class RiskDataSource(object):
     ============
     RiskDataSource:
         factorRisk:
-            factorRisk1.csv
-            factorRisk2.csv
+            factorRisk1.csv \n
+            factorRisk2.csv \n
             ...
         specificRisk:
-            specificRisk1.csv
-            specificRisk2.csv
+            specificRisk1.csv \n
+            specificRisk2.csv \n
             ...
         rawFactorRisk:
-            rawFactorRisk1.csv
-            rawFactorRisk2.csv
+            rawFactorRisk1.csv \n
+            rawFactorRisk2.csv \n
             ...
         rawSpecificRisk:
-            rawSpecificRisk1.csv
-            rawSpecificRisk2.csv
+            rawSpecificRisk1.csv \n
+            rawSpecificRisk2.csv \n
             ...
         factorData:
-            factor1.h5
-            factor2.h5
+            factor1.h5 \n
+            factor2.h5 \n
             ...
-        factor_return.h5
-        regress_stats.h5
-        resid_return.h5
+        factor_return.h5 \n
+        regress_stats.h5 \n
+        resid_return.h5 \n
 
     文件存储的格式:
     ==============
@@ -230,13 +230,13 @@ class RiskDataSource(object):
     股票特质(残差)收益率: h5
         DataFrame(index:[date IDs], columns:[resid_return])
     股票特质收益协方差矩阵: csv
-        每日一个csv文件，以YYYYMMDD命名。文件内数据格式: 第一列和第一行是股票代码
+        每日一个csv文件，以YYYYMMDD命名。文件内数据格式: 第一列股票代码
     截面回归统计量: h5
         DataFrame(index:[date stats_name], columns:[regress_stats])
     原始的风险因子收益协方差矩阵(调整前): csv
         每日一个csv文件，以 YYYYMMDD 命名。文件内的数据格式：第一列和第一行是因子名称
-    原始的特质收益协方差矩阵(调整前): csv
-        每日一个csv文件，以YYYYMMDD命名。文件内数据格式: 第一列和第一行是股票代码
+    原始的特质收益协方差矩阵(调整前): pkl
+        每日一个pkl文件，以YYYYMMDD命名。文件内数据格式: 第一列是股票代码
     风险因子数据: h5
         每个因子是一个h5文件， 以因子名称命名。DataFrame(index:[date IDs], columns:[factor_name])
     """
@@ -271,8 +271,17 @@ class RiskDataSource(object):
         """
         加载风险因子数据
 
-        风险因子
+        风险因子文件格式：h5
+        文件内部数据格式：DataFrame(index:[date IDs], columns:[factor_name])
+
+        Return
+        ======
+        factor_data: DataFrame
+            DataFrame(index:[date IDs], columns:[factor_names])
         """
+        data_dict = {'/factorData/':factor_names}
+        data = self.h5_db.load_factors(data_dict, dates=dates, ids=ids)
+        return data
 
     @DateRange2Dates
     def load_returns(self, start_date=None, end_date=None, dates=None):
@@ -404,7 +413,7 @@ class RiskDataSource(object):
         for i, date in enumerate(dates_str):
             csv_file = path.join(dirpth, '%s.csv' % date)
             if path.isfile(csv_file):
-                matrix = pd.read_csv(csv_file, index_col=0, header=0)
+                matrix = pd.read_csv(csv_file, index_col=0)
                 matrixes[dates[i]] = matrix
             else:
                 warn("%s 风险矩阵不存在！" % date)
@@ -451,7 +460,11 @@ class RiskDataSource(object):
         raw_factor_riskmatrix: dict
             dict(key: date, value:DataFrame(index:[factor_names], columns:[factor_names]))
         raw_specific_riskmatrix: dict
-            dict(key: date, value:DataFrame(index:[IDs], columns:[IDs])
+            dict(key: date, value:Series(index:[IDs], columns:[IDs])
+        specific_riskmatrix: dict
+            dict(key: date, value:Seriex(index:[IDs], columns:[IDs])
+        factor_data: DataFrame
+            DataFrame(indedx:[date IDs], columns:[factor_names])
         """
         tvalue = pd.DataFrame()
         if 'tvalue' in kwargs:
@@ -510,6 +523,8 @@ class RiskDataSource(object):
             for k, v in kwargs['raw_specific_riskmatrix'].items():
                 date = k.strftime("%Y%m%d")
                 v.to_csv(path.join(save_dir, "%s.csv" % date))
+        if 'factor_data' in kwargs:
+            self.h5_db.save_factor(kwargs['factor_data'], '/factorData/')
         return
 
     def load_others(self, name):
