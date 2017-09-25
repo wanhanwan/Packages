@@ -38,7 +38,7 @@ class BarraModel(object):
     def getFactorReturnArgs(self):
         """初始化参数"""
         args = dict()
-        args['行业因子'] = searchNameInStrList(self.data_source.factor_names, ['cs_level','wind_level','sw_level'])
+        args['行业因子'] = searchNameInStrList(self.data_source.factor_names, ['cs_level','wind_level', 'sw_level'])
         args['回归权重因子'] = searchNameInStrList(self.data_source.factor_names, ['float_mkt_value'])
         args['风格因子'] = [x for x in self.data_source.factor_names if x not in [args['行业因子'], args['回归权重因子']]]
         args['忽略行业'] = []
