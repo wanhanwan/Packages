@@ -3,15 +3,16 @@
    2. 支持提前设置因子列表，设置完成之后可以直接调用prepare_data函数提取数据
 """
 from multiprocessing import Lock
-from ..data_source.trade_calendar import trade_calendar,as_timestamp
+from ..data_source.trade_calendar import trade_calendar
 from ..data_source.base_data_source_h5 import H5DB
-import pandas as pd
-import numpy as np
 from ..utils.datetime_func import DateRange2Dates
 from ..utils.disk_persist_provider import DiskPersistProvider
 from ..utils.tool_funcs import ensure_dir_exists
 from os import path
 from warnings import warn
+import pandas as pd
+import numpy as np
+import os
 tc = trade_calendar()
 default_riskds_root = 'D:/data/risk_model'
 
@@ -279,7 +280,25 @@ class RiskDataSource(object):
         factor_data: DataFrame
             DataFrame(index:[date IDs], columns:[factor_names])
         """
-        data_dict = {'/factorData/':factor_names}
+        if factor_names == 'ALL':
+            factor_names = [x.replace(".h5", "") for x in os.listdir(self._dspath+'/factorData')]
+        data_dict = {'/factorData/': factor_names}
+        data = self.h5_db.load_factors(data_dict, dates=dates, ids=ids).rename(columns=lambda x: x[5:] if x.startswith("Indu_") else x)
+        return data
+
+    @DateRange2Dates
+    def load_industry(self, ids=None, start_date=None, end_date=None, dates=None):
+        """
+        加载行业哑变量
+        行业变量文件以"Indu_"开头， 存储在factorData文件夹中
+
+        Returns:
+        ========
+        industry: DataFrame
+            DataFrame(index:[date IDs], columns:[industry_names])
+        """
+        all_industries = [x for x in os.listdir(path.join(self._dspath, 'factorData')) if x.startswith('Indu_')]
+        data_dict = {'/factorData/': all_industries}
         data = self.h5_db.load_factors(data_dict, dates=dates, ids=ids)
         return data
 
@@ -401,7 +420,7 @@ class RiskDataSource(object):
         Return:
         ======
         specific_riskmatrix: dict
-            dict(key:date, value:DataFrame(index:[IDs], columns:[IDs])
+            dict(key:date, value:Series(index:[IDs], value:specific_risk)
         """
         dates_str = [x.strftime("%Y%m%d") for x in dates]
         matrixes = {}
@@ -413,7 +432,8 @@ class RiskDataSource(object):
         for i, date in enumerate(dates_str):
             csv_file = path.join(dirpth, '%s.csv' % date)
             if path.isfile(csv_file):
-                matrix = pd.read_csv(csv_file, index_col=0)
+                matrix = pd.read_csv(csv_file, index_col=0, header=None, squeeze=True)
+                matrix.index = [str(x).zfill(6) for x in matrix.index]
                 matrixes[dates[i]] = matrix
             else:
                 warn("%s 风险矩阵不存在！" % date)
