@@ -62,6 +62,13 @@ def _drop_suspendtrading(stocklist, hold_days=0):
     else:
         suspend = data_source.sector.get_suspend(alldates)
     return _difference(stocklist, suspend)
+drop_suspendtrading = _drop_suspendtrading
+
+
+# 返回股票列表中停牌的股票
+def suspendtrading(stocklist, date):
+    suspend = data_source.sector.get_suspend([date]).index.get_level_values(1).tolist()
+    return list(set(stocklist).intersection(set(suspend)))
 
 
 # 删除上市不满一定天数的股票

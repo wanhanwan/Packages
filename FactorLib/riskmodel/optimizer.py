@@ -7,6 +7,7 @@ import pandas as pd
 import cplex as cpx
 import sys
 from FactorLib.data_source.base_data_source_h5 import data_source
+from QuantLib.stockFilter import suspendtrading
 from .riskmodel_data_source import RiskDataSource
 from itertools import combinations_with_replacement
 
@@ -33,8 +34,8 @@ class Optimizer(object):
         风险厌恶系数lambda
     """
 
-    def __init__(self, signal, date, ds_name, active=False, benchmark='000905', risk_mul=0):
-        self._signal = signal
+    def __init__(self, signal, target_ids, date, ds_name, asset=None, active=False, benchmark='000905', risk_mul=0):
+        self.target_ids = target_ids
         self._date = date
         self._rskds = RiskDataSource(ds_name)
         self._active = active
@@ -43,20 +44,45 @@ class Optimizer(object):
         self.optimal = False
         self.solution_status = ""
         self.solution_value = None
+        self._internal_limit = None
+        nontrad_pre, nontrad_target, bchmrk_notin_tar, self._signal = self._create_signal(signal, asset)
+        self._init_opt_result(asset)
+        self._init_opt_prob(nontrad_pre, nontrad_target, bchmrk_notin_tar)
 
-        # 初始化优化结果，权重设为等权
-        self.asset = pd.DataFrame(np.ones(len(self._signal)) / len(self._signal),
-                                  index=pd.MultiIndex.from_product([[date], signal.index], names=['date', 'IDs']),
-                                  columns=['optimal_weight'])
+    def _create_signal(self, signal, asset):
+        # 基准指数的成分股和权重
         self._bchmrk_weight = data_source.sector.get_index_weight(
             ids=self._benchmark, dates=[self._date]).reset_index(level=0, drop=True).iloc[:, 0]
-        self._init_opt_prob()
+        # 找出上期持仓中停牌的股票
+        if asset is not None:
+            preids = asset[asset != 0.0].index.tolist()
+            if preids:
+                nontrad_pre = suspendtrading(preids, self._date)
+            else:
+                nontrad_pre = []
+        else:
+            nontrad_pre = []
+        #  找出不在target_ids中的基准成分股
+        bchmrk_notin_tar = list(set(self._bchmrk_weight.index.tolist()).difference(set(self.target_ids)))
+        # 找出target_ids中停牌的股票
+        nontrad_target = suspendtrading(self.target_ids, self._date)
+        # signal 包含了三部分的股票
+        allids = list(set(self.target_ids+self._bchmrk_weight.index.tolist()+nontrad_pre))
+        allids.sort()
+        return nontrad_pre, nontrad_target, bchmrk_notin_tar, signal.loc[allids]
 
-    def _init_opt_prob(self):
+    def _init_opt_prob(self, nontrad_pre, nontrad_target, bchmrk_notin_tar):
         """
         初始化优化问题
-        设置了现金中性和做空限制
+        设置了现金中性、禁止做空、停牌无法交易等限制.此函数还应该生成一个signal序列， 并且包含如下的股票池：
+        1. target_ids
+        2. benchmark_ids
+        3. 上一期持仓中停牌的股票，因为这部分股票无法交易，肯定会留在组合当中。
+
+        在限制条件中，需要把上期持仓停牌的股票权重设置为上期的权重；不在target_ids中的基准指数成分股设置为零；
+        target_ids中停牌的股票设置为零。
         """
+
         nvar = self._signal.index.tolist()
         self._c = cpx.Cplex()
         self._c.variables.add(names=nvar)
@@ -68,8 +94,36 @@ class Optimizer(object):
                                        rhs=[1],
                                        names=['csh_ntrl']
                                        )
+        # 加入线性限制
+        limit_ids = list(set(nontrad_pre+bchmrk_notin_tar+nontrad_target))
+        if limit_ids:
+            limit_values = pd.Series(np.zeros(len(limit_ids)), index=limit_ids)
+            limit_values.loc[nontrad_pre] = self.asset.loc[nontrad_pre, 'previous_weight']
+            lin_exprs = []
+            rhs = []
+            names = []
+            senses = ['E']*len(limit_values)
+            for i, x in limit_values.iteritems():
+                lin_exprs.append([[i], [1]])
+                rhs.append(x)
+                names.append('notrading_%s' % i)
+            self._c.linear_constraints.add(lin_expr=lin_exprs, senses=senses, rhs=rhs, names=names)
+            self._internal_limit = limit_values
+
         self._c.set_log_stream(sys.stdout)
         self._c.set_results_stream(sys.stdout)
+
+    def _init_opt_result(self, asset):
+        # 初始化优化结果，在上一期的权重里添加一列optimal_weight。若求解成功，则该列为优化后的权重，否则，仍然返回上期
+        # 权重。
+        if asset is None:
+            self.asset = pd.DataFrame(np.ones(len(self._signal)) / len(self._signal),
+                                      index=pd.MultiIndex.from_product([[self._date], self._signal.index], names=['date', 'IDs']),
+                                      columns=['optimal_weight'])
+            self.asset['previous_weight'] = 0
+        else:
+            self.asset = pd.concat([asset, asset], axis=1)
+            self.asset.columns = ['previous_weight', 'optimal_weight']
 
     def _add_style_cons(self, style_dict, active=True):
         """
@@ -123,6 +177,7 @@ class Optimizer(object):
         portf_indu = self._prepare_portfolio_indu()
         if np.any(pd.isnull(portf_indu)) or np.any(pd.isnull(cons)):
             raise ValueError("行业变量存在缺失值！")
+        # todo: 检查组合中某个行业的权重为零，但是基准指数对应行业的权重不为零
         lin_exprs = []
         rhs = []
         senses = ['E'] * len(cons)
@@ -136,9 +191,12 @@ class Optimizer(object):
     def _add_stock_limit(self, default_min=0.0, default_max=1.0):
         """
         添加个股权重的上下限
+        对于
         """
         # assert ((default_min < 0) or (default_max > 1))
         nvar = self._signal.index.tolist()
+        if self._internal_limit is not None:
+            nvar = list(set(nvar).difference(set(self._internal_limit.index.tolist())))
         min_limit = list(zip(nvar, [default_min]*len(nvar)))
         max_limit = list(zip(nvar, [default_max]*len(nvar)))
         self._c.variables.set_lower_bounds(min_limit)
@@ -163,7 +221,7 @@ class Optimizer(object):
         """
         weight = self._bchmrk_weight
         indu = self._rskds.load_industry(ids=weight.index.tolist(), dates=[self._date]).reset_index(level=0, drop=True)
-        indu = indu.mul(weight.iloc[:, 0], axis='index').sum() / weight.iloc[:, 0].sum()
+        indu = indu.mul(weight, axis='index').sum() / weight.sum()
         return indu
 
     def _prepare_portfolio_style(self, styles):
@@ -213,10 +271,10 @@ class Optimizer(object):
         """
         加载股票组合风险矩阵
         """
-        factor_risk = self._rskds.load_factor_riskmatrix(dates=[self._date], raw=False)[self._date]
+        factor_risk = self._rskds.load_factor_riskmatrix(dates=[self._date], raw=False)[self._date] / 100
         portf_style = self._prepare_portfolio_style(styles='ALL').reindex(columns=factor_risk.columns)
         specidic_risk = self._rskds.load_specific_riskmatrix(dates=[self._date], raw=False)[self._date].reindex(
-            self._signal.index)
+            self._signal.index) / 100
         if np.any(pd.isnull(portf_style)):
             raise ValueError("股票组合的风格因子存在缺失值！")
         sigma = np.dot(np.dot(portf_style.values, factor_risk.values), portf_style.values.T) + np.diag(

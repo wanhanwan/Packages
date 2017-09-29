@@ -297,7 +297,7 @@ class RiskDataSource(object):
         industry: DataFrame
             DataFrame(index:[date IDs], columns:[industry_names])
         """
-        all_industries = [x for x in os.listdir(path.join(self._dspath, 'factorData')) if x.startswith('Indu_')]
+        all_industries = [x[:-3] for x in os.listdir(path.join(self._dspath, 'factorData')) if x.startswith('Indu_')]
         data_dict = {'/factorData/': all_industries}
         data = self.h5_db.load_factors(data_dict, dates=dates, ids=ids)
         return data
