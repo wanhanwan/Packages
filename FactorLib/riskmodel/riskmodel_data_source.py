@@ -282,6 +282,8 @@ class RiskDataSource(object):
         """
         if factor_names == 'ALL':
             factor_names = [x.replace(".h5", "") for x in os.listdir(self._dspath+'/factorData')]
+        if factor_names == 'STYLE':
+            factor_names = [x.replace(".h5", "") for x in os.listdir(self._dspath+'/factorData') if not x.startswith('Indu_')]
         data_dict = {'/factorData/': factor_names}
         data = self.h5_db.load_factors(data_dict, dates=dates, ids=ids).rename(columns=lambda x: x[5:] if x.startswith("Indu_") else x)
         return data

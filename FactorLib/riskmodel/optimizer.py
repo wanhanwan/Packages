@@ -45,6 +45,7 @@ class Optimizer(object):
         self.solution_status = ""
         self.solution_value = None
         self._internal_limit = None
+        self._signalrisk = None
         nontrad_pre, nontrad_target, bchmrk_notin_tar, self._signal = self._create_signal(signal, asset)
         self._init_opt_result(asset)
         self._init_opt_prob(nontrad_pre, nontrad_target, bchmrk_notin_tar)
@@ -69,6 +70,7 @@ class Optimizer(object):
         # signal 包含了三部分的股票
         allids = list(set(self.target_ids+self._bchmrk_weight.index.tolist()+nontrad_pre))
         allids.sort()
+        self._bchmrk_weight = self._bchmrk_weight.reindex(allids, fill_value=0)
         return nontrad_pre, nontrad_target, bchmrk_notin_tar, signal.loc[allids]
 
     def _init_opt_prob(self, nontrad_pre, nontrad_target, bchmrk_notin_tar):
@@ -109,9 +111,10 @@ class Optimizer(object):
                 names.append('notrading_%s' % i)
             self._c.linear_constraints.add(lin_expr=lin_exprs, senses=senses, rhs=rhs, names=names)
             self._internal_limit = limit_values
-
-        self._c.set_log_stream(sys.stdout)
-        self._c.set_results_stream(sys.stdout)
+        self._c.set_warning_stream(sys.stdout)
+        self._c.set_log_stream(None)
+        self._c.set_error_stream(None)
+        self._c.set_results_stream(None)
 
     def _init_opt_result(self, asset):
         # 初始化优化结果，在上一期的权重里添加一列optimal_weight。若求解成功，则该列为优化后的权重，否则，仍然返回上期
@@ -145,7 +148,7 @@ class Optimizer(object):
             raise ValueError("风格因子数据存在缺失值!")
         lin_exprs = []
         rhs = []
-        senses = ['E'] * len(portf_style)
+        senses = ['E'] * len(cons)
         names = []
         for style, value in portf_style.iteritems():
             lin_exprs.append([value.index.tolist(), value.values.tolist()])
@@ -244,18 +247,18 @@ class Optimizer(object):
         Return:
         ======
         style_benchmark: Series
-        基准的风格因子，Series(index:[factor_names], values:style)
+        基准的风格因子，Series(index:[factor_names], values:style_value)
         """
         weight = self._bchmrk_weight
         members = weight.index.tolist()
-        style_data = self._rskds.load_factors(styles, ids=members, dates=[self._date])
-        style_benchmark = style_data.mul(weight.iloc[:, 0], axis='index').sum() / weight.iloc[:, 0].sum()
+        style_data = self._rskds.load_factors(styles, ids=members, dates=[self._date]).reset_index(level=0, drop=True)
+        style_benchmark = style_data.mul(weight, axis='index').sum() / weight.sum()
         return style_benchmark
 
     def _add_trckerr(self, target_err, **kwargs):
         if self._active:
             raise ValueError("跟踪误差与风险嫌恶项重复设置！")
-        bchmrk_weight = self._bchmrk_weight.reindex(self._signal.index, fill_value=0)
+        bchmrk_weight = self._bchmrk_weight
         sigma = self._load_portfolio_risk()
         bchmrk_risk = np.dot(np.dot(bchmrk_weight.values, sigma), bchmrk_weight.values)
         qlin = [self._signal.index.tolist(), (-2.0 * np.dot(bchmrk_weight.values, sigma)).tolist()]
@@ -266,6 +269,7 @@ class Optimizer(object):
 
         self._c.quadratic_constraints.add(lin_expr=qlin, quad_expr=quad, sense='L', rhs=-bchmrk_risk+target_err,
                                           name='tracking_error')
+        self._signalrisk = sigma
 
     def _load_portfolio_risk(self):
         """
@@ -343,9 +347,37 @@ class Optimizer(object):
         self._create_obj()
         self._c.solve()
 
-        self.optimal = self._c.solution.get_status() == 1
+        self.optimal = self._c.solution.get_status() == self._c.solution.status.optimal
         self.solution_status = self._c.solution.status[self._c.solution.get_status()]
         self.solution_value = self._c.solution.get_objective_value()
 
         if self.optimal:
             self.asset['optimal_weight'] = self._c.solution.get_values()
+
+    def check_ktt(self):
+        """
+        检验风格敞口和行业敞口以及跟踪误差是否满足条件
+        """
+        style_expo = None
+        indu_expo = None
+        terr_expo = None
+        if self.optimal:
+            optimal_weight = self.asset['optimal_weight'].reset_index(level=0, drop=True)
+            # 计算风格敞口
+            bchmrk_style = self._prepare_benchmark_style('STYLE')
+            portf_style = self._prepare_portfolio_style('STYLE').mul(optimal_weight, axis='index').sum()
+            style_expo = pd.concat([portf_style, bchmrk_style], axis=1, ignore_index=True).rename(
+                columns={0: 'style_portfolio', 1: 'style_benchmark'})
+            style_expo['expo'] = style_expo['style_portfolio'] - style_expo['style_benchmark']
+            # 计算行业敞口
+            bckmrk_indu = self._prepare_benchmark_indu()
+            portf_indu = self._prepare_portfolio_indu().mul(optimal_weight, axis='index').sum()
+            indu_expo = pd.concat([portf_indu, bckmrk_indu], axis=1, ignore_index=True).rename(
+                columns={0: 'indu_portfolio', 1: 'indu_benchmark'})
+            indu_expo['expo'] = indu_expo['indu_portfolio'] - indu_expo['indu_benchmark']
+            # 跟踪误差敞口
+            if self._signalrisk is not None:
+                active_weight = optimal_weight - self._bchmrk_weight
+                terr_expo = np.dot(np.dot(active_weight.values, self._signalrisk), active_weight.values)
+        return style_expo, indu_expo, terr_expo
+
