@@ -4,13 +4,17 @@
 """
 from multiprocessing import Lock
 from ..data_source.trade_calendar import trade_calendar
-import pandas as pd
-import numpy as np
+from ..data_source.base_data_source_h5 import H5DB
 from ..utils.datetime_func import DateRange2Dates
 from ..utils.disk_persist_provider import DiskPersistProvider
 from ..utils.tool_funcs import ensure_dir_exists
-from .stockpool import get_estu
+from os import path
+from warnings import warn
+import pandas as pd
+import numpy as np
+import os
 tc = trade_calendar()
+default_riskds_root = 'D:/data/risk_model'
 
 
 class RiskModelDataSourceOnH5(object):
@@ -21,7 +25,7 @@ class RiskModelDataSourceOnH5(object):
         self.all_dates = None
         self.all_ids = None
         self.idx = None
-        self.estu_config = {}
+        self.estu_name = None
         self.factor_dict = {}
         self.factor_names = []
         self.cache_data = {}            # 缓存数据
@@ -38,13 +42,15 @@ class RiskModelDataSourceOnH5(object):
         self.all_ids = idx.index.get_level_values(1).unique().tolist()
         self.all_dates = idx.index.get_level_values(0).unique().tolist()
 
-    def set_estu_config(self, estu_config):
-        self.estu_config = estu_config
+    def set_estu(self, estu_name):
+        self.estu_name = estu_name
 
     def update_estu(self, dates):
-        stocklist = get_estu(dates, self.estu_config)
-        stocklist = stocklist[stocklist.iloc[0, :] == 1]
-        self.set_dimension(stocklist)
+        self.multiprocess_lock.acquire()
+        stocklist = self.h5_db.load_factor(self.estu_name, '/indexes/', dates=dates)
+        self.multiprocess_lock.release()
+        stocklist = stocklist[stocklist.iloc[:, 0] == 1]
+        return stocklist
 
     def set_multiprocess_lock(self, lock):
         self.multiprocess_lock = Lock() if lock is None else lock
@@ -96,11 +102,14 @@ class RiskModelDataSourceOnH5(object):
         self.factor_read_num = pd.Series([0]*len(self.factor_names), index=self.factor_names)
 
     @DateRange2Dates
-    def get_factor_data(self, factor_name, start_date=None, end_date=None, ids=None, dates=None):
+    def get_factor_data(self, factor_name, start_date=None, end_date=None, ids=None, dates=None, idx=None):
         """获得单因子的数据"""
-        idx = self.idx[self.idx.index.get_level_values(0).isin(dates)]
+        if idx is None:
+            idx = self.idx[self.idx.index.get_level_values(0).isin(dates)]
+        else:
+            idx = idx[idx.index.get_level_values(0).isin(dates)]
         if ids is not None:
-            idx = self.idx.loc[pd.IndexSlice[:, ids], :]
+            idx = idx.loc[pd.IndexSlice[:, ids], :]
         if self.max_cache_num == 0:     # 无缓存机制
             self.multiprocess_lock.acquire()
             data = self.h5_db.load_factor(factor_name, self.factor_dict[factor_name], dates=dates, ids=ids)
@@ -112,8 +121,7 @@ class RiskModelDataSourceOnH5(object):
             if self.cached_factor_num < self.max_cache_num:
                 self.cached_factor_num += 1
                 self.multiprocess_lock.acquire()
-                factor_data = self.h5_db.load_factor(factor_name, self.factor_dict[factor_name], dates=self.all_dates,
-                                                     ids=self.all_ids)
+                factor_data = self.h5_db.load_factor(factor_name, self.factor_dict[factor_name])
                 self.multiprocess_lock.release()
                 self.cache_data[factor_name] = factor_data
             else:   # 当前缓存因子数大于等于最大缓存因子数，那么检查最小读取次数的因子
@@ -121,8 +129,7 @@ class RiskModelDataSourceOnH5(object):
                 min_read_idx = cached_factor_read_nums.argmin()
                 self.multiprocess_lock.acquire()
                 if cached_factor_read_nums.iloc[min_read_idx] < self.factor_read_num[factor_name]:
-                    factor_data = self.h5_db.load_factor(factor_name, self.factor_dict[factor_name],
-                                                         dates=self.all_dates, ids=self.all_ids)
+                    factor_data = self.h5_db.load_factor(factor_name, self.factor_dict[factor_name])
                     self.cache_data.pop(cached_factor_read_nums.index[min_read_idx])
                     self.cache_data[factor_name] = factor_data
                 else:
@@ -133,11 +140,11 @@ class RiskModelDataSourceOnH5(object):
         return factor_data.reindex(idx.index)
 
     @DateRange2Dates
-    def get_data(self, factor_names, start_date=None, end_date=None, ids=None, dates=None):
+    def get_data(self, factor_names, start_date=None, end_date=None, ids=None, dates=None, idx=None):
         """加载因子数据到一个dataframe里"""
         frame = []
         for ifactor in factor_names:
-            ifactor_data = self.get_factor_data(ifactor, dates=dates, ids=ids)
+            ifactor_data = self.get_factor_data(ifactor, dates=dates, ids=ids, idx=idx)
             frame.append(ifactor_data)
         data = pd.concat(frame, axis=1)
         return data
@@ -159,7 +166,7 @@ class RiskModelDataSourceOnH5(object):
             'factor_dict': self.factor_dict,
             'factor_names': self.factor_names,
             'max_cache_num': self.max_cache_num,
-            'estu_config': self.estu_config
+            'estu_name': self.estu_name
         }
         dumper.dump(info, name=self.name)
 
@@ -174,10 +181,389 @@ class RiskModelDataSourceOnH5(object):
         self.factor_dict = info['factor_dict']
         self.factor_names = info['factor_names']
         self.max_cache_num = info['max_cache_num']
-        self.estu_config = info['estu_config']
+        self.estu_name = info['estu_name']
         self.factor_read_num = pd.Series(np.zeros(len(self.factor_names)), index=self.factor_names)
 
     def save_factor(self, data, path):
         self.multiprocess_lock.acquire()
         self.h5_db.save_factor(data, path)
         self.multiprocess_lock.release()
+
+
+class RiskDataSource(object):
+    """
+    风险数据库数据源，包括风险因子收益率、风险因子收益协方差矩阵、股票特质收益率、股票特质收益协方差矩阵、
+    截面回归的统计量、原始的风险因子收益协方差矩阵(调整前)、 原始的特质收益协方差矩阵(调整前)。每一个数据库对应一个文件夹。
+
+    文件夹的结构：
+    ============
+    RiskDataSource:
+        factorRisk:
+            factorRisk1.csv \n
+            factorRisk2.csv \n
+            ...
+        specificRisk:
+            specificRisk1.csv \n
+            specificRisk2.csv \n
+            ...
+        rawFactorRisk:
+            rawFactorRisk1.csv \n
+            rawFactorRisk2.csv \n
+            ...
+        rawSpecificRisk:
+            rawSpecificRisk1.csv \n
+            rawSpecificRisk2.csv \n
+            ...
+        factorData:
+            factor1.h5 \n
+            factor2.h5 \n
+            ...
+        factor_return.h5 \n
+        regress_stats.h5 \n
+        resid_return.h5 \n
+
+    文件存储的格式:
+    ==============
+    风险因子收益率：h5
+        DataFrame(index:[date factor_names], columns:[factor_return])
+    风险因子收益协方差矩阵: csv
+        每日一个csv文件，以YYYYMMDD命名。文件内的数据格式：第一列和第一行是因子名称
+    股票特质(残差)收益率: h5
+        DataFrame(index:[date IDs], columns:[resid_return])
+    股票特质收益协方差矩阵: csv
+        每日一个csv文件，以YYYYMMDD命名。文件内数据格式: 第一列股票代码
+    截面回归统计量: h5
+        DataFrame(index:[date stats_name], columns:[regress_stats])
+    原始的风险因子收益协方差矩阵(调整前): csv
+        每日一个csv文件，以 YYYYMMDD 命名。文件内的数据格式：第一列和第一行是因子名称
+    原始的特质收益协方差矩阵(调整前): pkl
+        每日一个pkl文件，以YYYYMMDD命名。文件内数据格式: 第一列是股票代码
+    风险因子数据: h5
+        每个因子是一个h5文件， 以因子名称命名。DataFrame(index:[date IDs], columns:[factor_name])
+    """
+    root_dir = default_riskds_root
+    h5_db = H5DB(data_path=default_riskds_root)
+
+    def __init__(self, name):
+        self._name = name
+        self._dspath = path.join(RiskDataSource.root_dir, self._name)
+        self._h5_dir = '/%s/' % self._name
+        self.h5_db = H5DB(data_path=self._dspath)
+        self.persist_helper = DiskPersistProvider(self._h5_dir)
+        ensure_dir_exists(self._dspath)
+        self.initialize()
+
+    def initialize(self):
+        ensure_dir_exists(path.join(self._dspath, 'factorRisk'))
+        ensure_dir_exists(path.join(self._dspath, 'rawFactorRisk'))
+        ensure_dir_exists(path.join(self._dspath, 'specificRisk'))
+        ensure_dir_exists(path.join(self._dspath, 'rawSpecificRisk'))
+        ensure_dir_exists(path.join(self._dspath, 'others'))
+        ensure_dir_exists(path.join(self._dspath, 'factorData'))
+
+    def check_file_exists(self, file_name):
+        return path.isfile(path.join(self._dspath, file_name))
+
+    def check_dir_exists(self, dir_name):
+        return path.isdir(path.join(self._dspath, dir_name))
+
+    @DateRange2Dates
+    def load_factors(self, factor_names, ids=None, start_date=None, end_date=None, dates=None):
+        """
+        加载风险因子数据
+
+        风险因子文件格式：h5
+        文件内部数据格式：DataFrame(index:[date IDs], columns:[factor_name])
+
+        Return
+        ======
+        factor_data: DataFrame
+            DataFrame(index:[date IDs], columns:[factor_names])
+        """
+        if factor_names == 'ALL':
+            factor_names = [x.replace(".h5", "") for x in os.listdir(self._dspath+'/factorData')]
+        if factor_names == 'STYLE':
+            factor_names = [x.replace(".h5", "") for x in os.listdir(self._dspath+'/factorData') if not x.startswith('Indu_')]
+        data_dict = {'/factorData/': factor_names}
+        data = self.h5_db.load_factors(data_dict, dates=dates, ids=ids).rename(columns=lambda x: x[5:] if x.startswith("Indu_") else x)
+        return data
+
+    @DateRange2Dates
+    def load_industry(self, ids=None, start_date=None, end_date=None, dates=None):
+        """
+        加载行业哑变量
+        行业变量文件以"Indu_"开头， 存储在factorData文件夹中
+
+        Returns:
+        ========
+        industry: DataFrame
+            DataFrame(index:[date IDs], columns:[industry_names])
+        """
+        all_industries = [x[:-3] for x in os.listdir(path.join(self._dspath, 'factorData')) if x.startswith('Indu_')]
+        data_dict = {'/factorData/': all_industries}
+        data = self.h5_db.load_factors(data_dict, dates=dates, ids=ids)
+        return data
+
+    @DateRange2Dates
+    def load_returns(self, start_date=None, end_date=None, dates=None):
+        """
+        加载风险因子收益率数据,一次性加载所有的因子。
+
+        风险因子收益率文件格式：h5
+        文件内部数据格式：DataFrame(index:[date factor_names], columns:[factor_return])
+
+        Return
+        ======
+        ret: DataFrame
+            DataFrame(index:[date], columns:[factor_names])
+        """
+        if not self.check_file_exists('factor_return.h5'):
+            ret = self.h5_db.load_factor('factor_return', self._h5_dir, dates=dates)
+        else:
+            print(FileNotFoundError("因子收益率文件不存在！"))
+            return pd.DataFrame()
+        return ret['factor_return'].unstack()
+
+    @DateRange2Dates
+    def load_factor_return(self, factor_name, start_date=None, end_date=None, dates=None):
+        """
+        加载单一风险因子的收益率
+
+        Return
+        ======
+        ret: DataFrame
+            DataFrame(index:[date], columns:[factor_names])
+        """
+        if isinstance(factor_name, str):
+            factor_name = [factor_name]
+        if not self.check_file_exists('factor_return.h5'):
+            ret = self.h5_db.load_factor('factor_return', self._h5_dir, dates=dates, ids=factor_name)
+        else:
+            print(FileNotFoundError("因子收益率文件不存在！"))
+            return pd.DataFrame()
+        return ret['factor_return'].unstack()
+
+    def load_snapshot_return(self, date):
+        """
+        加载某一时间点的风险因子收益率数据
+
+        Return
+        ======
+        ret: DataFrame
+            DataFrame(index:[date], columns:[factor_names])
+        """
+        if not self.check_file_exists('factor_return.h5'):
+            ret = self.h5_db.load_factor('factor_return', self._h5_dir, dates=[date])
+        else:
+            raise FileNotFoundError("因子收益率文件不存在！")
+        return ret['factor_return'].unstack()
+
+    @DateRange2Dates
+    def load_stats(self, start_date=None, end_date=None, dates=None):
+        """
+        加载截面回归统计诊断指标，主要包括了：
+        1. 每一个风险因子的t统计量
+        2. 截面回归的F统计量
+        3. 截面回归的R方、调整的R方
+        4. 每一个风险因子的方差膨胀系数(VIF)
+
+        Return
+        ======
+        stats: DataFrame
+            DataFrame(index:[date], columns:[stat_names])
+        """
+        if not self.check_file_exists('regress_stats.h5'):
+            stats = self.h5_db.load_factor('regress_stats', self._h5_dir, dates=dates)
+        else:
+            raise FileNotFoundError("回归诊断文件不存在！")
+        return stats['regress_stats'].unstack()
+
+    @DateRange2Dates
+    def load_factor_riskmatrix(self, start_date=None, end_date=None, dates=None, raw=False):
+        """
+        加载风险因子的风险矩阵
+
+        Paramters:
+        ==========
+        raw: bool
+            是否加载原始的风险因子收益协方差矩阵
+
+        Return:
+        =======
+        riskmatrix: dict
+            dict(key:date, value:DataFrame(index:[factor_names], columns:[factor_names])
+        """
+        dates_str = [x.strftime("%Y%m%d") for x in dates]
+        matrixes = {}
+        if raw:
+            dirpth = path.join(self._dspath, 'rawFactorRisk')
+        else:
+            dirpth = path.join(self._dspath, 'factorRisk')
+
+        for i, date in enumerate(dates_str):
+            csv_file = path.join(dirpth, '%s.csv' % date)
+            if path.isfile(csv_file):
+                matrix = pd.read_csv(csv_file, index_col=0, header=0)
+                matrixes[dates[i]] = matrix
+            else:
+                warn("%s 风险矩阵不存在！" % date)
+        return matrixes
+
+    @DateRange2Dates
+    def load_specific_riskmatrix(self, start_date=None, end_date=None, dates=None, raw=False):
+        """
+        加载特质风险矩阵
+
+        Paramters:
+        ==========
+        raw: bool
+            是否加载原始的特质收益协方差矩阵
+
+        Return:
+        ======
+        specific_riskmatrix: dict
+            dict(key:date, value:Series(index:[IDs], value:specific_risk)
+        """
+        dates_str = [x.strftime("%Y%m%d") for x in dates]
+        matrixes = {}
+        if raw:
+            dirpth = path.join(self._dspath, 'rawSpecificRisk')
+        else:
+            dirpth = path.join(self._dspath, 'specificRisk')
+
+        for i, date in enumerate(dates_str):
+            csv_file = path.join(dirpth, '%s.csv' % date)
+            if path.isfile(csv_file):
+                matrix = pd.read_csv(csv_file, index_col=0, header=None, squeeze=True)
+                matrix.index = [str(x).zfill(6) for x in matrix.index]
+                matrixes[dates[i]] = matrix
+            else:
+                warn("%s 风险矩阵不存在！" % date)
+        return matrixes
+
+    @DateRange2Dates
+    def load_resid_factor(self, ids=None, start_date=None, end_date=None, dates=None):
+        """
+        加载残差收益率
+
+        Return:
+        ======
+        resid_factor: DataFrame
+            DataFrame(index:[date, IDs], columns:[resid_return])
+        """
+        if not self.check_file_exists('resid_return.h5'):
+            ret = self.h5_db.load_factor('resid_return', self._h5_dir, dates=dates, ids=ids)
+        else:
+            raise FileNotFoundError("因子收益率文件不存在！")
+        return ret
+
+    def save_data(self, **kwargs):
+        """
+        保存风险模型的数据，保存规则与数据存储规则一致。
+
+        Paramters:
+        ==========
+        tvalue: DataFrame
+            DataFrame(index:[date], columns:[factor_names])
+        fvalue: Series
+            Series(index:[date], name: fvalue)
+        rsquared: Series
+            Series(index:[date], name:rsquared)
+        adjust_rsquared: Series
+            Series(index:[date], name:adjust_rsquared)
+        vifs: DataFrame
+            DataFrame(index:[date], columns:[factor_names])
+        factor_return: DataFrame
+            DataFrame(index:[date], columns:[factor_names])
+        resid_return: DataFrame
+            DataFrame(index;[date], columns:[IDs])
+        factor_riskmatrix: dict
+            dict(key: date, value:DataFrame(index:[factor_names], columns:[factor_names]))
+        raw_factor_riskmatrix: dict
+            dict(key: date, value:DataFrame(index:[factor_names], columns:[factor_names]))
+        raw_specific_riskmatrix: dict
+            dict(key: date, value:Series(index:[IDs], columns:[IDs])
+        specific_riskmatrix: dict
+            dict(key: date, value:Seriex(index:[IDs], columns:[IDs])
+        factor_data: DataFrame
+            DataFrame(indedx:[date IDs], columns:[factor_names])
+        """
+        tvalue = pd.DataFrame()
+        if 'tvalue' in kwargs:
+            if not kwargs['tvalue'].empty:
+                tvalue = kwargs['tvalue'].rename(columns=lambda x: 'tstat_' + x).stack().to_frame('regress_stats')
+                tvalue.index.names = ['date', 'IDs']
+        fvalue = pd.DataFrame()
+        if 'fvalue' in kwargs:
+            if not kwargs['fvalue'].empty:
+                fvalue = kwargs['fvalue'].to_frame().stack().to_frame('regress_stats')
+                fvalue.index.names = ['date', 'IDs']
+        rsquared = pd.DataFrame()
+        if 'rsquared' in kwargs:
+            if not kwargs['rsquared'].empty:
+                rsquared = kwargs['rsquared'].to_frame().stack().to_frame('regress_stats')
+                rsquared.index.names = ['date', 'IDs']
+        adjust_rsquared = pd.DataFrame()
+        if 'adjust_rsquared' in kwargs:
+            if not kwargs['adjust_rsquared'].empty:
+                adjust_rsquared = kwargs['adjust_rsquared'].to_frame().stack().to_frame('regress_stats')
+                adjust_rsquared.index.names = ['date', 'IDs']
+        vifs = pd.DataFrame()
+        if 'vifs' in kwargs:
+            if not kwargs['vifs'].empty:
+                vifs = kwargs['vifs'].rename(columns=lambda x: 'vif_' + x).stack().to_frame('regress_stats')
+                vifs.index.names = ['date', 'IDs']
+        stats = pd.concat([tvalue, fvalue, rsquared, adjust_rsquared, vifs]).sort_index()
+        self.h5_db.save_factor(stats, self._h5_dir)
+        if 'factor_return' in kwargs:
+            if not kwargs['factor_return'].empty:
+                factor_return = kwargs['factor_return'].stack().to_frame('factor_return')
+                factor_return.index.names = ['date', 'IDs']
+                self.h5_db.save_factor(factor_return, self._h5_dir)
+        if 'resid_factor' in kwargs:
+            if not kwargs['resid_return'].empty:
+                resid_return = kwargs['resid_return'].stack().toframe('resid_return')
+                resid_return.index.names = ['date', 'IDs']
+                self.h5_db.save_factor(resid_return, self._h5_dir)
+        if 'factor_riskmatrix' in kwargs:
+            save_dir = path.join(self._dspath, 'factorRisk')
+            for k, v in kwargs['factor_riskmatrix'].items():
+                date = k.strftime("%Y%m%d")
+                v.to_csv(path.join(save_dir, "%s.csv" % date))
+        if 'raw_factor_riskmatrix' in kwargs:
+            save_dir = path.join(self._dspath, 'rawFactorRisk')
+            for k, v in kwargs['raw_factor_riskmatrix'].items():
+                date = k.strftime("%Y%m%d")
+                v.to_csv(path.join(save_dir, "%s.csv" % date))
+        if 'specific_riskmatrix' in kwargs:
+            save_dir = path.join(self._dspath, 'specificRisk')
+            for k, v in kwargs['specific_riskmatrix'].items():
+                date = k.strftime("%Y%m%d")
+                v.to_csv(path.join(save_dir, "%s.csv" % date))
+        if 'raw_specific_riskmatrix' in kwargs:
+            save_dir = path.join(self._dspath, 'rawSpecificRisk')
+            for k, v in kwargs['raw_specific_riskmatrix'].items():
+                date = k.strftime("%Y%m%d")
+                v.to_csv(path.join(save_dir, "%s.csv" % date))
+        if 'factor_data' in kwargs:
+            self.h5_db.save_factor(kwargs['factor_data'], '/factorData/')
+        return
+
+    def load_others(self, name):
+        """
+        使用.pkl文件，加载其他数据
+
+        """
+        name = 'others/' + name
+        obj = self.persist_helper.load(name)
+        return obj
+
+    def save_other(self, name, **kwargs):
+        """
+        使用.pkl文件，序列化对象
+        """
+        name = 'others/' + name
+        self.persist_helper.dump(kwargs, name)
+        return
+
+

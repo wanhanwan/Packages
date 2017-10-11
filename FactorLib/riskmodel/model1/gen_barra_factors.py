@@ -23,6 +23,7 @@ def prepare_save_info(config_file):
     _args['factor_save_path'] = config_file.save_info['factor_save_path']
     _args['split_length'] = config_file.save_info['split_length']
     _args['industry_factor'] = config_file.save_info['industry_factor']
+    _args['regress_weight_factor'] = config_file.save_info['regress_weight_factor']
     if config_file.save_info['cpu_use'] is not None:
         _args['cpu_use'] = config_file.save_info['cpu_use']
     else:
@@ -57,12 +58,14 @@ def parallel_func(args):
 def generate_barra_datasource(arg):
     factor_dict = {x: arg['save_info']['factor_save_path'] for x in arg['save_info']['factor2save']}
     factor_dict[arg['save_info']['industry_factor']] = get_factors([arg['save_info']['industry_factor']])[0][1]
+    factor_dict[arg['save_info']['regress_weight_factor']] = get_factors([arg['save_info']['regress_weight_factor']])[0][1]
     factor_names = arg['save_info']['factor2save']
     factor_names.append(arg['save_info']['industry_factor'])
+    factor_names.append(arg['save_info']['regress_weight_factor'])
     data_source = riskmodel_data_source.RiskModelDataSourceOnH5(h5_db=h5)
     data_source.factor_names = factor_names
     data_source.factor_dict = factor_dict
-    data_source.set_estu_config(arg['estu_config'])
+    data_source.set_estu(arg['estu_config']['ESTU'])
     data_source.name = 'DS-Barra'
     data_source.save_info(path=os.path.dirname(__file__))
 
@@ -81,13 +84,12 @@ if __name__ == '__main__':
     estu_config = _parse_estuconfig(config)
     estu = get_estu(all_dates, estu_config)
     Args['estu_config'] = estu_config
-    Args['estu'] = estu[estu.iloc[:, 0] == 1]
+    Args['estu'] = estu
     Args['descriptors'] = prepare_factors(config)
     Args['func_modules'] = config.funcs
     Args['save_info'] = prepare_save_info(config)
     data_source = riskmodel_data_source.RiskModelDataSourceOnH5(h5_db=h5)
     data_source.set_dimension(Args['estu'])
-    data_source.set_estu_config(estu_config)
     data_source.prepare_factor(table_factor=Args['descriptors'])
     Args['data_source'] = data_source
 

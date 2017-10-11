@@ -8,7 +8,7 @@ others = ['wind_level_1', 'float_mkt_value']
 
 # 两个股票池(CU、ESTU)
 CU = '全A'
-ESTU = {'func': 'typical_add_latest_st', 'func_args': {'st_months': 12}}
+ESTU = 'barramodel1'
 
 # 风险描述子的横截面清洗
 funcs = []
@@ -90,6 +90,7 @@ funcs.append(func_description)
 save_info = {
     'factor_to_save': ['BETA','RSTR','VOLATILITY','BTOP','LIQUIDITY','EARNING','GROWTH','LEVERAGE','LNCAP','NLSIZE'],
     'industry_factor': 'wind_level_1',
+    'regress_weight_factor': 'float_mkt_value',
     'factor_save_path': '/barra/factors/',
     'run_type': 'M',
     'split_length': 75,
