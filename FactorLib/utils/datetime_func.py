@@ -1,3 +1,4 @@
+# coding: utf-8
 from pandas import datetime as pdDateTime
 from FactorLib.data_source.trade_calendar import tc
 import pandas as pd

@@ -1,3 +1,4 @@
+# coding: utf-8
 """基于HDF文件的数据库"""
 
 import pandas as pd
@@ -164,7 +165,7 @@ class H5DB(object):
         if zipname is not None:
             zip_dir(target_path, os.path.join(self.snapshots_path, '%s_%s.zip'%(date_now, zipname)))
         if mail:
-            from QuantLib import mymail
+            from mailing.mailmanager import mymail
             mymail.connect()
             mymail.login()
             content = "hello everyone, this is factor data on %s"%date_now

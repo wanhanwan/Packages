@@ -1,5 +1,5 @@
 from .utils import DropOutlier, Standard
-from mailing.mailmanager import mymail
+# from mailing.mailmanager import mymail
 
 
 

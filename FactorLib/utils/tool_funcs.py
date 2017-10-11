@@ -1,3 +1,4 @@
+# coding: utf-8
 """一些工具函数"""
 from FactorLib.const import (INDUSTRY_NAME_DICT,
                    SW_INDUSTRY_DICT,
@@ -9,7 +10,6 @@ from FactorLib.const import (INDUSTRY_NAME_DICT,
                    )
 import pandas as pd
 import os
-import importlib.util as ilu
 
 
 def dict_reverse(_dict):
@@ -69,6 +69,7 @@ def import_mod(mod_name):
 
 
 def import_module(module_name, module_path):
+    import importlib.util as ilu
     spec = ilu.spec_from_file_location(module_name, module_path)
     m = ilu.module_from_spec(spec)
     spec.loader.exec_module(m)

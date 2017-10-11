@@ -1,3 +1,4 @@
+# coding: utf-8
 from empyrical.stats import cum_returns_final
 from .trade_calendar import _to_offset, tc
 from fastcache import clru_cache

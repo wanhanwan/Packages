@@ -1,6 +1,7 @@
+# coding: utf-8
 import os
+from fastcache import clru_cache
 from datetime import timedelta, datetime
-from functools import lru_cache
 
 import numpy as np
 import pandas as pd
@@ -288,7 +289,7 @@ class base_data_source(object):
         else:
             dates = pd.DatetimeIndex(self.trade_calendar.get_trade_days('20070101', today))
 
-            @lru_cache()
+            @clru_cache()
             def _mapdate(date):
                 if date.month == 3:
                     return pd.datetime(date.year, 4, 30)
