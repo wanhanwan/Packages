@@ -1,3 +1,4 @@
+# coding: utf-8
 """一些工具函数"""
 from FactorLib.const import (INDUSTRY_NAME_DICT,
                    SW_INDUSTRY_DICT,
@@ -9,7 +10,6 @@ from FactorLib.const import (INDUSTRY_NAME_DICT,
                    )
 import pandas as pd
 import os
-import importlib.util as ilu
 
 
 def dict_reverse(_dict):
@@ -69,6 +69,7 @@ def import_mod(mod_name):
 
 
 def import_module(module_name, module_path):
+    import importlib.util as ilu
     spec = ilu.spec_from_file_location(module_name, module_path)
     m = ilu.module_from_spec(spec)
     spec.loader.exec_module(m)
@@ -202,3 +203,18 @@ def distribute_equal(n, m):
     for i in range(Remainder):
         Res[i] += 1
     return Res
+
+
+# 在给定的字符串列表str_list中寻找第一个含有name_list中给定字符串的字符串名字,如果没有找到，返回str_list的第一个元素
+def searchNameInStrList(str_list, name_list):
+    Rslt = None
+    for iStr in str_list:
+        for iNameStr in name_list:
+            if iStr.find(iNameStr) != -1:
+                Rslt = iStr
+                break
+        if Rslt is not None:
+            break
+    if Rslt is None:
+        Rslt = str_list[0]
+    return Rslt

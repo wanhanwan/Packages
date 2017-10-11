@@ -11,7 +11,6 @@ import numpy as np
 import QuantLib as qlib
 from QuantLib.factor_validation import cal_ic
 
-
 def combine_factors_by_ic(factor_list):
     '''通过IC最优加权，将单因子合并成复合因子
 

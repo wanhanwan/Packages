@@ -1,7 +1,7 @@
 from FactorLib.utils.strategy_manager import StrategyManager
 
-start = '20170801'
-end = '20170831'
+start = '20170901'
+end = '20170929'
 
 sm = StrategyManager('D:/data/factor_investment_strategies', 'D:/data/factor_investment_stocklists')
 for strategy_id in sm._strategy_dict['id'].values:

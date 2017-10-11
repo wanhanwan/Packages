@@ -1,5 +1,6 @@
-import pandas as pd
+# coding: utf-8
 
+import pandas as pd
 
 # mysql引擎
 # mysql_engine = create_engine('mysql+pymysql://root:123456@localhost/barrafactors')

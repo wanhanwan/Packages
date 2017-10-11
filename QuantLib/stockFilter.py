@@ -56,12 +56,19 @@ def _drop_suspendtrading(stocklist, hold_days=0):
         start = data_source.trade_calendar.tradeDayOffset(min(alldates), -hold_days)
         end = max(alldates).strftime("%Y%m%d")
         dates = data_source.trade_calendar.get_trade_days(start, end)
-        suspend = data_source.sector.get_suspend(dates).unstack().dropna(axis=1, how='all')
+        suspend = data_source.sector.get_suspend(dates).unstack().dropna(axis=1, how='all').fillna(1)
         suspend = df_rolling(suspend, hold_days, np.nanmin, axis=0).stack()
         suspend = suspend[suspend == 0]
     else:
         suspend = data_source.sector.get_suspend(alldates)
     return _difference(stocklist, suspend)
+drop_suspendtrading = _drop_suspendtrading
+
+
+# 返回股票列表中停牌的股票
+def suspendtrading(stocklist, date):
+    suspend = data_source.sector.get_suspend([date]).index.get_level_values(1).tolist()
+    return list(set(stocklist).intersection(set(suspend)))
 
 
 # 删除上市不满一定天数的股票
@@ -76,7 +83,6 @@ def _drop_latest_st(stocklist, months=6):
     all_dates = stocklist.index.get_level_values(0).unique().tolist()
     unst = data_source.sector.get_latest_unst(all_dates, months=months)
     return _difference(stocklist, unst)
-
 
 
 def typical(stocklist):

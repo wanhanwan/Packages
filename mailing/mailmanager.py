@@ -1,3 +1,4 @@
+# coding: utf-8
 import configparser
 import smtplib
 from email.mime.multipart import MIMEMultipart

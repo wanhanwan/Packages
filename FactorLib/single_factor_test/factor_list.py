@@ -183,6 +183,7 @@ STOQ = ('STOQ', '/barra/descriptors/', 1)
 STOM = ('STOM', '/barra/descriptors/', 1)
 
 
+
 # 行业因子
 cs_level_1 = ('cs_level_1', '/indexes/', 1)
 cs_level_2 = ('cs_level_2', '/indexes/', 1)
@@ -195,6 +196,20 @@ BARRA = [BETA, BLEV, BTOP, CETOP, CMRA,
          DASTD, DTOA, EGRLF, EGRO, EGRSF,
          EPFWD, ETOP, HSIGMA, LNCAP, MLEV,
          RSTR, SGRO, STOA, STOQ, STOM]
+
+
+def get_factors(factors):
+    all_factors = []
+    if isinstance(factors, str):
+        all_factors += (globals()[factors])
+    else:
+        for f in factors:
+            try:
+                factor = globals()[f]
+            except KeyError:
+                continue
+            all_factors.append(factor)
+    return all_factors
 
 
 factor_list = factor_list_growth + factor_list_momentum + factor_list_quality + factor_list_sentiment + \

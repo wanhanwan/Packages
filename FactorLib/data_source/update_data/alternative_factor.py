@@ -3,7 +3,7 @@
 import pandas as pd
 import numpy as np
 import statsmodels.api as sm
-from QuantLib.tools import df_rolling
+from QuantLib.tools import df_rolling2
 
 
 # 特异度
@@ -19,7 +19,7 @@ def iffr(start, end, **kwargs):
     
     # 计算特质收益率因子
 
-    r_square = df_rolling(data, 20, _calRSquareApplyFunc)
+    r_square = df_rolling2(data, 20, _calRSquareApplyFunc)
 
     # 存储数据到数据库
     r_square = r_square.stack()

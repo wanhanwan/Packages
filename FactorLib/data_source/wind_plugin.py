@@ -3,6 +3,7 @@ from WindPy import *
 from . import data_api
 from .base_data_source_h5 import h5
 from ..utils.tool_funcs import tradecode_to_windcode, drop_patch
+from .trade_calendar import as_timestamp
 from ..const import MARKET_INDEX_WINDCODE
 import pandas as pd
 import xlrd
@@ -97,7 +98,7 @@ def _bar_to_dataframe(data):
     if data.ErrorCode != 0:
         raise ValueError(str(data.ErrorCode))
     ids = list(map(drop_patch, data.Codes))
-    dates = [x.date() for x in data.Times]
+    dates = [as_timestamp(x) for x in data.Times]
     col = pd.Index(ids, name='IDs')
     if len(dates) == 1:
         df = pd.DataFrame(data.Data)

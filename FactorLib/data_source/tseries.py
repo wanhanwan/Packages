@@ -1,5 +1,7 @@
+# coding: utf-8
 from empyrical.stats import cum_returns_final
 from .trade_calendar import _to_offset, tc
+from fastcache import clru_cache
 import pandas as pd
 import numpy as np
 
@@ -115,3 +117,38 @@ def date_shift(dataframe, shift):
         return dataframe.stack()
     else:
         return dataframe
+
+
+@clru_cache()
+def _tradeDayOffset(x, shift, freq):
+    return tc.tradeDayOffset(x, shift, freq=freq, retstr=None)
+
+
+def move_dtindex(dataframe, shift, freq):
+
+    """
+    数据框的时间索引漂移，只改变索引，数据并不发生漂移
+    :param dataframe: 数据框
+
+    :param shift: 漂移步长
+
+    :param freq: 漂移频率
+
+    :return: new_frame
+
+    """
+    is_ser = False
+    if isinstance(dataframe, pd.Series):
+        dataframe = dataframe.to_frame()
+        is_ser = True
+    if isinstance(dataframe.index, pd.MultiIndex):
+        dates_shift = [_tradeDayOffset(x, shift, freq=freq) for x in dataframe.index.levels[0]]
+        new_frame = pd.DataFrame(dataframe.values, index=dataframe.index.set_levels(dates_shift,level='date'),
+                                 columns=dataframe.columns)
+    else:
+        dates_shift = [_tradeDayOffset(x, shift, freq=freq) for x in dataframe.index]
+        new_frame = pd.DataFrame(dataframe.values, index=pd.DatetimeIndex(dates_shift, name='date'),
+                                 columns=dataframe.columns)
+    if is_ser:
+        new_frame = new_frame.iloc[:, 0]
+    return new_frame

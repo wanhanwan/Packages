@@ -13,3 +13,16 @@ def _qualify_stocks(stocklist, method, **kwargs):
         raise KeyError("%s doesn't exist in file stockFilter.py")
     else:
         return getattr(stockFilter, method)(stocklist, **kwargs)
+
+
+def _parse_estuconfig(config_file):
+    estu_config = dict()
+    estu_config['ESTU'] = config_file.ESTU
+    estu_config['CU'] = config_file.CU
+    return estu_config
+
+
+def get_estu(dates, estu_config):
+    stocklist = data_source.h5DB.load_factor(estu_config['ESTU'], '/indexes/', dates=dates)
+    return stocklist[stocklist.iloc[:, 0] == 1]
+

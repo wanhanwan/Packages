@@ -5,10 +5,10 @@ from WindPy import *
 
 from FactorLib.utils.tool_funcs import get_industry_code, ReportDateAvailable, windcode_to_tradecode
 from FactorLib.utils.datetime_func import DateStr2Datetime
-from FactorLib.data_source.base_data_source_h5 import h5, sec
+from FactorLib.data_source.base_data_source_h5 import h5, sec, tc
 from FactorLib.data_source.wind_plugin import get_history_bar, get_wsd, _load_wsd_data
 from FactorLib.data_source.data_api import get_trade_days, trade_day_offset
-from FactorLib.data_source.update_data import index_members, sector_members, index_weights, industry_classes
+from FactorLib.data_source.update_data import index_members, sector_members, index_weights, industry_classes, slfdef_index
 
 w.start()
 
@@ -105,7 +105,7 @@ def update_price(start, end):
     data.columns = ['close','daily_returns_%','high','low','volume']
     data['volume'] = data['volume'] / 100
     data['daily_returns'] = data['daily_returns_%'] / 100
-    h5.save_factor(data,'/stocks/')
+    h5.save_factor(data, '/stocks/')
 
     field_names = "总市值 A股市值(不含限售股)"
     data = get_history_bar(field_names.split(),start,end)
@@ -213,5 +213,17 @@ def update_industry_index_prices(start, end):
     h5.save_factor(data, '/indexprices/cs_level_1/')
 
 
+def update_slfdef_index(start, end):
+    from QuantLib import stockFilter
+    dates = tc.get_trade_days(start, end)
+    ashare = sec.get_history_ashare(dates)
+    for index in slfdef_index:
+        func = index['func']
+        kwargs = index['func_args']
+        name = index['name']
+        stocklist = getattr(stockFilter, func)(ashare, **kwargs)
+        stocklist.columns = [name]
+        h5.save_factor(stocklist, '/indexes/')
+
 if __name__ == '__main__':
-    stockname('20170905','20170905')
+    update_slfdef_index('20100101','20170905')

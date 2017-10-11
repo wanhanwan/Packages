@@ -1,6 +1,7 @@
+# coding: utf-8
 import os
+from fastcache import clru_cache
 from datetime import timedelta, datetime
-from functools import lru_cache
 
 import numpy as np
 import pandas as pd
@@ -9,8 +10,9 @@ from .h5db import H5DB
 from .trade_calendar import tc
 from .tseries import resample_func, resample_returns
 from ..utils.datetime_func import DateStr2Datetime
-from ..utils.tool_funcs import parse_industry, get_industry_names, financial_data_reindex, windcode_to_tradecode
+from ..utils.tool_funcs import parse_industry, financial_data_reindex, windcode_to_tradecode
 from QuantLib.utils import Generate_Dummy
+from .converter import IndustryConverter
 
 
 class base_data_source(object):
@@ -287,7 +289,7 @@ class base_data_source(object):
         else:
             dates = pd.DatetimeIndex(self.trade_calendar.get_trade_days('20070101', today))
 
-            @lru_cache()
+            @clru_cache()
             def _mapdate(date):
                 if date.month == 3:
                     return pd.datetime(date.year, 4, 30)
@@ -395,7 +397,7 @@ class sector(object):
             dates = [dates]
         symbol = parse_industry(industry)
         industry_info = self.h5DB.load_factor(symbol, '/indexes/', ids=ids, dates=dates)
-        return get_industry_names(symbol, industry_info)
+        return IndustryConverter.convert(symbol, industry_info[symbol]).to_frame()
 
     def get_industry_dummy(self, ids, industry='中信一级', start_date=None, end_date=None, dates=None,
                            drop_first=True):
@@ -413,7 +415,7 @@ class sector(object):
         dates = self.trade_calendar.get_trade_days(start_date, end_date) if dates is None else dates
         symbol = '_{id}_weight'.format(id=ids)
 
-        weight = self.h5DB.load_factor(symbol, '/indexes/', dates=dates).sort_index()
+        weight = self.h5DB.load_factor(symbol, '/indexes/').sort_index()
         weight = weight.unstack().reindex(pd.DatetimeIndex(dates), method='ffill').stack()
         weight.index.names = ['date', 'IDs']
         return weight
