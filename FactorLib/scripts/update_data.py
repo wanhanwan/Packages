@@ -19,8 +19,8 @@ import pandas as pd
 import os
 from FactorLib.data_source.base_data_source_h5 import tc
 
-latest_update_date_0 = '20170907'
-latest_update_date_1 = '20170907'
+latest_update_date_0 = '20171011'
+latest_update_date_1 = '20171011'
 
 
 UpdateFuncs = [
@@ -46,7 +46,7 @@ while 1:
         print("即将更新因子数据...")
         start = tc.tradeDayOffset(latest_update_date_0, 1)
         end = datetime.today().strftime('%Y%m%d')
-        # end = '20170831'
+        # end = '20171011'
         for iFunc in UpdateFuncs:
             iFunc(start, end)
         update.update_all(start, end)
@@ -67,3 +67,4 @@ while 1:
         latest_update_date_1 = datetime.now().strftime("%Y%m%d")
         update_nav(start=start, end=latest_update_date_1)
         collect_nav(mailling=True)
+        print("策略回测更新成功...")

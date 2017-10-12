@@ -233,24 +233,26 @@ class StrategyManager(object):
         idx = pd.IndexSlice
         today = tc.get_latest_trade_days(datetime.today().strftime('%Y%m%d'))
         stocks = self.latest_position(strategy_id=strategy_id)
-        stocks.index = stocks.index.set_levels([pd.to_datetime(datetime.today().date())], level=0)
-        stocks.index = stocks.index.set_levels([windcode_to_tradecode(x) for x in stocks.index.get_level_values(1)], level=1)
-        stock_ids = stocks.index.get_level_values(1).tolist()
+        stock_ids = [windcode_to_tradecode(x) for x in stocks.index.get_level_values(1).tolist()]
         last_close = get_history_bar(['收盘价'], start_date=today, end_date=today, **{'复权方式': '前复权'})
-        last_close.index = last_close.index.set_levels([pd.to_datetime(datetime.today().date())], level=0)
         """如果当前是交易时间，需要区分停牌和非停牌股票。停牌股票取昨日前复权收盘价，
         非停牌股票取最新成交价。若非交易时间统一使用最新前复权收盘价。"""
         if tc.is_trading_time(datetime.now()) and not realtime:
             data = realtime_quote(['rt_last', 'rt_susp_flag'], ids=stock_ids)
+            last_close.index = last_close.index.set_levels([data.index.get_level_values(0)[0]]*len(last_close), level=0)
             tradeprice = data['rt_last'].where(data['rt_susp_flag']!=1, last_close['close'])
         else:
             tradeprice = last_close.loc[idx[:, stock_ids], 'close']
+        stocks.index = stocks.index.set_levels([tradeprice.index.get_level_values(0)[0]]*len(stocks), level=0)
+        stocks['IDs'] = [windcode_to_tradecode(x) for x in stocks.index.get_level_values(1)]
+        stocks = stocks.reset_index(level=1, drop=True).set_index('IDs')
         tradeorders = (stocks['Weight'] * capital / tradeprice / 100).reset_index().rename(columns={'IDs': '股票代码',
                                                                                                     0: '手数'})
+        tradeorders = tradeorders.join(stocks, on=['股票代码']).rename(columns={'Weight': '权重'})
         strategy_name = self.strategy_name(strategy_id)
         cwd = os.getcwd()
         os.chdir(os.path.join(self._strategy_path, strategy_name))
-        tradeorders[['股票代码', '手数']].to_excel('权重文件.xlsx', index=False, float_format='%.4f')
+        tradeorders[['股票代码', '权重', '手数']].to_excel('权重文件.xlsx', index=False, float_format='%.4f')
         os.chdir(cwd)
         return
 
@@ -352,7 +354,7 @@ def collect_nav(mailling=False):
                **{'returns': df, 'market index':indexreturns, 'citic industry index':industry_returns})
     if mailling:
         from filemanager import zip_dir
-        from QuantLib import mymail
+        from mailing.mailmanager import mymail
         mymail.connect()
         mymail.login()
         zip_dir("D:/data/strategy_performance/%s"%maxdate, 'D:/data/strategy_performance/%s.zip'%maxdate)

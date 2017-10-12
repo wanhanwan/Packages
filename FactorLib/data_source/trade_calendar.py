@@ -271,19 +271,19 @@ class trade_calendar(object):
         """
         遍历days中的每个元素，返回距离每个元素最近的交易日。
         """
-        if isinstance(days, Iterable):
+        if isinstance(days, list):
             timeindex = pd.DatetimeIndex(days)
             return pd.DatetimeIndex([traderule_alias_mapping['d'].rollback(x) for x in timeindex])
         else:
             return traderule_alias_mapping['d'].rollback(as_timestamp(days))
 
     @staticmethod
-    def is_trading_time(self, date_time):
+    def is_trading_time(date_time):
         """
         交易时间判断
 
         """
-        is_tradingdate = self.is_trade_day(date_time.date())
+        is_tradingdate = trade_calendar.is_trade_day(date_time.date())
         is_tradingtime = time(9, 25, 0) < date_time.time() < time(15, 0, 0)
         return is_tradingdate and is_tradingtime
 
