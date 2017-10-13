@@ -12,8 +12,8 @@ import pandas as pd
 optimal_assets = []
 for date in tc.get_trade_days('20140901', '20170831', freq='1m', retstr=None):
     # date = datetime(2017, 2, 24)
-    secID = '000905'
-    signal_name = 'StyleFactor_VG'
+    secID = '399974'
+    signal_name = 'StyleFactor_VGS'
     stockIDs = data_source.sector.get_index_members(ids=secID, dates=[date])
     # stockIDs = stockIDs[stockIDs.iloc[:, 0] == 1.0]
     # stockIDs = drop_suspendtrading(stockIDs)    # 剔除停牌股票
@@ -23,9 +23,9 @@ for date in tc.get_trade_days('20140901', '20170831', freq='1m', retstr=None):
 
     opt = Optimizer(signal, stockIDs, date, ds_name='uqer', benchmark=secID)
     opt.add_constraint('StockLimit', default_max=0.08)
-    opt.add_constraint('Style', {'MOMENTUM': 0.0, 'RESVOL': 0.0})
-    # opt.add_constraint('TrackingError', 0.0025)
-    opt.add_constraint('Indu')
+    # opt.add_constraint('Style', {'MOMENTUM': 0.0, 'RESVOL': 0.0})
+    opt.add_constraint('TrackingError', 0.0025)
+    # opt.add_constraint('Indu')
     opt.solve()
 
     if opt.optimal:
@@ -33,4 +33,4 @@ for date in tc.get_trade_days('20140901', '20170831', freq='1m', retstr=None):
         optimal_assets.append(opt.asset)
         style_expo, indu_expo, terr = opt.check_ktt()
 optimal_assets = pd.concat(optimal_assets)
-optimal_assets.to_csv(r"D:\spyder\stocklist_indnur_mom_vol.csv")
+optimal_assets.to_csv(r"D:\spyder\guoqigaige.csv")

@@ -252,7 +252,15 @@ class StrategyManager(object):
         strategy_name = self.strategy_name(strategy_id)
         cwd = os.getcwd()
         os.chdir(os.path.join(self._strategy_path, strategy_name))
-        tradeorders[['股票代码', '权重', '手数']].to_excel('权重文件.xlsx', index=False, float_format='%.4f')
+
+        # 写入Excel文件，权重一列保留6位小数，手数一列保留4位小数
+        writer = pd.ExcelWriter('权重文件.xlsx', engine='xlsxwriter')
+        tradeorders[['股票代码', '权重', '手数']].to_excel(writer, index=False, float_format='%.6f', sheet_name='Sheet1')
+        workbook = writer.book
+        worksheet = writer.sheets['Sheet1']
+        format1 = workbook.add_format({'num_format':'0.0000'})
+        worksheet.set_column('C:C', None, format1)
+        writer.save()
         os.chdir(cwd)
         return
 

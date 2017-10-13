@@ -140,7 +140,7 @@ def save_stock_list(factor, file_path, env):
     for _m in factor.stock_list:
         stock_list = factor.stock_list[_m].reset_index()
         stock_list['IDs'] = stock_list['IDs'].apply(tradecode_to_windcode)
-        file_name = "_".join([os.path.join(file_path,factor.name), 'stock_list', _m+'.csv'])
+        file_name = "_".join([os.path.join(file_path, factor.name), 'stock_list', _m+'.csv'])
         stock_list.to_csv(file_name, index=False)
 
 

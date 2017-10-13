@@ -47,9 +47,9 @@ class AbstractStockGenerator(object):
             raw = pd.read_csv(csvf, converters={'date': lambda x: datetime.strptime(x, "%Y-%m-%d")}).set_index('date')
             stocks = stocks[~stocks.index.isin(raw.index)]
             new = raw.append(stocks)
-            new.reset_index().to_csv(self.config.stocklist.output, float_format="%.4f", index=False)
+            new.reset_index().to_csv(self.config.stocklist.output, float_format="%.6f", index=False)
         else:
-            stocks.reset_index().to_csv(self.config.stocklist.output, float_format="%.4f", index=False)
+            stocks.reset_index().to_csv(self.config.stocklist.output, float_format="%.6f", index=False)
 
     def _update_tempdata(self, start, end, **kwargs):
         temp = self.generate_tempdata(start, end, **kwargs)
