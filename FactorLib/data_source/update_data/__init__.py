@@ -1,3 +1,4 @@
+# coding: utf-8
 # 更新成分股的指数
 index_members = ['000300.SH','000905.SH', '399102.SZ','000906.SH']
 
@@ -5,7 +6,7 @@ index_members = ['000300.SH','000905.SH', '399102.SZ','000906.SH']
 sector_members = {'is_st':'1000006526000000', 'ashare':'a001010100000000'}
 
 # 更新成分股权重的指数
-index_weights = ['000905.SH', '000300.SH', '000991.SH', '000906.SH']
+index_weights = ['000905.SH', '000300.SH', '000991.SH', '000906.SH', '399974.SZ']
 
 # 更新自定义指数成分股
 slfdef_index = [{'func': 'typical_add_latest_st', 'func_args': {'st_months': 12}, 'name': 'barramodel1'}]

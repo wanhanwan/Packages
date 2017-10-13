@@ -100,29 +100,29 @@ def stockname(start, end):
 def update_price(start, end):
     """更新价量行情数据"""
     # 股票价量数据
-    field_names = "收盘价 涨跌幅 最高价 最低价 成交量"
-    data = get_history_bar(field_names.split(),start,end,**{'复权方式':'不复权'})
-    data.columns = ['close','daily_returns_%','high','low','volume']
-    data['volume'] = data['volume'] / 100
-    data['daily_returns'] = data['daily_returns_%'] / 100
-    h5.save_factor(data, '/stocks/')
-
-    field_names = "总市值 A股市值(不含限售股)"
-    data = get_history_bar(field_names.split(),start,end)
-    data.columns = ['total_mkt_value', 'float_mkt_value']
-    data = data / 10000
-    h5.save_factor(data,'/stocks/')
-
-    # 股票后复权收盘价
-    field_names = "收盘价"
-    data = get_history_bar(field_names.split(),start,end,**{'复权方式':'后复权'})
-    data.columns = ['adj_close']
-    h5.save_factor(data,'/stocks/')
-
-    field_names = "换手率 换手率(基准.自由流通股本)"
-    data = get_history_bar(field_names.split(),start,end)
-    data.columns = ['turn','freeturn']
-    h5.save_factor(data,'/stock_liquidity/')
+    # field_names = "收盘价 涨跌幅 最高价 最低价 成交量"
+    # data = get_history_bar(field_names.split(),start,end,**{'复权方式':'不复权'})
+    # data.columns = ['close','daily_returns_%','high','low','volume']
+    # data['volume'] = data['volume'] / 100
+    # data['daily_returns'] = data['daily_returns_%'] / 100
+    # h5.save_factor(data, '/stocks/')
+    #
+    # field_names = "总市值 A股市值(不含限售股)"
+    # data = get_history_bar(field_names.split(),start,end)
+    # data.columns = ['total_mkt_value', 'float_mkt_value']
+    # data = data / 10000
+    # h5.save_factor(data,'/stocks/')
+    #
+    # # 股票后复权收盘价
+    # field_names = "收盘价"
+    # data = get_history_bar(field_names.split(),start,end,**{'复权方式':'后复权'})
+    # data.columns = ['adj_close']
+    # h5.save_factor(data,'/stocks/')
+    #
+    # field_names = "换手率 换手率(基准.自由流通股本)"
+    # data = get_history_bar(field_names.split(),start,end)
+    # data.columns = ['turn','freeturn']
+    # h5.save_factor(data,'/stock_liquidity/')
 
     # 指数价量数据
     field_names = "开盘价 最高价 最低价 收盘价 成交量 成交额 涨跌幅"
@@ -226,4 +226,4 @@ def update_slfdef_index(start, end):
         h5.save_factor(stocklist, '/indexes/')
 
 if __name__ == '__main__':
-    update_slfdef_index('20100101','20170905')
+    update_price('20140901', '20171012')

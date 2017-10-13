@@ -58,7 +58,7 @@ class Optimizer(object):
             ids=self._benchmark, dates=[self._date]).reset_index(level=0, drop=True).iloc[:, 0]
         # 找出上期持仓中停牌的股票
         if asset is not None:
-            preids = asset[asset != 0.0].index.tolist()
+            preids = [x.encode('utf8') for x in asset[asset != 0.0].index.tolist()]
             if preids:
                 nontrad_pre = suspendtrading(preids, self._date)
             else:
@@ -67,10 +67,13 @@ class Optimizer(object):
             nontrad_pre = []
         #  找出不在target_ids中的基准成分股
         bchmrk_notin_tar = list(set(self._bchmrk_weight.index.tolist()).difference(set(self.target_ids)))
+        bchmrk_notin_tar = [x.encode('utf8') for x in bchmrk_notin_tar]
         # 找出target_ids中停牌的股票
         nontrad_target = suspendtrading(self.target_ids, self._date)
+        nontrad_target = [x.encode('utf8') for x in nontrad_target]
         # signal 包含了三部分的股票
         allids = list(set(self.target_ids+self._bchmrk_weight.index.tolist()+nontrad_pre))
+        allids = [x.encode('utf8') for x in allids]
         allids.sort()
         self._bchmrk_weight = self._bchmrk_weight.reindex(allids, fill_value=0)
         return nontrad_pre, nontrad_target, bchmrk_notin_tar, signal.loc[allids]
@@ -87,7 +90,7 @@ class Optimizer(object):
         target_ids中停牌的股票设置为零。
         """
 
-        nvar = self._signal.index.tolist()
+        nvar = [x.encode('utf8') for x in self._signal.index.tolist()]
         self._c = cpx.Cplex()
         self._c.variables.add(names=nvar)
         # 禁止做空
