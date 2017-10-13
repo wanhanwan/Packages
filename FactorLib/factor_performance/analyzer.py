@@ -197,7 +197,7 @@ class Analyzer(object):
                     cur_day,
                     cur_day.to_period('W').start_time,
                     cur_day + MonthBegin(-1),
-                    cur_day + QuarterBegin(-1),
+                    cur_day + QuarterBegin(n=-1, startingMonth=1),
                     cur_day + MonthBegin(-6),
                     cur_day + YearBegin(-1),
                     cur_day + YearBegin(-2)
@@ -247,7 +247,7 @@ class FactorAnalyzer(Analyzer):
             cur_day,
             cur_day.to_period('W').start_time,
             cur_day + MonthBegin(-1),
-            cur_day + QuarterBegin(-1),
+            cur_day + QuarterBegin(n=-1, startingMonth=1),
             cur_day + MonthBegin(-6),
             cur_day + YearBegin(-1),
             cur_day + YearBegin(-2)
