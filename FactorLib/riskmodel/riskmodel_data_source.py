@@ -428,8 +428,9 @@ class RiskDataSource(object):
         for i, date in enumerate(dates_str):
             csv_file = path.join(dirpth, '%s.csv' % date)
             if path.isfile(csv_file):
-                matrix = pd.read_csv(csv_file, index_col=0, header=0)
-                matrix[dates[i]] = matrix
+                matrix = pd.read_csv(csv_file, index_col=0, header=0).rename(
+                    index=lambda x: str(x).zfill(6), columns=lambda x: str(x).zfill(6))
+                matrixes[dates[i]] = matrix
             else:
                 warn("%s 风险矩阵不存在！" % date)
         return matrixes

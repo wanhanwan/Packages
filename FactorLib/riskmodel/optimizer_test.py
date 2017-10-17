@@ -5,12 +5,12 @@
 使用兴业风格VGS因子作为选股信号
 """
 from datetime import datetime
-from FactorLib.riskmodel.optimizer27 import Optimizer
+from FactorLib.riskmodel.optimizer_xyquant import Optimizer
 from FactorLib.data_source.base_data_source_h5 import data_source, tc
 import pandas as pd
 
 optimal_assets = []
-for date in tc.get_trade_days('20140901', '20170831', freq='1m', retstr=None):
+for date in tc.get_trade_days('20140801', '20170831', freq='1m', retstr=None):
     # date = datetime(2017, 2, 24)
     secID = '399974'
     signal_name = 'StyleFactor_VGS'
@@ -21,10 +21,10 @@ for date in tc.get_trade_days('20140901', '20170831', freq='1m', retstr=None):
     signal = data_source.load_factor(signal_name, '/XYData/StyleFactor/',
                                      dates=[date])[signal_name].reset_index(level=0, drop=True)
 
-    opt = Optimizer(signal, stockIDs, date, ds_name='uqer', benchmark='399974')
+    opt = Optimizer(signal, stockIDs, date, ds_name='xy', benchmark='399974')
     opt.add_constraint('StockLimit', default_max=0.08)
     # opt.add_constraint('Style', {'MOMENTUM': 0.0, 'RESVOL': 0.0})
-    opt.add_constraint('TrackingError', 0.0025)
+    opt.add_constraint('TrackingError', 0.0020/12)
     # opt.add_constraint('Indu')
     opt.solve()
 
@@ -35,4 +35,4 @@ for date in tc.get_trade_days('20140901', '20170831', freq='1m', retstr=None):
     else:
         print("%s 权重优化失败：%s"%(date.strftime("%Y%m%d"), opt.solution_status))
 optimal_assets = pd.concat(optimal_assets)
-optimal_assets.to_csv(r"D:\spyder\guoqigaige.csv")
+optimal_assets.to_csv(r"D:\spyder\guoqigaige_tr0020.csv")
