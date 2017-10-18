@@ -226,4 +226,4 @@ def update_slfdef_index(start, end):
         h5.save_factor(stocklist, '/indexes/')
 
 if __name__ == '__main__':
-    update_price('20171013', '20171013')
+    update_idx_weight('20140829', '20140829')

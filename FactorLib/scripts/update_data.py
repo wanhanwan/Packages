@@ -19,8 +19,8 @@ import pandas as pd
 import os
 from FactorLib.data_source.base_data_source_h5 import tc
 
-latest_update_date_0 = '20171012'
-latest_update_date_1 = '20171012'
+latest_update_date_0 = '20171016'
+latest_update_date_1 = '20171016'
 
 
 UpdateFuncs = [
@@ -64,6 +64,7 @@ while 1:
         os.system("rqalpha update_bundle")
         flag1 = 0
         start = tc.tradeDayOffset(latest_update_date_1, 1)
+        # start = '20171012'
         latest_update_date_1 = datetime.now().strftime("%Y%m%d")
         update_nav(start=start, end=latest_update_date_1)
         collect_nav(mailling=True)
