@@ -116,7 +116,7 @@ class FactorGroups(object):
 
     def get_snapshot_by_date(self, date):
         _l = []
-        for m, x in self.group_info:
+        for m, x in self.group_info.items():
             group_id = x.get_snapshot_by_date(date)
             if group_id is None:
                 return None

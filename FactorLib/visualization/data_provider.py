@@ -44,7 +44,7 @@ class SingleStrategyResultProvider(object):
 
     def update_strategy(self):
         summary_file = os.path.join(self.root_path, 'summary.csv')
-        summary_df = pd.read_csv(summary_file, converters={'benchmark': lambda x:str(x).zfill(6)}, encoding='GBK')
+        summary_df = pd.read_csv(summary_file, converters={'benchmark': lambda x: str(x).zfill(6)}, encoding='GBK')
         self.strategy_summary = summary_df
         self.all_strategies = summary_df['name'].tolist()
 
@@ -64,6 +64,16 @@ class SingleStrategyResultProvider(object):
     @fastcache.clru_cache()
     def load_info(self, strategy):
         return str(self.strategy_summary.loc[self.strategy_summary.name==strategy, :].iloc[0])
+
+    @fastcache.clru_cache()
+    def load_strategy_performance(self, strategy):
+        analyzer = self.get_analyzer(strategy)
+        return str(analyzer.total_performance)
+
+    @fastcache.clru_cache()
+    def load_strategy_rel_yr_performance(self, strategy):
+        analyzer = self.get_analyzer(strategy)
+        return str(analyzer.rel_yearly_performance)
 
     @fastcache.clru_cache()
     def load_stock_info(self, date):

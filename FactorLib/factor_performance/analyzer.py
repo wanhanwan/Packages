@@ -70,7 +70,11 @@ class Analyzer(object):
 
     @property
     def rel_total_return(self):
-        return stats.cum_returns_final(self.portfolio_return) - stats.cum_returns_final(self.benchmark_return)
+        return self.abs_total_return - self.total_benchmark_return
+
+    @property
+    def total_benchmark_return(self):
+        return stats.cum_returns_final(self.benchmark_return)
 
     @property
     def abs_annual_volatility(self):
@@ -161,6 +165,21 @@ class Analyzer(object):
             }
         df = resample_func(self.active_return, convert_to='1y', func=func_dict)
         df.insert(2, 'active_return', df['cum_return']-df['benchmark_return'])
+        return df
+
+    @property
+    def total_performance(self):
+        """策略全局表现"""
+        win_rate_func = lambda x, y: stats.win_rate(x, factor_returns=0, period=y)
+        df = pd.DataFrame([[self.abs_total_return, self.total_benchmark_return, self.rel_total_return],
+                           [self.abs_maxdrawdown, stats.max_drawdown(self.benchmark_return), self.rel_maxdrawdown],
+                           [self.abs_annual_volatility, stats.annual_volatility(self.benchmark_return), self.rel_annual_volatility],
+                           [self.abs_annual_return, stats.annual_return(self.benchmark_return), self.rel_annual_return],
+                           [self.abs_sharp_ratio, stats.sharpe_ratio(self.benchmark_return, simple_interest=True), self.rel_sharp_ratio],
+                           [win_rate_func(self.portfolio_return, 'monthly'), win_rate_func(self.benchmark_return, 'monthly'),
+                            win_rate_func(self.active_return, 'monthly')]],
+                          columns=['portfolio', 'benchmark', 'hedge'],
+                          index=['total_return', 'maxdd', 'volatility', 'annual_return', 'sharp', 'win_rate'])
         return df
 
     def range_pct(self, start, end, rel=True):
