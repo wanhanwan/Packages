@@ -411,6 +411,31 @@ class RiskDataSource(object):
         return matrixes
 
     @DateRange2Dates
+    def load_xy_riskmatrix(self, start_date=None, end_date=None, dates=None, raw=False):
+        """
+        加载兴业金工风险模型风险矩阵
+        风险矩阵是月频的总风险
+
+        Return:
+        =======
+        riskmatrix: dict
+            dict(key:date, value:DataFrame(index:[IDs], columns:[IDs])
+        """
+        dates_str = [x.strftime("%Y%m%d") for x in dates]
+        matrixes = {}
+        dirpth = path.join(self._dspath, 'stockRisk')
+
+        for i, date in enumerate(dates_str):
+            csv_file = path.join(dirpth, '%s.csv' % date)
+            if path.isfile(csv_file):
+                matrix = pd.read_csv(csv_file, index_col=0, header=0).rename(
+                    index=lambda x: str(x).zfill(6), columns=lambda x: str(x).zfill(6))
+                matrixes[dates[i]] = matrix
+            else:
+                warn("%s 风险矩阵不存在！" % date)
+        return matrixes
+
+    @DateRange2Dates
     def load_specific_riskmatrix(self, start_date=None, end_date=None, dates=None, raw=False):
         """
         加载特质风险矩阵
