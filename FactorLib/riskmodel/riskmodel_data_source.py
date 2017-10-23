@@ -8,7 +8,7 @@ from ..data_source.trade_calendar import trade_calendar
 from ..data_source.base_data_source_h5 import H5DB
 from ..utils.datetime_func import DateRange2Dates
 from ..utils.disk_persist_provider import DiskPersistProvider
-from ..utils.tool_funcs import ensure_dir_exists
+from ..utils.tool_funcs import ensure_dir_exists, drop_patch
 from os import path
 from warnings import warn
 import pandas as pd
@@ -268,6 +268,9 @@ class RiskDataSource(object):
     def check_dir_exists(self, dir_name):
         return path.isdir(path.join(self._dspath, dir_name))
 
+    def list_files(self, dir_name, ignores=[]):
+        return [drop_patch(x) for x in os.listdir(self._dspath+'/%s'%dir_name) if x not in ignores]
+
     @DateRange2Dates
     def load_factors(self, factor_names, ids=None, start_date=None, end_date=None, dates=None):
         """
@@ -285,6 +288,7 @@ class RiskDataSource(object):
             factor_names = [x.replace(".h5", "") for x in os.listdir(self._dspath+'/factorData')]
         if factor_names == 'STYLE':
             factor_names = [x.replace(".h5", "") for x in os.listdir(self._dspath+'/factorData') if not x.startswith('Indu_')]
+            factor_names = [x for x in factor_names if x not in ['Estu']]
         data_dict = {'/factorData/': factor_names}
         data = self.h5_db.load_factors(data_dict, dates=dates, ids=ids).rename(columns=lambda x: x[5:] if x.startswith("Indu_") else x)
         return data
