@@ -183,6 +183,7 @@ def DateRange2Dates(func):
         dates = kwargs.get('dates')
         d = tc.get_trade_days(start, end, retstr=None)
         if dates is not None:
+            dates = pd.DatetimeIndex(dates)
             dates = list(set(dates).intersection(set(d)))
             dates.sort()
         else:
