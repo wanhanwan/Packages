@@ -37,6 +37,7 @@ tab1 = Panel(child=column(controls, table), title='SUMMARY')
 
 
 # Tab Two
+# --------PLOT NAV------------------
 @clru_cache()
 def get_data(s):
     return strategy_data_provider.load_return(s)
@@ -55,11 +56,14 @@ ts2.legend.location = 'top_left'
 strategy_select = Select(title='strategy', value=strategy_data_provider.all_strategies[0],
                          options=strategy_data_provider.all_strategies)
 stats = PreText(text='', width=500)
+performance_stats = PreText(text='', width=500)
+yr_performance_stats = PreText(text='', width=500)
 
 
 def update_stats():
     stats.text = strategy_data_provider.load_info(strategy_select.value)
-
+    performance_stats.text = strategy_data_provider.load_strategy_performance(strategy_select.value)
+    yr_performance_stats.text = strategy_data_provider.load_strategy_rel_yr_performance(strategy_select.value)
 
 def update_data():
     new_data = get_data(strategy_select.value)
@@ -73,7 +77,8 @@ def strategy_change(attr, old, new):
 strategy_select.on_change('value', strategy_change)
 
 widgets = row(strategy_select, stats)
-layout = column(widgets, ts1, ts2)
+stats_widgets = column(performance_stats, yr_performance_stats)
+layout = row(column(widgets, ts1, ts2), stats_widgets)
 tab2 = Panel(child=layout, title='PLOT NAV')
 update_data()
 update_stats()
