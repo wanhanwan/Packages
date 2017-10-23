@@ -49,8 +49,10 @@ class RiskExposureAnalyzer(object):
         从csv文件中导入股票持仓，返回类实例 \n
         csv文件的格式：日期  代码(wind格式)  权重
         """
-        stocks = pd.read_csv(csv_path, header=0, index_col=None, date_parser='date', converters={'IDs': lambda x: x[:6]})
-        stocks = stocks.set_index(['date', 'Weight'])
+        with open(csv_path) as f:
+            stocks = pd.read_csv(f, header=0, index_col=None, parse_dates=['date'],
+                                 converters={'IDs': lambda x: x[:6]})
+        stocks = stocks.set_index(['date', 'IDs'])
         return cls(stocks=stocks, **kwargs)
 
     def _load_data(self, dates):
@@ -76,10 +78,10 @@ class RiskExposureAnalyzer(object):
             if self.risk_factors is not None:
                 new_risk_data = data_source.h5DB.load_factors(self.risk_factors, dates=new_dates)
             for d in new_dates:
-                self.barra_data[d] = new_barra_data.loc[[d]]
-                self.industry_data[d] = new_industry_data.loc[[d]]
+                self.barra_data[d] = new_barra_data.loc[[pd.to_datetime(d)]]
+                self.industry_data[d] = new_industry_data.loc[[pd.to_datetime(d)]]
                 if self.risk_factors is not None:
-                    self.risk_factors_data[d] = new_risk_data.loc[[d]]
+                    self.risk_factors_data[d] = new_risk_data.loc[[pd.to_datetime(d)]]
         barra_data = pd.concat([old_barra_data, new_barra_data]).sort_index()
         industry_data = pd.concat([old_industry_data, new_industry_data]).sort_index()
         if self.risk_factors is not None:
@@ -103,14 +105,14 @@ class RiskExposureAnalyzer(object):
             weight_bchmrk = data_source.sector.get_index_weight(ids=self.benchmark, dates=dates)
             for d in dates:
                 idata, iweight = barra.loc[d].align(weight_bchmrk.loc[d], join='right', axis=0)
-                barra_b.loc[d] = idata.mul(iweight.iloc[:, 0]).sum()
+                barra_b.loc[d] = idata.mul(iweight.iloc[:, 0], axis='index').sum()
 
                 iindu, iweight = indus.loc[d].align(weight_bchmrk.loc[d], join='right', axis=0)
-                indus_b.loc[d] = iindu.mul(iweight.iloc[:, 0]).sum()
+                indus_b.loc[d] = iindu.mul(iweight.iloc[:, 0], axis='index').sum()
 
                 if risk_factor is not None:
                     irisk, iweight = indus.loc[d].align(weight_bchmrk.loc[d], join='right', axis=0)
-                    riskfactor_b.loc[d] = irisk.mul(iweight.iloc[:, 0]).sum()
+                    riskfactor_b.loc[d] = irisk.mul(iweight.iloc[:, 0], axis='index').sum()
         return barra_b, indus_b, riskfactor_b
 
     def cal_risk_of_portfolio(self, dates):
@@ -125,15 +127,15 @@ class RiskExposureAnalyzer(object):
         else:
             riskfactor_p = None
         for d in dates:
-            idata, iweight = barra.loc[d].align(self.stock_positions.loc[d], join='right', axis=0)
-            barra_p.loc[d] = idata.mul(iweight.iloc[:, 0]).sum()
+            idata, iweight = barra.loc[d].align(self.stock_positions.loc[pd.to_datetime(d)], join='right', axis=0)
+            barra_p.loc[d] = idata.mul(iweight.iloc[:, 0], axis='index').sum()
 
-            iindu, iweight = indus.loc[d].align(self.stock_positions.loc[d], join='right', axis=0)
-            indus_p.loc[d] = iindu.mul(iweight.iloc[:, 0]).sum()
+            iindu, iweight = indus.loc[d].align(self.stock_positions.loc[pd.to_datetime(d)], join='right', axis=0)
+            indus_p.loc[d] = iindu.mul(iweight.iloc[:, 0], axis='index').sum()
 
             if risk_factor is not None:
-                irisk, iweight = indus.loc[d].align(self.stock_positions.loc[d], join='right', axis=0)
-                riskfactor_p.loc[d] = irisk.mul(iweight.iloc[:, 0]).sum()
+                irisk, iweight = indus.loc[d].align(self.stock_positions.loc[pd.to_datetime(d)], join='right', axis=0)
+                riskfactor_p.loc[d] = irisk.mul(iweight.iloc[:, 0], axis='index').sum()
         return barra_p, indus_p, riskfactor_p
 
     @clru_cache()
@@ -146,7 +148,17 @@ class RiskExposureAnalyzer(object):
 
     def cal_multidates_expo(self, dates):
         """
-         计算多期风险暴露
+        计算多期风险暴露。\n
+
+        Returns:
+        ========
+        因子暴露数据结构：
+        barra_expo: DataFrame
+            DataFrame(index:[date style_name], columns:[portfolio benchmark])
+        indus_expo: DataFrame
+            DataFrame(index:[date industry_name], columns:[portfolio benchmark])
+        risk_expo: DataFrame
+            DataFrame(index:[date  riskfactor_name], columns:[portfolio benchmark])
         """
         risk_b = self._cal_risk_of_bchmrk(dates)
         risk_p = self.cal_risk_of_portfolio(dates)
