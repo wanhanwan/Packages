@@ -4,18 +4,17 @@ import numpy as np
 import statsmodels.api as sm
 from statsmodels.sandbox.rls import RLS
 from statsmodels.stats.outliers_influence import variance_inflation_factor
-from ..utils.tool_funcs import searchNameInStrList
-from .riskmodel_data_source import RiskModelDataSourceOnH5, RiskDataSource
-from ..data_source.base_data_source_h5 import h5, tc
+from .riskmodel_data_source import RiskDataSource
+from ..data_source.base_data_source_h5 import h5, tc, sec
 from ..data_source.converter import IndustryConverter
 from ..utils.datetime_func import DateRange2Dates
-from ..data_source.tseries import date_shift, move_dtindex
+from ..data_source.tseries import move_dtindex
 from warnings import warn
 
 
-class BarraModel(object):
+class BarraFactorReturn(object):
     """Barra风险模型"""
-    def __init__(self, name, model_path):
+    def __init__(self, name):
         self.name = name
         self.riskdb = RiskDataSource(self.name)
         self._init_results()
@@ -25,9 +24,10 @@ class BarraModel(object):
         """初始化参数"""
         args = dict()
         args['行业因子'] = 'DEFAULT'
+        args['忽略行业'] = []
         args['回归权重因子'] = 'float_mkt_value'
         args['风格因子'] = 'DEFAULT'
-        args['忽略行业'] = []
+        args['忽略风格'] = []
         args['开始时间'] = '20100101'
         args['结束时间'] = pd.datetime.today().strftime('%Y%m%d')
         self.args = args
@@ -53,10 +53,11 @@ class BarraModel(object):
         风格因子
         估计时间区间
         """
-        self.args['所有时间'] = tc.get_trade_days(self.args['开始时间'], self.args['结束时间'])
-        estu = self.riskdb.load_factors(['Estu'], dates=self.args['所有时间'])
+        self.args['所有日期'] = tc.get_trade_days(self.args['开始时间'], self.args['结束时间'])
+        estu = self.riskdb.load_factors(['Estu'], dates=self.args['所有日期'])
         self.all_ids = estu.index.get_level_values(1).unique().tolist()
         self.estu = estu[estu['Estu'] == 1]
+        self.estu_fw1d = move_dtindex(self.estu, 1, '1d')
 
         if self.args['行业因子'] == 'DEFAULT':
             all_industries = [x.replace('.h5', '') for x in self.riskdb.list_files('factorData') if x.startswith('Indu_')]
@@ -64,80 +65,39 @@ class BarraModel(object):
         else:
             all_industries = IndustryConverter.all_values(self.args['行业因子'])
             self.args['行业因子'] = (self.args['行业因子'], [list(set(all_industries).difference(set(self.args['忽略行业'])))])
+        if self.args['风格因子'] == 'DEFAULT':
+            all_factors = [x.replace('.h5', '') for x in self.riskdb.list_files('factorData', ['Estu.h5']) if not x.startswith('Indu_')]
+            self.args['风格因子'] = [x for x in all_factors if x not in self.args['忽略风格']] + ['Market']
 
-
-    def prepareFactorReturnResults(self, dates):
-        all_ids = self.data_source.all_ids
-        self.factor_return = pd.DataFrame(index=dates, columns=self.all_factors)
-        self.tvalue = pd.DataFrame(index=dates, columns=self.all_factors)
+    def prepareFactorReturnResults(self):
+        """初始化回归结果"""
+        all_ids = self.all_ids
+        dates = self.args['所有日期']
+        self.factor_return = pd.DataFrame(index=dates, columns=self.args['风格因子']+self.args['行业因子'][1])
+        self.tvalue = pd.DataFrame(index=dates, columns=self.args['风格因子']+self.args['行业因子'][1])
         self.resid_return = pd.DataFrame(index=dates, columns=all_ids)
         self.rsquared = pd.Series(index=dates, name='rsquared')
         self.adjust_rsquared = pd.Series(index=dates, name='adjust_rsquared')
         self.fvalue = pd.Series(index=dates, name='fvalue')
-        self.vifvalue = pd.DataFrame(index=dates,columns=self.genFactorReturnArgs['风格因子'])
+        self.vifvalue = pd.DataFrame(index=dates,columns=self.args['风格因子'])
 
-    def setGenFactorReturnArgs(self, attr, value):
+    def set_args(self, attr, value):
         """设置因子收益率生成参数"""
-        if attr in self.genFactorReturnArgs:
-            self.genFactorReturnArgs[attr] = value
-
-    @DateRange2Dates
-    def setDimension(self, start_date=None, end_date=None, dates=None):
-        """设置股票维度和时间维度"""
-        self.estu = self.data_source.update_estu(dates)
-        # 由于在截面回归时，因子数据需要滞后一天，所以维度需要滞后
-        self.estu_fw1d = move_dtindex(self.estu, 1, '1d')
-        self.data_source.set_dimension(self.estu)
-
-    def setStyleFactors(self, factors):
-        """设置风格因子"""
-        init_style_factors = self.genFactorReturnArgs['风格因子']
-        self.genFactorReturnArgs['风格因子'] = [x for x in factors if x in init_style_factors]
-        self.all_factors = ['Market'] +  self.genFactorReturnArgs['风格因子'] + self.all_industries
-
-    def setIgnoredIndusries(self, industries):
-        """设置忽略行业"""
-        self.genFactorReturnArgs['忽略行业'] = []
-        for industry in industries:
-            if industry in self.all_industries:
-                self.genFactorReturnArgs['忽略行业'].append(industry)
-                self.all_industries.remove(industry)
-        self.all_factors = ['Market'] + self.genFactorReturnArgs['风格因子'] + self.all_industries
-
-    def setRegressWeightFactor(self, factor):
-        """设置回归权重因子"""
-        if factor in self.data_source.factor_names:
-            self.genFactorReturnArgs['回归权重因子'] = factor
-
-    def setIndustryFactor(self, factor):
-        """设置行业因子"""
-        if factor in self.data_source.factor_names:
-            self.genFactorReturnArgs['行业因子'] = factor
-            self.all_industries = self.data_source.get_factor_unique_data(factor)
-            if np.nan in self.all_industries:
-                self.all_industries.remove(np.nan)
-            self.genFactorReturnArgs['忽略行业'] = []
-            self.all_factors = ['Market'] + self.genFactorReturnArgs['风格因子'] + self.all_industries
-
-    def setStrucStdFactor(self, factors):
-        """
-        设置结构化风险模型回归因子
-        :param factor: list-like
-        :return:
-        """
-        self.strucstd_factors = [x for x in factors if x in self.genFactorReturnArgs['风格因子']]
+        if attr in self.args:
+            self.args[attr] = value
+        self.refresh_args()
 
     def getStyleFactorData(self, ids=None, start_date=None, end_date=None, dates=None, idx=None):
         """获得风格因子数据"""
         if idx is not None:
             start_date = None
             end_date = None
-            data = self.data_source.get_data(self.genFactorReturnArgs['风格因子'], start_date=start_date,
-                                             end_date=end_date, dates=dates, ids=ids, idx=idx)
+            data = self.riskdb.load_factors(factor_names=self.args['风格因子'], start_date=start_date,
+                                            end_date=end_date, dates=dates, ids=ids, idx=idx)
             data = data.reindex(idx)
         else:
-            data = self.data_source.get_data(self.genFactorReturnArgs['风格因子'], start_date=start_date,
-                                             end_date=end_date, ids=ids, dates=dates)
+            data = self.riskdb.load_factors(factor_names=self.args['风格因子'], start_date=start_date,
+                                            end_date=end_date, ids=ids, dates=dates)
         if np.any(pd.isnull(data)):
             warn("风格因子数据存在缺失值，请检查！")
             data = data.dropna()
@@ -145,29 +105,32 @@ class BarraModel(object):
 
     def getIndustryDummy(self, ids=None, start_date=None, end_date=None, dates=None, idx=None):
         """获得行业因子哑变量"""
-        all_industries = [x for x in self.all_industries if x not in self.genFactorReturnArgs['忽略行业']]
-        all_industries_codes = IndustryConverter.name2id(self.genFactorReturnArgs['行业因子'], all_industries)
-
+        all_industries = self.args['行业因子'][1]
+        industry = self.args['行业因子'][0]
         if idx is not None:
             start_date = None
             end_date = None
-            data = self.data_source.get_factor_data(self.genFactorReturnArgs['行业因子'], start_date=start_date,
-                                                    end_date=end_date, dates=dates, ids=ids, idx=idx)
-            data = data.reindex(idx)
+        if industry == 'DEFAULT':
+            data = self.riskdb.load_industry(ids=ids, start_date=start_date, end_date=end_date, dates=dates)
         else:
-            data = self.data_source.get_factor_data(self.genFactorReturnArgs['行业因子'], start_date=start_date,
-                                                    end_date=end_date, ids=ids, dates=dates)
-        data = data[data.iloc[:, 0].isin(all_industries_codes)]
+            data = sec.get_industry_dummy(ids=ids, industry=industry, dates=dates, start_date=start_date,
+                                          end_date=end_date, drop_first=False)
+        data = data.loc[:, ]
+        if not data.any(axis=1).all():
+            data['other_indu'] = 0
+            ind = ~ data.any(axis=1)
+            data.loc[ind, 'other'] = 1
+        if idx is not None:
+           data = data.reindex(idx.index)
         if np.any(data.isnull()):
             warn("行业因子存在缺失数据，请检查！")
             data = data.dropna()
         data = data.astype('int32')
-        data[self.genFactorReturnArgs['行业因子']] = data[self.genFactorReturnArgs['行业因子']].astype('category')
-        dummy = pd.get_dummies(data)
-        return dummy
+        return data
 
     @DateRange2Dates
     def getStockReturn(self, ids=None, start_date=None, end_date=None, dates=None, idx=None):
+        """个股日收益率"""
         if idx is not None:
             dates = idx.index.get_level_values(0).unique().tolist()
             ids = idx.index.get_level_values(1).unique().tolist()
@@ -188,8 +151,8 @@ class BarraModel(object):
 
     def getResgressWeight(self, ids=None, start_date=None, end_date=None, dates=None, percentile=0.95, idx=None):
         """计算回归权重"""
-        weight = self.data_source.get_factor_data(self.genFactorReturnArgs['回归权重因子'], start_date=start_date,
-                                                  end_date=end_date, ids=ids, dates=dates, idx=idx)
+        weight = h5.load_factor(self.args['回归权重因子'], '/stocks/', start_date=start_date,
+                                end_date=end_date, ids=ids, dates=dates, idx=idx)
         weight = np.sqrt(weight).astype('float32')
         weight_sum_perdate = weight.groupby(level=0).sum()
         weight = weight / weight_sum_perdate
@@ -200,8 +163,7 @@ class BarraModel(object):
 
     def getIndustryMarketValue(self, industry_dummy):
         """计算行业市值"""
-        float_mkt_mv = self.data_source.get_factor_data(
-            self.genFactorReturnArgs['回归权重因子'], idx=self.estu_fw1d)
+        float_mkt_mv = h5.load_factor('float_mkt_mv', '/stocks/', idx=self.estu_fw1d)
         industry_mv = pd.DataFrame(industry_dummy.values * float_mkt_mv.values, index=industry_dummy.index, columns=industry_dummy.columns)
         industry_mv = industry_mv.sum(level=0).stack()
         return industry_mv
@@ -226,7 +188,7 @@ class BarraModel(object):
             sample = factor_data.loc[industry_dummy[industry] == 1, :]
             if sample.empty:
                 continue
-            iweight = weight.loc[industry_dummy[industry]==1, :]
+            iweight = weight.loc[industry_dummy[industry] == 1, :]
             itotal_weight = iweight.sum(level=0)
             nsample = itotal_weight ** 2 / (iweight ** 2).sum(level=0)
             nsample_bigger_than_5 = nsample[(nsample.iloc[:, 0] < 5) & (nsample.iloc[:, 0] > 0)]
@@ -301,11 +263,14 @@ class BarraModel(object):
             vifs.append(variance_inflation_factor(X, i))
         return np.array(vifs)
 
-    @DateRange2Dates
-    def getFactorReturn(self, start_date=None, end_date=None, dates=None):
-        factor_data = self.getStyleFactorData(dates=dates)
-        industry_dummy = self.getIndustryDummy(dates=dates)
-        industry_cap = self.getIndustryMarketValue(industry_dummy)
+    def getFactorReturn(self):
+        """计算因子收益率
+        在截面上股票的日收益率与股票因子做最小二乘回归。
+        """
+        dates = self.args['所有日期']
+        factor_data = self.getStyleFactorData(dates=dates)          # 风格因子数据
+        industry_dummy = self.getIndustryDummy(dates=dates)         # 行业哑变量
+        industry_cap = self.getIndustryMarketValue(industry_dummy)  # 行业的总市值
         stock_return = self.getStockReturn(idx=self.estu_fw1d)
         weight = self.getResgressWeight(idx=self.estu_fw1d)
         market_return = self.getMarketReturn(stock_return, weight)
@@ -319,7 +284,7 @@ class BarraModel(object):
                                                                         market_return_1dayfwd)
         nindustry = industry_dummy.shape[1]
         nfactor = factor_data.shape[1] + 1
-        self.prepareFactorReturnResults(dates)
+        self.prepareFactorReturnResults()
         for idate in dates:
             ifactor_data = pd.concat([factor_data.loc[idate], industry_dummy.loc[idate]], axis=1).sort_index()
             if np.any(ifactor_data.isnull()):

@@ -5,7 +5,7 @@
 """
 from multiprocessing import Lock
 from ..data_source.trade_calendar import trade_calendar
-from ..data_source.base_data_source_h5 import H5DB
+from ..data_source.base_data_source_h5 import H5DB, h5
 from ..utils.datetime_func import DateRange2Dates
 from ..utils.disk_persist_provider import DiskPersistProvider
 from ..utils.tool_funcs import ensure_dir_exists, drop_patch
@@ -244,6 +244,7 @@ class RiskDataSource(object):
     """
     root_dir = default_riskds_root
     h5_db = H5DB(data_path=default_riskds_root)
+    base_db = h5
 
     def __init__(self, name):
         self._name = name
