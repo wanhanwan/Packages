@@ -53,7 +53,7 @@ class BarraFactorReturn(object):
         风格因子
         估计时间区间
         """
-        self.args['所有日期'] = tc.get_trade_days(self.args['开始时间'], self.args['结束时间'])
+        self.args['所有日期'] = tc.get_trade_days(self.args['开始时间'], self.args['结束时间'], retstr=None)
         estu = self.riskdb.load_factors(['Estu'], dates=self.args['所有日期'])
         self.all_ids = estu.index.get_level_values(1).unique().tolist()
         self.estu = estu[estu['Estu'] == 1]
@@ -67,7 +67,7 @@ class BarraFactorReturn(object):
             self.args['行业因子'] = (self.args['行业因子'], [list(set(all_industries).difference(set(self.args['忽略行业'])))])
         if self.args['风格因子'] == 'DEFAULT':
             all_factors = [x.replace('.h5', '') for x in self.riskdb.list_files('factorData', ['Estu.h5']) if not x.startswith('Indu_')]
-            self.args['风格因子'] = [x for x in all_factors if x not in self.args['忽略风格']] + ['Market']
+            self.args['风格因子'] = ['Market'] + [x for x in all_factors if x not in self.args['忽略风格']]
 
     def prepareFactorReturnResults(self):
         """初始化回归结果"""
@@ -79,24 +79,26 @@ class BarraFactorReturn(object):
         self.rsquared = pd.Series(index=dates, name='rsquared')
         self.adjust_rsquared = pd.Series(index=dates, name='adjust_rsquared')
         self.fvalue = pd.Series(index=dates, name='fvalue')
-        self.vifvalue = pd.DataFrame(index=dates,columns=self.args['风格因子'])
+        self.vifvalue = pd.DataFrame(index=dates,columns=[x for x in self.args['风格因子'] if x != 'Market'])
 
-    def set_args(self, attr, value):
+    def set_args(self, attr, value, commit=False):
         """设置因子收益率生成参数"""
         if attr in self.args:
             self.args[attr] = value
-        self.refresh_args()
+        if commit:
+            self.refresh_args()
 
     def getStyleFactorData(self, ids=None, start_date=None, end_date=None, dates=None, idx=None):
         """获得风格因子数据"""
+        style_factors = [x for x in self.args['风格因子'] if x != 'Market']
         if idx is not None:
             start_date = None
             end_date = None
-            data = self.riskdb.load_factors(factor_names=self.args['风格因子'], start_date=start_date,
-                                            end_date=end_date, dates=dates, ids=ids, idx=idx)
-            data = data.reindex(idx)
+            data = self.riskdb.load_factors(factor_names=style_factors, start_date=start_date,
+                                            end_date=end_date, dates=dates, ids=ids)
+            data = data.reindex(idx.index)
         else:
-            data = self.riskdb.load_factors(factor_names=self.args['风格因子'], start_date=start_date,
+            data = self.riskdb.load_factors(factor_names=style_factors, start_date=start_date,
                                             end_date=end_date, ids=ids, dates=dates)
         if np.any(pd.isnull(data)):
             warn("风格因子数据存在缺失值，请检查！")
@@ -115,7 +117,7 @@ class BarraFactorReturn(object):
         else:
             data = sec.get_industry_dummy(ids=ids, industry=industry, dates=dates, start_date=start_date,
                                           end_date=end_date, drop_first=False)
-        data = data.loc[:, ]
+        data = data.loc[:, all_industries]
         if not data.any(axis=1).all():
             data['other_indu'] = 0
             ind = ~ data.any(axis=1)
@@ -149,10 +151,10 @@ class BarraFactorReturn(object):
         industry_factor = self.getIndustryDummy(idx=portfolio.index)
         return pd.concat([style_factor, industry_factor], axis=1)
 
+    @DateRange2Dates
     def getResgressWeight(self, ids=None, start_date=None, end_date=None, dates=None, percentile=0.95, idx=None):
-        """计算回归权重"""
-        weight = h5.load_factor(self.args['回归权重因子'], '/stocks/', start_date=start_date,
-                                end_date=end_date, ids=ids, dates=dates, idx=idx)
+        """计算回归权重, 流通市值的平方根"""
+        weight = h5.load_factor(self.args['回归权重因子'], '/stocks/', dates=dates, idx=idx.index)
         weight = np.sqrt(weight).astype('float32')
         weight_sum_perdate = weight.groupby(level=0).sum()
         weight = weight / weight_sum_perdate
@@ -163,7 +165,7 @@ class BarraFactorReturn(object):
 
     def getIndustryMarketValue(self, industry_dummy):
         """计算行业市值"""
-        float_mkt_mv = h5.load_factor('float_mkt_mv', '/stocks/', idx=self.estu_fw1d)
+        float_mkt_mv = h5.load_factor('float_mkt_value', '/stocks/', idx=industry_dummy.index)
         industry_mv = pd.DataFrame(industry_dummy.values * float_mkt_mv.values, index=industry_dummy.index, columns=industry_dummy.columns)
         industry_mv = industry_mv.sum(level=0).stack()
         return industry_mv
@@ -268,8 +270,8 @@ class BarraFactorReturn(object):
         在截面上股票的日收益率与股票因子做最小二乘回归。
         """
         dates = self.args['所有日期']
-        factor_data = self.getStyleFactorData(dates=dates)          # 风格因子数据
-        industry_dummy = self.getIndustryDummy(dates=dates)         # 行业哑变量
+        factor_data = self.getStyleFactorData(dates=dates, idx=self.estu)       # 风格因子数据
+        industry_dummy = self.getIndustryDummy(dates=dates, idx=self.estu)      # 行业哑变量
         industry_cap = self.getIndustryMarketValue(industry_dummy)  # 行业的总市值
         stock_return = self.getStockReturn(idx=self.estu_fw1d)
         weight = self.getResgressWeight(idx=self.estu_fw1d)
@@ -290,13 +292,17 @@ class BarraFactorReturn(object):
             if np.any(ifactor_data.isnull()):
                 warn("因子数据存在缺失值，请检查！")
                 ifactor_data = ifactor_data.dropna()
-            ids = [x for x in ifactor_data.index.get_level_values(0) if x[0] != 'P']
             istock_return = stock_return.loc[idate].loc[ifactor_data.index]
             iweight = weight.loc[idate].loc[ifactor_data.index]
+            notnan_inds = np.squeeze(pd.notnull(iweight).values & pd.notnull(istock_return).values)
+            ifactor_data = ifactor_data.loc[notnan_inds, :]
+            istock_return = istock_return.loc[notnan_inds, :]
+            iweight = iweight.loc[notnan_inds, :]
+            ids = [x for x in ifactor_data.index.get_level_values(0) if x[0] != 'P']
             isqrt_weight = np.sqrt(iweight)
             iindustry_cap = industry_cap.loc[idate]
-            if not (len(ifactor_data)==len(istock_return)==len(iweight)):
-                raise KeyError("回归数据在%s索引不一致"%idate.strftime("%Y%m%d"))
+            if not (len(ifactor_data) == len(istock_return) == len(iweight)):
+                raise KeyError("回归数据在%s索引(维度)不一致"%idate.strftime("%Y%m%d"))
             result, ind, vif = self.regress(ifactor_data, istock_return, iweight, iindustry_cap, nindustry)
 
             # 存储数据
@@ -307,7 +313,7 @@ class BarraFactorReturn(object):
                 industry_return[ind] = params[nfactor:]
                 params = np.hstack((params[:nfactor], industry_return))
             self.factor_return.loc[idate] = params
-            resid = result.resid / np.squeeze(isqrt_weight)
+            resid = result.resid / np.squeeze(isqrt_weight).values
             self.resid_return.loc[idate, ids] = resid[:len(ids)]
             ind = np.hstack((np.ones(nfactor), ind)).astype('bool')
             self.tvalue.loc[idate, ind] = result.tvalues
@@ -322,7 +328,7 @@ class BarraFactorReturn(object):
                 self.adjust_rsquared.loc[idate] = 0
         return 1
 
-    def save_regress_results(self):
+    def save_results(self):
         self.riskdb.save_data(tvalue=self.tvalue, fvalue=self.fvalue, rsquared=self.rsquared,
                               adjust_rsquared=self.adjust_rsquared, vifs=self.vifvalue,
                               factor_return=self.factor_return, resid_return=self.resid_return,

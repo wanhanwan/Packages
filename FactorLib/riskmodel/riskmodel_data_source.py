@@ -251,7 +251,7 @@ class RiskDataSource(object):
         self._dspath = path.join(RiskDataSource.root_dir, self._name)
         self._h5_dir = '/%s/' % self._name
         self.h5_db = H5DB(data_path=self._dspath)
-        self.persist_helper = DiskPersistProvider(self._h5_dir)
+        self.persist_helper = DiskPersistProvider(self._dspath)
         ensure_dir_exists(self._dspath)
         self.initialize()
 
@@ -271,6 +271,11 @@ class RiskDataSource(object):
 
     def list_files(self, dir_name, ignores=[]):
         return [drop_patch(x) for x in os.listdir(self._dspath+'/%s'%dir_name) if x not in ignores]
+
+    @property
+    def max_date_of_factor(self):
+        factor_names = [x.replace(".h5", "") for x in os.listdir(self._dspath+'/factorData')]
+        return self.h5_db.get_date_range(factor_names[0], '/factorData/')[1]
 
     @DateRange2Dates
     def load_factors(self, factor_names, ids=None, start_date=None, end_date=None, dates=None):
@@ -323,11 +328,10 @@ class RiskDataSource(object):
         ret: DataFrame
             DataFrame(index:[date], columns:[factor_names])
         """
-        if not self.check_file_exists('factor_return.h5'):
+        if self.check_file_exists('%s/factor_return.h5' % self._name):
             ret = self.h5_db.load_factor('factor_return', self._h5_dir, dates=dates)
         else:
-            print(FileNotFoundError("因子收益率文件不存在！"))
-            return pd.DataFrame()
+            raise FileNotFoundError("因子收益率文件不存在！")
         return ret['factor_return'].unstack()
 
     @DateRange2Dates
@@ -342,7 +346,7 @@ class RiskDataSource(object):
         """
         if isinstance(factor_name, str):
             factor_name = [factor_name]
-        if not self.check_file_exists('factor_return.h5'):
+        if not self.check_file_exists('%s/factor_return.h5' % self._name):
             ret = self.h5_db.load_factor('factor_return', self._h5_dir, dates=dates, ids=factor_name)
         else:
             print(FileNotFoundError("因子收益率文件不存在！"))
@@ -358,7 +362,7 @@ class RiskDataSource(object):
         ret: DataFrame
             DataFrame(index:[date], columns:[factor_names])
         """
-        if not self.check_file_exists('factor_return.h5'):
+        if self.check_file_exists('%s/factor_return.h5' % self._name):
             ret = self.h5_db.load_factor('factor_return', self._h5_dir, dates=[date])
         else:
             raise FileNotFoundError("因子收益率文件不存在！")
@@ -378,7 +382,7 @@ class RiskDataSource(object):
         stats: DataFrame
             DataFrame(index:[date], columns:[stat_names])
         """
-        if not self.check_file_exists('regress_stats.h5'):
+        if self.check_file_exists('%s/regress_stats.h5' % self._name):
             stats = self.h5_db.load_factor('regress_stats', self._h5_dir, dates=dates)
         else:
             raise FileNotFoundError("回归诊断文件不存在！")
@@ -482,7 +486,7 @@ class RiskDataSource(object):
         resid_factor: DataFrame
             DataFrame(index:[date, IDs], columns:[resid_return])
         """
-        if not self.check_file_exists('resid_return.h5'):
+        if self.check_file_exists('%s/resid_return.h5' % self._name):
             ret = self.h5_db.load_factor('resid_return', self._h5_dir, dates=dates, ids=ids)
         else:
             raise FileNotFoundError("因子收益率文件不存在！")
@@ -551,9 +555,9 @@ class RiskDataSource(object):
                 factor_return = kwargs['factor_return'].stack().to_frame('factor_return')
                 factor_return.index.names = ['date', 'IDs']
                 self.h5_db.save_factor(factor_return, self._h5_dir)
-        if 'resid_factor' in kwargs:
+        if 'resid_return' in kwargs:
             if not kwargs['resid_return'].empty:
-                resid_return = kwargs['resid_return'].stack().toframe('resid_return')
+                resid_return = kwargs['resid_return'].stack().to_frame('resid_return')
                 resid_return.index.names = ['date', 'IDs']
                 self.h5_db.save_factor(resid_return, self._h5_dir)
         if 'factor_riskmatrix' in kwargs:

@@ -8,6 +8,7 @@ from functools import partial
 from datetime import datetime
 from pandas.tseries.offsets import MonthBegin, QuarterBegin, YearBegin
 from ..factors import load_factor
+from ..riskmodel.attribution import RiskExposureAnalyzer
 
 
 class Analyzer(object):
@@ -17,6 +18,7 @@ class Analyzer(object):
         self.portfolio_return = self._return_of_portfolio
         self.benchmark_return = self._return_of_benchmark(benchmark_name)
         self.active_return = stats._adjust_returns(self.portfolio_return, self.benchmark_return)
+        self.benchmark_name = benchmark_name
 
     @property
     def _return_of_portfolio(self):
@@ -200,11 +202,22 @@ class Analyzer(object):
         except:
             return np.nan
 
-    def portfolio_weights(self, date):
-        weight = (self.table['stock_positions'].loc[date, 'market_value'] /
-                  self.table['stock_account'].loc[date, 'total_value']).to_frame('Weight')
-        weight['IDs'] = self.table['stock_positions'].loc[date, 'order_book_id'].str[:6]
+    def portfolio_weights(self, dates):
+        """组合成分股权重"""
+        dates = pd.DatetimeIndex(dates)
+        weight = (self.table['stock_positions'].loc[dates, 'market_value'] /
+                  self.table['stock_account'].loc[dates, 'total_value']).to_frame('Weight')
+        weight['IDs'] = self.table['stock_positions'].loc[dates, 'order_book_id'].str[:6]
+        weight.index.name = 'date'
         return weight.set_index('IDs', append=True)
+
+    def portfolio_risk_expo(self, data_src_name, dates):
+        dates = pd.DatetimeIndex(dates)
+        positions = self.portfolio_weights(dates)
+        data_src = RiskExposureAnalyzer.from_df(positions, barra_datasource=data_src_name,
+                                                benchmark=self.benchmark_name)
+        barra_expo, indus_expo, risk_expo = data_src.cal_multidates_expo(dates)
+        return barra_expo, indus_expo, risk_expo
 
     def returns_sheet(self, cur_day=None):
         if cur_day is None:
