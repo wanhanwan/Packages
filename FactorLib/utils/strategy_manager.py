@@ -3,7 +3,7 @@ from ..single_factor_test.config import parse_config
 from ..utils import AttrDict
 from datetime import datetime
 from ..data_source.base_data_source_h5 import tc, h5
-from ..utils.tool_funcs import windcode_to_tradecode, import_module
+from ..utils.tool_funcs import windcode_to_tradecode, import_module, tradecode_to_windcode
 from ..factor_performance.analyzer import Analyzer
 import pandas as pd
 import numpy as np
@@ -301,6 +301,35 @@ class StrategyManager(object):
             return_sheet = analyzer.returns_sheet(max_date)
             return_sheet.insert(0, '最新日期', max_date)
             return_sheet.to_csv("returns_sheet.csv", index=False, float_format='%.4f')
+        os.chdir(cwd)
+
+    # 策略当日模拟持仓(自定义总市值)
+    def history_mimic_position(self, date, total_value=100000000, strategy_name=None, strategy_id=None):
+        """
+        以当日的收盘价计算在给定总市值的情况下的目标持仓
+        """
+        if strategy_id is not None:
+            strategy_name = self.strategy_name(strategy_id)
+        analyzer = self.performance_analyser(strategy_name=strategy_name)
+        weight = analyzer.portfolio_weights([date])
+        all_ids = weight.index.get_level_values(1).tolist()
+        close = h5.load_factor('close', '/stocks/', dates=[date], ids=all_ids)
+        weight = weight.join(close)
+        vols = weight['Weight'] / weight['close'] * total_value // 100 * 100
+        vols = vols.to_frame('持仓数量').reset_index()[['IDs', '持仓数量']].rename(columns={'IDs': '证券代码'})
+        vols['证券代码'] = vols['证券代码'].apply(tradecode_to_windcode)
+        return vols
+
+
+    # 导出交易记录
+    def export_trade_records(self, start_date, end_date, strategy_name=None, strategy_id=None):
+        if strategy_id is not None:
+            strategy_name = self.strategy_name(strategy_id)
+        cwd = os.getcwd()
+        os.chdir(os.path.join(self._strategy_path, strategy_name + '/backtest'))
+        analyzer = self.performance_analyser(strategy_name=strategy_name)
+        trades = analyzer.trade_records(start_date, end_date)
+        trades.to_excel('交易记录.xlsx', index=False)
         os.chdir(cwd)
 
     # back up

@@ -190,3 +190,69 @@ class RiskExposureAnalyzer(object):
             risk_expo = None
         return barra_expo, indus_expo, risk_expo
 
+
+class RiskModelAttribution(object):
+    """
+    风险模型的收益归因分析
+    已知组合的主动暴露(风格暴露和行业暴露)，把组合的收益率归因到因子上去
+    """
+    def __init__(self, ret_ptf, style_expo, industry_expo, bchmrk_name='000905', barra_ds='xy'):
+        self.ret_ptf = ret_ptf                                                # 组合日频收益率
+        self.style_of_ptf = style_expo['portfolio'].unstack()                 # 组合风格暴露
+        self.style_expo = style_expo['expo'].unstack()                        # 风格主动暴露
+        self.style_of_bch = style_expo['benchmark'].unstack()                 # 基准风格暴露
+
+        self.industry_of_ptf = industry_expo['portfolio'].unstack()           # 组合行业暴露
+        self.industry_of_bch = industry_expo['benchmark'].unstack()           # 基准行业暴露
+        self.industry_expo = industry_expo['expo'].unstack()                  # 行业主动暴露
+        self.bchmrk = bchmrk_name                                             # 业绩基准
+        self.barra_datasource = RiskDataSource(barra_ds)                      # Barra数据源
+        self._prepare_data()
+
+    def _prepare_data(self):
+        """
+        准备数据
+        """
+        self.expo = pd.concat([self.style_expo, self.industry_expo], axis=1)
+        # 日期
+        self.all_dates = self.expo.index.get_level_values(0).unique().tolist()
+
+        # 风险因子收益率
+        self.factor_ret = self.barra_datasource.load_factor_return(factor_name=list(self.expo.columns),
+                                                                   dates=self.all_dates)
+        # 基准日收益率
+        self.ret_bch = data_source.load_factor('daily_returns_%', '/indexprices/', dates=self.all_dates,
+                                               ids=[self.bchmrk])['daily_returns_%'] / 100
+        # 基准超额收益率
+        self.ret_active = self.ret_ptf - self.ret_bch
+
+    @property
+    def active_attributed_ret(self):
+        """
+        主动归因收益率
+        组合的主动暴露 * 因子日收益率
+        """
+        return self.expo * self.factor_ret
+
+    def range_attribute(self, start_date=None, end_date=None):
+        """
+        在某个时间范围内进行业绩归因
+        """
+        if start_date is None:
+            start_date = self.all_dates[0]
+        else:
+            start_date = pd.to_datetime(start_date)
+
+        if end_date is None:
+            end_date = self.all_dates[-1]
+        else:
+            end_date = pd.to_datetime(end_date)
+
+        attr_ret_active = self.active_attributed_ret.loc[start_date:end_date, :]
+        ptf_ret_active = self.ret_active.loc[start_date:end_date]
+        ptf_ret_active_final = (1.0 + ptf_ret_active).prod() - 1.0
+
+        attribution = ptf_ret_active_final - (-1.0 * attr_ret_active.sub(ptf_ret_active, axis='index')).prod()
+        specific = ptf_ret_active_final - attribution.sum()
+        attribution['specific'] = specific
+        return attribution
