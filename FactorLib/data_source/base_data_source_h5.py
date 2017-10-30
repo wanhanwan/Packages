@@ -403,7 +403,7 @@ class sector(object):
                            drop_first=True):
         """股票行业哑变量"""
         industry_info = self.get_stock_industry_info(None, industry, start_date, end_date, dates)
-        dummy = Generate_Dummy(industry_info, drop_first)
+        dummy = Generate_Dummy(industry_info.iloc[:, 0], drop_first)
         if ids is not None:
             if not isinstance(ids, list):
                 ids = [ids]

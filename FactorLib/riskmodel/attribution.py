@@ -154,12 +154,17 @@ class RiskExposureAnalyzer(object):
         ========
         因子暴露数据结构：
         barra_expo: DataFrame
-            DataFrame(index:[date style_name], columns:[portfolio benchmark])
+            DataFrame(index:[date style_name], columns:[portfolio benchmark expo])
         indus_expo: DataFrame
-            DataFrame(index:[date industry_name], columns:[portfolio benchmark])
+            DataFrame(index:[date industry_name], columns:[portfolio benchmark expo])
         risk_expo: DataFrame
-            DataFrame(index:[date  riskfactor_name], columns:[portfolio benchmark])
+            DataFrame(index:[date  riskfactor_name], columns:[portfolio benchmark expo])
         """
+        max_date = self.barra_ds.max_date_of_factor
+        dates = dates[dates <= max_date]
+        if len(dates) == 0:
+            return None, None, None
+
         risk_b = self._cal_risk_of_bchmrk(dates)
         risk_p = self.cal_risk_of_portfolio(dates)
 
@@ -184,3 +189,4 @@ class RiskExposureAnalyzer(object):
         else:
             risk_expo = None
         return barra_expo, indus_expo, risk_expo
+
