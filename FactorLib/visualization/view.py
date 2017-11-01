@@ -154,21 +154,32 @@ benchmark_select_tb4 = Select(title='benchmark', value=list(all_benchmarks)[0],
                               options=list(all_benchmarks))
 update_risk_expo_single_date()
 barra_names = list(barra_expo.to_df()['barra_style'])
+indu_names = indu_expo.data['industry']
+# 风格因子展示
 barra_fig = figure(x_range=barra_names, y_range=(-3, 3), plot_height=350, plot_width=900, title="Style Expo",
                    toolbar_location=None, tools="")
 barra_fig.vbar(x=dodge('barra_style', -0.1, barra_fig.x_range), top='portfolio', width=0.2, source=barra_expo,
                color="#e84d60", legend=value("portfolio"))
 barra_fig.vbar(x=dodge('barra_style', 0.1, barra_fig.x_range), top='benchmark', width=0.2, source=barra_expo,
                color="#718dbf", legend=value("benchmark"))
+# 行业因子展示
+indu_fig = figure(x_range=indu_names, y_range=(-0.5, 0.5), plot_height=600, title="Industry Expo", plot_width=1900,
+                  toolbar_location=None, tools="")
+indu_fig.vbar(x=dodge('industry', -0.1, indu_fig.x_range), top='portfolio', width=0.1, source=indu_expo, color="#e84d60",
+              legend=value('portfolio'))
+indu_fig.vbar(x=dodge('industry', 0.1, indu_fig.x_range), top='benchmark', width=0.1, source=indu_expo, color="#718dbf",
+              legend=value('benchmark'))
+indu_fig.xaxis.major_label_orientation = 'vertical'
+
 datepicker_tb4.on_change('value', lambda attr, old, new: update_risk_expo_single_date())
 strategy_select_tb4.on_change('value', lambda attr, old, new: update_risk_expo_single_date())
 benchmark_select_tb4.on_change('value', lambda attr, old, new: update_risk_expo_single_date())
 controls_tb4 = row(strategy_select_tb4, datepicker_tb4, benchmark_select_tb4)
-tab4 = Panel(child=column(controls_tb4, barra_fig), title="RISK EXPO")
+tab4 = Panel(child=column(controls_tb4, barra_fig, indu_fig), title="RISK EXPO")
 
 # set layout
 tabs = Tabs(tabs=[tab1, tab2, tab3, tab4])
-tabs = Tabs(tabs=[tab4])
+# tabs = Tabs(tabs=[tab4])
 curdoc().add_root(tabs)
 
 

@@ -16,8 +16,12 @@ Rule = namedtuple('Rule', ['mapping', 'convertfunc', 'name2id_func'])
 def read_industry_mapping():
     p = abspath(dirname(__file__)+'/..') + '/resource/level_2_industry_dict.xlsx'
     file = pd.ExcelFile(p)
-    sw_level_2 = dict(file.parse(sheetname='sw_level_2', header=0).values)
-    cs_level_2 = dict(file.parse(sheetname='cs_level_2', header=0).values)
+    if pd.__version__ >= '0.21.0':
+        sw_level_2 = dict(file.parse(sheet_name='sw_level_2', header=0).values)
+        cs_level_2 = dict(file.parse(sheet_name='cs_level_2', header=0).values)
+    else:
+        sw_level_2 = dict(file.parse(sheetname='sw_level_2', header=0).values)
+        cs_level_2 = dict(file.parse(sheetname='cs_level_2', header=0).values)
     file.close()
     return sw_level_2, cs_level_2
 
