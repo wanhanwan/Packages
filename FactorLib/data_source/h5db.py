@@ -46,6 +46,11 @@ class H5DB(object):
             pass
         self._update_info()
     
+    # 列出因子名称
+    def list_factors(self, factor_dir):
+        factors = self.data_dict[self.data_dict.path == factor_dir]['name']
+        return factors.tolist()
+    
     # 重命名因子
     def rename_factor(self, old_name, new_name, factor_dir):
         factor_path = self.abs_factor_path(factor_dir, old_name)

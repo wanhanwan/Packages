@@ -42,6 +42,14 @@ class SingleStrategyResultProvider(object):
         self.strategy_summary = None
         self.update_strategy()
 
+    @property
+    def strategy_max_date(self):
+        """策略的最近更新的日期"""
+        strategy = self.all_strategies[0]
+        analyzer = self.get_analyzer(strategy)
+        max_date = analyzer.portfolio_return.index.max()
+        return max_date
+
     def update_strategy(self):
         summary_file = os.path.join(self.root_path, 'summary.csv')
         summary_df = pd.read_csv(summary_file, converters={'benchmark': lambda x: str(x).zfill(6)}, encoding='GBK')
@@ -92,3 +100,12 @@ class SingleStrategyResultProvider(object):
         stock_return = self.load_stock_return(latest_trade_date).reset_index(level=0, drop=True).rename(
             columns={'daily_returns_%': 'daily_return'})
         return pd.concat([stock_weight, stock_info, stock_return], axis=1, join='inner')
+
+    @fastcache.clru_cache()
+    def load_risk_expo_single_date(self, strategy, date, ds_name='xy', bchrk_name=None):
+        """加载单期风险暴露"""
+        analyzer = self.get_analyzer(strategy)
+        barra, indu, risk = analyzer.portfolio_risk_expo(ds_name, [date], bchmrk_name=bchrk_name)
+        barra = barra.reset_index(level=0, drop=True).reset_index().to_dict(orient='list')
+        indu = indu.reset_index(level=0, drop=True).reset_index().to_dict(orient='list')
+        return barra, indu

@@ -346,7 +346,7 @@ class RiskDataSource(object):
         """
         if isinstance(factor_name, str):
             factor_name = [factor_name]
-        if not self.check_file_exists('%s/factor_return.h5' % self._name):
+        if self.check_file_exists('%s/factor_return.h5' % self._name):
             ret = self.h5_db.load_factor('factor_return', self._h5_dir, dates=dates, ids=factor_name)
         else:
             print(FileNotFoundError("因子收益率文件不存在！"))

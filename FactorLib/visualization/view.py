@@ -5,17 +5,24 @@ from bokeh.layouts import widgetbox, row, column
 from bokeh.models import ColumnDataSource
 from bokeh.plotting import figure
 from bokeh.models.widgets import DataTable, PreText, TableColumn, Select, NumberFormatter, Panel, Tabs, DatePicker
+from bokeh.transform import dodge
+from bokeh.core.properties import value
 from FactorLib.visualization.data_provider import StrategyPerformanceResultProvider, SingleStrategyResultProvider
 from fastcache import clru_cache
 from datetime import datetime, timedelta
 from FactorLib.data_source.trade_calendar import as_timestamp
+from FactorLib.riskmodel.riskmodel_data_source import RiskDataSource
+from FactorLib.data_source.update_data import index_weights
+from FactorLib.const import MARKET_INDEX_WINDCODE_REVERSE
 
 output_file("viwer.html")
 
 data_provider = StrategyPerformanceResultProvider(r"D:\data\strategy_performance")
 strategy_data_provider = SingleStrategyResultProvider(r"D:\data\factor_investment_strategies")
 
+
 # Tab One
+
 table_source = ColumnDataSource(data=data_provider.load_data(data_provider.max_date))
 columns = []
 for k, v in data_provider.load_data(data_provider.max_date).items():
@@ -27,6 +34,8 @@ for k, v in data_provider.load_data(data_provider.max_date).items():
 
 def update():
     table_source.data = data_provider.load_data(select.value)
+
+
 select = Select(title='Date:', value=data_provider.max_date, options=data_provider.all_dates)
 select.on_change('value', lambda attr, old, new: update())
 data_table = DataTable(source=table_source, columns=columns, width=1200, height=1000)
@@ -85,9 +94,11 @@ update_stats()
 
 
 # Tab Three
-def yesterday():
-    return datetime.now() - timedelta(days=1)
-datepicker = DatePicker(title='Date', min_date=datetime(2007, 1, 1), max_date=datetime.now(), value=yesterday().date())
+def max_date():
+    return as_timestamp(data_provider.max_date)
+
+
+datepicker = DatePicker(title='Date', min_date=datetime(2007, 1, 1), max_date=datetime.now(), value=max_date().date())
 strategy_select_tb3 = Select(title='strategy', value=strategy_data_provider.all_strategies[0],
                              options=strategy_data_provider.all_strategies)
 positions = ColumnDataSource(data=dict(
@@ -115,8 +126,49 @@ update_data_tb3()
 controls_tb3 = widgetbox(datepicker, strategy_select_tb3)
 tab3 = Panel(child=column(controls_tb3, widgetbox(table_tb3)), title='POSITIONS')
 
+
+# Tab Four 风险控制
+all_benchmarks = {MARKET_INDEX_WINDCODE_REVERSE[x]: x[:6] for x in index_weights}
+
+def max_date_tab4():
+    risk_ds = RiskDataSource('xy')
+    return as_timestamp(risk_ds.max_date_of_factor)
+
+
+def update_risk_expo_single_date():
+    strategy = strategy_select_tb4.value
+    benchmark = all_benchmarks[benchmark_select_tb4.value]
+    date = as_timestamp(datepicker_tb4.value)
+    barra, indu = strategy_data_provider.load_risk_expo_single_date(strategy, date, bchrk_name=benchmark)
+    barra_expo.data = barra
+    indu_expo.data = indu
+
+
+barra_expo = ColumnDataSource(data=dict(barra_style=[], portfolio=[], benchmark=[], expo=[]))
+indu_expo = ColumnDataSource(data=dict(industry=[], portfolio=[], benchmark=[], expo=[]))
+datepicker_tb4 = DatePicker(title='Date', min_date=datetime(2007, 1, 1), max_date=datetime.now(),
+                            value=max_date_tab4().date())
+strategy_select_tb4 = Select(title='strategy', value=strategy_data_provider.all_strategies[0],
+                             options=strategy_data_provider.all_strategies)
+benchmark_select_tb4 = Select(title='benchmark', value=list(all_benchmarks)[0],
+                              options=list(all_benchmarks))
+update_risk_expo_single_date()
+barra_names = list(barra_expo.to_df()['barra_style'])
+barra_fig = figure(x_range=barra_names, y_range=(-3, 3), plot_height=350, plot_width=900, title="Style Expo",
+                   toolbar_location=None, tools="")
+barra_fig.vbar(x=dodge('barra_style', -0.1, barra_fig.x_range), top='portfolio', width=0.2, source=barra_expo,
+               color="#e84d60", legend=value("portfolio"))
+barra_fig.vbar(x=dodge('barra_style', 0.1, barra_fig.x_range), top='benchmark', width=0.2, source=barra_expo,
+               color="#718dbf", legend=value("benchmark"))
+datepicker_tb4.on_change('value', lambda attr, old, new: update_risk_expo_single_date())
+strategy_select_tb4.on_change('value', lambda attr, old, new: update_risk_expo_single_date())
+benchmark_select_tb4.on_change('value', lambda attr, old, new: update_risk_expo_single_date())
+controls_tb4 = row(strategy_select_tb4, datepicker_tb4, benchmark_select_tb4)
+tab4 = Panel(child=column(controls_tb4, barra_fig), title="RISK EXPO")
+
 # set layout
-tabs = Tabs(tabs=[tab1, tab2, tab3])
+tabs = Tabs(tabs=[tab1, tab2, tab3, tab4])
+tabs = Tabs(tabs=[tab4])
 curdoc().add_root(tabs)
 
 

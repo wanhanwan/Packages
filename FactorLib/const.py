@@ -31,17 +31,18 @@ MARKET_INDEX_DICT = {'000905':'中证500','000300':'沪深300','000906':'中证8
 INDUSTRY_NAME_DICT = {'中信一级':'cs_level_1','申万一级':'sw_level_1', '中信二级': 'cs_level_2', '申万一级': 'sw_level_2',
                       '万得一级':'wind_level_1'}
 
-MARKET_INDEX_WINDCODE = {"中证500":"000905.SH",
-                         "沪深300":"000300.SH",
-                         "上证综指":"000001.SH",
-                         "上证50":"000016.SH",
-                         "中证800":"000906.SH",
-                         "创业板综":"399102.SZ",
-                         "万得全A":"881001.WI",
+MARKET_INDEX_WINDCODE = {"中证500": "000905.SH",
+                         "沪深300": "000300.SH",
+                         "上证综指": "000001.SH",
+                         "上证50": "000016.SH",
+                         "中证800": "000906.SH",
+                         "创业板综": "399102.SZ",
+                         "万得全A": "881001.WI",
                          "中证全指医药指数": "000991.SH",
                          "中证申万医药生物指数": "000808.SH",
                          "中证国企改革指数": "399974.SZ"
                          }
+MARKET_INDEX_WINDCODE_REVERSE = {MARKET_INDEX_WINDCODE[x]: x for x in MARKET_INDEX_WINDCODE}
 
 DATEMULTIPLIER = {'m':20,'w':5,'Y':252}
 

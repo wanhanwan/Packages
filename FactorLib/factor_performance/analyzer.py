@@ -6,6 +6,7 @@ from ..data_source.base_data_source_h5 import data_source, tc
 from ..data_source.tseries import resample_returns, resample_func
 from functools import partial
 from datetime import datetime
+from collections import Iterable
 from pandas.tseries.offsets import MonthBegin, QuarterBegin, YearBegin
 from ..factors import load_factor
 from ..riskmodel.attribution import RiskExposureAnalyzer, RiskModelAttribution
@@ -210,7 +211,7 @@ class Analyzer(object):
         scale: bool
             股票权重是否归一化处理，默认False
         """
-        if not isinstance(dates, list):
+        if not isinstance(dates, Iterable) or isinstance(dates, str):
             dates = [dates]
         dates = pd.DatetimeIndex(dates)
         weight = (self.table['stock_positions'].loc[dates, 'market_value'] /
@@ -223,18 +224,19 @@ class Analyzer(object):
             weight = weight / sum_of_weight
         return weight
 
-    def portfolio_risk_expo(self, data_src_name, dates):
+    def portfolio_risk_expo(self, data_src_name, dates, bchmrk_name=None):
         """组合风险因子暴露"""
+        bchmrk_name = self.benchmark_name if bchmrk_name is None else bchmrk_name
         dates = pd.DatetimeIndex(dates)
-        positions = self.portfolio_weights(dates)
+        positions = self.portfolio_weights(dates, scale=True)
         data_src = RiskExposureAnalyzer.from_df(positions, barra_datasource=data_src_name,
-                                                benchmark=self.benchmark_name)
+                                                benchmark=bchmrk_name)
         barra_expo, indus_expo, risk_expo = data_src.cal_multidates_expo(dates)
         return barra_expo, indus_expo, risk_expo
 
     def range_attribute(self, start_date, end_date, data_src_name='xy'):
         """在一个时间区间进行归因分析"""
-        dates = tc.get_trade_days(start_date, end_date)
+        dates = tc.get_trade_days(start_date, end_date, retstr=None)
         ret_ptf = self.portfolio_return.loc[dates]
         barra_expo, indus_expo, risk_expo = self.portfolio_risk_expo(data_src_name, dates=dates)
         risk_model = RiskModelAttribution(ret_ptf, barra_expo, indus_expo, self.benchmark_name, data_src_name)

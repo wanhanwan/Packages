@@ -161,7 +161,7 @@ class RiskExposureAnalyzer(object):
             DataFrame(index:[date  riskfactor_name], columns:[portfolio benchmark expo])
         """
         max_date = self.barra_ds.max_date_of_factor
-        dates = dates[dates <= max_date]
+        dates = dates[dates <= pd.to_datetime(max_date)]
         if len(dates) == 0:
             return None, None, None
 
@@ -222,7 +222,7 @@ class RiskModelAttribution(object):
                                                                    dates=self.all_dates)
         # 基准日收益率
         self.ret_bch = data_source.load_factor('daily_returns_%', '/indexprices/', dates=self.all_dates,
-                                               ids=[self.bchmrk])['daily_returns_%'] / 100
+                                               ids=[self.bchmrk]).reset_index(level=1, drop=True)['daily_returns_%'] / 100
         # 基准超额收益率
         self.ret_active = self.ret_ptf - self.ret_bch
 
@@ -250,9 +250,13 @@ class RiskModelAttribution(object):
 
         attr_ret_active = self.active_attributed_ret.loc[start_date:end_date, :]
         ptf_ret_active = self.ret_active.loc[start_date:end_date]
+        u_ret = ptf_ret_active - attr_ret_active.sum(axis=1)
         ptf_ret_active_final = (1.0 + ptf_ret_active).prod() - 1.0
+        u_ret_final = (1.0 + u_ret).prod() - 1.0
 
-        attribution = ptf_ret_active_final - (-1.0 * attr_ret_active.sub(ptf_ret_active, axis='index')).prod()
-        specific = ptf_ret_active_final - attribution.sum()
-        attribution['specific'] = specific
+        attribution = ptf_ret_active_final - (1.0 + (-1.0 * attr_ret_active.sub(ptf_ret_active, axis='index'))).prod() + 1
+        cross = ptf_ret_active_final - u_ret_final - attribution.sum()      # 交叉项
+        weight = attribution.abs() / attribution.abs().sum() * cross
+        attribution = attribution + weight
+        attribution['specific'] = u_ret_final
         return attribution
