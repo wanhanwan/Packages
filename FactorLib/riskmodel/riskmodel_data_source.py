@@ -277,6 +277,10 @@ class RiskDataSource(object):
         factor_names = [x.replace(".h5", "") for x in os.listdir(self._dspath+'/factorData')]
         return self.h5_db.get_date_range(factor_names[0], '/factorData/')[1]
 
+    @property
+    def max_date_of_factor_return(self):
+        return self.h5_db.get_date_range('factor_return', '/%s/'%self._name)[1]
+
     @DateRange2Dates
     def load_factors(self, factor_names, ids=None, start_date=None, end_date=None, dates=None):
         """

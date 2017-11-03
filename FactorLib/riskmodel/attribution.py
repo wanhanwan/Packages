@@ -252,6 +252,7 @@ class RiskModelAttribution(object):
         ptf_ret_active = self.ret_active.loc[start_date:end_date]
         u_ret = ptf_ret_active - attr_ret_active.sum(axis=1)
         ptf_ret_active_final = (1.0 + ptf_ret_active).prod() - 1.0
+        bchmrk_ret_final = (1.0 + self.ret_bch).prod() - 1.0
         u_ret_final = (1.0 + u_ret).prod() - 1.0
 
         attribution = ptf_ret_active_final - (1.0 + (-1.0 * attr_ret_active.sub(ptf_ret_active, axis='index'))).prod() + 1
@@ -259,4 +260,6 @@ class RiskModelAttribution(object):
         weight = attribution.abs() / attribution.abs().sum() * cross
         attribution = attribution + weight
         attribution['specific'] = u_ret_final
+        attribution['benchmark_ret'] = bchmrk_ret_final
+        attribution['total_active_ret'] = ptf_ret_active_final
         return attribution

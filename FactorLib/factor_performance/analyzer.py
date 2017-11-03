@@ -234,12 +234,13 @@ class Analyzer(object):
         barra_expo, indus_expo, risk_expo = data_src.cal_multidates_expo(dates)
         return barra_expo, indus_expo, risk_expo
 
-    def range_attribute(self, start_date, end_date, data_src_name='xy'):
+    def range_attribute(self, start_date, end_date, data_src_name='xy', bchmrk_name=None):
         """在一个时间区间进行归因分析"""
+        bchmrk_name = self.benchmark_name if bchmrk_name is None else bchmrk_name
         dates = tc.get_trade_days(start_date, end_date, retstr=None)
         ret_ptf = self.portfolio_return.loc[dates]
         barra_expo, indus_expo, risk_expo = self.portfolio_risk_expo(data_src_name, dates=dates)
-        risk_model = RiskModelAttribution(ret_ptf, barra_expo, indus_expo, self.benchmark_name, data_src_name)
+        risk_model = RiskModelAttribution(ret_ptf, barra_expo, indus_expo, bchmrk_name, data_src_name)
         return risk_model.range_attribute(start_date, end_date)
 
     def trade_records(self, start_date, end_date):

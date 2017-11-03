@@ -44,7 +44,7 @@ class SingleStrategyResultProvider(object):
 
     @property
     def strategy_max_date(self):
-        """策略的最近更新的日期"""
+        """策略净值最近更新的日期"""
         strategy = self.all_strategies[0]
         analyzer = self.get_analyzer(strategy)
         max_date = analyzer.portfolio_return.index.max()
@@ -109,3 +109,16 @@ class SingleStrategyResultProvider(object):
         barra = barra.reset_index(level=0, drop=True).reset_index().to_dict(orient='list')
         indu = indu.reset_index(level=0, drop=True).reset_index().to_dict(orient='list')
         return barra, indu
+
+    @fastcache.clru_cache()
+    def load_range_attribution(self, strategy, start_date, end_date, bchmrk_name=None):
+        """加载区间收益归因"""
+        analyzer = self.get_analyzer(strategy)
+        attr = analyzer.range_attribute(start_date, end_date, bchmrk_name=bchmrk_name)
+        industry_names = [x for x in attr.index if x.startswith('Indu_')]
+        style = attr[attr.index.difference(industry_names+['benchmark_ret', 'total_active_ret'])].to_frame('attr').\
+            reset_index().rename(columns={'index': 'barra_style'})
+        industry = attr.loc[industry_names].to_frame('attr').reset_index().rename(columns={'index': 'indu'})
+        benchmark_ret = attr['benchmark_ret']
+        total_active_ret = attr['total_active_ret']
+        return benchmark_ret, total_active_ret, style, industry

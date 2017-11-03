@@ -4,7 +4,7 @@ from bokeh.io import output_file, curdoc
 from bokeh.layouts import widgetbox, row, column
 from bokeh.models import ColumnDataSource
 from bokeh.plotting import figure
-from bokeh.models.widgets import DataTable, PreText, TableColumn, Select, NumberFormatter, Panel, Tabs, DatePicker
+from bokeh.models.widgets import DataTable, PreText, TableColumn, Select, NumberFormatter, Panel, Tabs, DatePicker, Button
 from bokeh.transform import dodge
 from bokeh.core.properties import value
 from FactorLib.visualization.data_provider import StrategyPerformanceResultProvider, SingleStrategyResultProvider
@@ -127,7 +127,7 @@ controls_tb3 = widgetbox(datepicker, strategy_select_tb3)
 tab3 = Panel(child=column(controls_tb3, widgetbox(table_tb3)), title='POSITIONS')
 
 
-# Tab Four 风险控制
+# Tab Four
 all_benchmarks = {MARKET_INDEX_WINDCODE_REVERSE[x]: x[:6] for x in index_weights}
 
 def max_date_tab4():
@@ -155,7 +155,7 @@ benchmark_select_tb4 = Select(title='benchmark', value=list(all_benchmarks)[0],
 update_risk_expo_single_date()
 barra_names = list(barra_expo.to_df()['barra_style'])
 indu_names = indu_expo.data['industry']
-# 风格因子展示
+
 barra_fig = figure(x_range=barra_names, y_range=(-3, 3), plot_height=350, plot_width=900, title="Style Expo",
                    toolbar_location=None, tools="")
 barra_fig.vbar(x=dodge('barra_style', -0.1, barra_fig.x_range), top='portfolio', width=0.2, source=barra_expo,
@@ -177,9 +177,61 @@ benchmark_select_tb4.on_change('value', lambda attr, old, new: update_risk_expo_
 controls_tb4 = row(strategy_select_tb4, datepicker_tb4, benchmark_select_tb4)
 tab4 = Panel(child=column(controls_tb4, barra_fig, indu_fig), title="RISK EXPO")
 
+
+# Tab Five
+def max_date_tab5():
+    risk_ds = RiskDataSource('xy')
+    return as_timestamp(risk_ds.max_date_of_factor_return)
+
+
+def min_date_tab5():
+    from FactorLib.data_source.base_data_source_h5 import tc
+    date = max_date_tab5()
+    return tc.tradeDayOffset(date, -10, retstr=None)
+
+
+def update_data_tb5():
+    start = as_timestamp(startdate_tb5.value)
+    end = as_timestamp(enddate_tb5.value)
+    strategy = strategy_select_tb5.value
+    benchmark = all_benchmarks[benchmark_select_tb5.value]
+    bchmrk_ret, tot_ac_ret, style_attr, indu_attr_ = strategy_data_provider.\
+        load_range_attribution(strategy, start, end, benchmark)
+    barra_attr.data = style_attr.to_dict(orient='list')
+    indu_attr.data = indu_attr_.to_dict(orient='list')
+    text_summary.text = "Date Range: %s To %s \n Benchmark Return: %f \n Total Active Return: %f \n Total Return: %f"%(
+        start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d"), bchmrk_ret, tot_ac_ret, bchmrk_ret+tot_ac_ret)
+
+
+startdate_tb5 = DatePicker(title='Start', min_date=datetime(2010, 1, 1), max_date=datetime.now(),
+                           value=min_date_tab5().date())
+enddate_tb5 = DatePicker(title='End', min_date=datetime(2010, 1, 1), max_date=datetime.now(),
+                         value=max_date_tab5().date())
+strategy_select_tb5 = Select(title='strategy', value=strategy_data_provider.all_strategies[0],
+                             options=strategy_data_provider.all_strategies)
+benchmark_select_tb5 = Select(title='benchmark', value=list(all_benchmarks)[0],
+                              options=list(all_benchmarks))
+text_summary = PreText(text='', width=300)
+calculate_button = Button(label="Calculate")
+calculate_button.on_click(update_data_tb5)
+barra_attr = ColumnDataSource(data=dict(barra_style=[], attr=[]))
+indu_attr = ColumnDataSource(data=dict(indu=[], attr=[]))
+update_data_tb5()
+all_barra_names_tb5 = list(barra_attr.data['barra_style'])
+barra_fig_tb5 = figure(y_range=all_barra_names_tb5, plot_height=500, plot_width=900, title="Style Attr",  # x_range=(-0.1, 0.1),
+                       toolbar_location=None, tools="")
+barra_fig_tb5.hbar(y=dodge('barra_style', 0, barra_fig_tb5.y_range), right='attr', height=0.2, color="#718dbf",
+                   source=barra_attr, legend=value('attr'))
+indu_names_tb5 = list(indu_attr.data['indu'])
+indu_fig_tb5 = figure(y_range=indu_names_tb5, plot_height=1900, plot_width=900, title="Industry Attr", toolbar_location=None, tools="")
+indu_fig_tb5.hbar(y=dodge('indu', 0, indu_fig_tb5.y_range), right='attr', height=0.2, color="#718dbf", source=indu_attr,
+                  legend=value('attr'))
+widgets_tb5 = row(column(startdate_tb5, enddate_tb5), column(strategy_select_tb5, benchmark_select_tb5), calculate_button)
+tab5 = Panel(child=column(widgets_tb5, row(column(barra_fig_tb5, indu_fig_tb5), text_summary)), title="RETURN ATTR")
+
 # set layout
-tabs = Tabs(tabs=[tab1, tab2, tab3, tab4])
-# tabs = Tabs(tabs=[tab4])
+tabs = Tabs(tabs=[tab1, tab2, tab3, tab4, tab5])
+# tabs = Tabs(tabs=[tab5])
 curdoc().add_root(tabs)
 
 
