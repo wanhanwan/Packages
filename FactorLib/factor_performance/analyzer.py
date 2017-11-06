@@ -2,13 +2,15 @@ import pandas as pd
 import numpy as np
 import os
 from empyrical import stats
-from ..data_source.base_data_source_h5 import data_source
+from ..data_source.base_data_source_h5 import data_source, tc
 from ..data_source.tseries import resample_returns, resample_func
 from functools import partial
 from datetime import datetime
+from collections import Iterable
 from pandas.tseries.offsets import MonthBegin, QuarterBegin, YearBegin
 from ..factors import load_factor
-from ..riskmodel.attribution import RiskExposureAnalyzer
+from ..riskmodel.attribution import RiskExposureAnalyzer, RiskModelAttribution
+from ..utils.tool_funcs import uqercode_to_windcode
 
 
 class Analyzer(object):
@@ -202,22 +204,62 @@ class Analyzer(object):
         except:
             return np.nan
 
-    def portfolio_weights(self, dates):
-        """组合成分股权重"""
+    def portfolio_weights(self, dates, scale=False):
+        """组合成分股权重
+        Paramters:
+        --------------
+        scale: bool
+            股票权重是否归一化处理，默认False
+        """
+        if not isinstance(dates, Iterable) or isinstance(dates, str):
+            dates = [dates]
         dates = pd.DatetimeIndex(dates)
         weight = (self.table['stock_positions'].loc[dates, 'market_value'] /
                   self.table['stock_account'].loc[dates, 'total_value']).to_frame('Weight')
         weight['IDs'] = self.table['stock_positions'].loc[dates, 'order_book_id'].str[:6]
         weight.index.name = 'date'
-        return weight.set_index('IDs', append=True)
+        weight = weight.set_index('IDs', append=True)
+        if scale:
+            sum_of_weight = weight.sum(level=0)
+            weight = weight / sum_of_weight
+        return weight
 
-    def portfolio_risk_expo(self, data_src_name, dates):
+    def portfolio_risk_expo(self, data_src_name, dates, bchmrk_name=None):
+        """组合风险因子暴露"""
+        bchmrk_name = self.benchmark_name if bchmrk_name is None else bchmrk_name
         dates = pd.DatetimeIndex(dates)
-        positions = self.portfolio_weights(dates)
+        positions = self.portfolio_weights(dates, scale=True)
         data_src = RiskExposureAnalyzer.from_df(positions, barra_datasource=data_src_name,
-                                                benchmark=self.benchmark_name)
+                                                benchmark=bchmrk_name)
         barra_expo, indus_expo, risk_expo = data_src.cal_multidates_expo(dates)
         return barra_expo, indus_expo, risk_expo
+
+    def range_attribute(self, start_date, end_date, data_src_name='xy', bchmrk_name=None):
+        """在一个时间区间进行归因分析"""
+        bchmrk_name = self.benchmark_name if bchmrk_name is None else bchmrk_name
+        dates = tc.get_trade_days(start_date, end_date, retstr=None)
+        ret_ptf = self.portfolio_return.loc[dates]
+        barra_expo, indus_expo, risk_expo = self.portfolio_risk_expo(data_src_name, dates=dates)
+        risk_model = RiskModelAttribution(ret_ptf, barra_expo, indus_expo, bchmrk_name, data_src_name)
+        return risk_model.range_attribute(start_date, end_date)
+
+    def trade_records(self, start_date, end_date):
+        """
+        导出交易记录
+        交易记录的格式为：
+            DataFrame(columns=[证券代码,操作类型(买入，卖出),交易价格,交易日期])
+        """
+        trades = self.table['trades'].copy()
+        start_date = pd.to_datetime(start_date)
+        end_date = pd.to_datetime(end_date)
+        trades.index = pd.DatetimeIndex(trades.index)
+        trades = trades.loc[start_date:end_date, ['order_book_id', 'side', 'last_quantity', 'last_price']]
+        trades['order_book_id'] = trades['order_book_id'].apply(uqercode_to_windcode)
+        trades.loc[trades['side']=='SELL', 'last_quantity'] = trades.loc[trades['side']=='SELL', 'last_quantity'] * -1
+        trades['side'] = trades['side'].map({'SELL': '卖出', 'BUY': '买入'})
+        trades = trades.reset_index().loc[:, ['order_book_id', 'side', 'last_quantity', 'last_price', 'datetime']]
+        trades.columns = ['证券代码', '操作类型', '交易数量', '交易价格', '交易日期']
+        return trades
 
     def returns_sheet(self, cur_day=None):
         if cur_day is None:

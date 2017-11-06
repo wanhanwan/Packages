@@ -277,6 +277,10 @@ class RiskDataSource(object):
         factor_names = [x.replace(".h5", "") for x in os.listdir(self._dspath+'/factorData')]
         return self.h5_db.get_date_range(factor_names[0], '/factorData/')[1]
 
+    @property
+    def max_date_of_factor_return(self):
+        return self.h5_db.get_date_range('factor_return', '/%s/'%self._name)[1]
+
     @DateRange2Dates
     def load_factors(self, factor_names, ids=None, start_date=None, end_date=None, dates=None):
         """
@@ -346,7 +350,7 @@ class RiskDataSource(object):
         """
         if isinstance(factor_name, str):
             factor_name = [factor_name]
-        if not self.check_file_exists('%s/factor_return.h5' % self._name):
+        if self.check_file_exists('%s/factor_return.h5' % self._name):
             ret = self.h5_db.load_factor('factor_return', self._h5_dir, dates=dates, ids=factor_name)
         else:
             print(FileNotFoundError("因子收益率文件不存在！"))

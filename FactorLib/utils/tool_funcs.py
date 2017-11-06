@@ -55,6 +55,9 @@ def tradecode_to_windcode(tradecode):
 def windcode_to_tradecode(windcode):
     return windcode[:6]
 
+def uqercode_to_windcode(uqercode):
+    return uqercode[:6]+'.SH' if uqercode[-4:]=='XSHG' else uqercode[:6]+'.SZ'
+
 
 def drop_patch(code):
     return code.split(".")[0]
