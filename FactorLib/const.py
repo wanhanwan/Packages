@@ -40,7 +40,7 @@ MARKET_INDEX_WINDCODE = {"中证500": "000905.SH",
                          "万得全A": "881001.WI",
                          "中证全指医药指数": "000991.SH",
                          "中证申万医药生物指数": "000808.SH",
-                         "中证国企改革指数": "399974.SZ"
+                         "中证国企改革指数": "399974.SZ",
                          }
 MARKET_INDEX_WINDCODE_REVERSE = {MARKET_INDEX_WINDCODE[x]: x for x in MARKET_INDEX_WINDCODE}
 

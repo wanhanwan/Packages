@@ -36,7 +36,7 @@ class StrategyManager(object):
 
     # 保存信息
     def _save(self):
-        self._strategy_dict.to_csv(os.path.join(self._strategy_path, 'summary.csv'), index=False, quoting=3)
+        self._strategy_dict.to_csv(os.path.join(self._strategy_path, 'summary.csv'), index=False, quoting=3, encoding='GBK')
 
     def performance_analyser(self, strategy_name=None, strategy_id=None):
         if strategy_id is not None:
@@ -300,7 +300,7 @@ class StrategyManager(object):
         if analyzer is not None:
             return_sheet = analyzer.returns_sheet(max_date)
             return_sheet.insert(0, '最新日期', max_date)
-            return_sheet.to_csv("returns_sheet.csv", index=False, float_format='%.4f')
+            return_sheet.to_csv("returns_sheet.csv", index=False, float_format='%.4f', encoding='GBK')
         os.chdir(cwd)
 
     # 策略当日模拟持仓(自定义总市值)
@@ -319,7 +319,6 @@ class StrategyManager(object):
         vols = vols.to_frame('持仓数量').reset_index()[['IDs', '持仓数量']].rename(columns={'IDs': '证券代码'})
         vols['证券代码'] = vols['证券代码'].apply(tradecode_to_windcode)
         return vols
-
 
     # 导出交易记录
     def export_trade_records(self, start_date, end_date, strategy_name=None, strategy_id=None):
@@ -374,7 +373,7 @@ def collect_nav(mailling=False):
     sm = StrategyManager('D:/data/factor_investment_strategies', 'D:/data/factor_investment_stocklists')
     for i, f in sm._strategy_dict['name'].iteritems():
         if os.path.isfile(os.path.join(sm._strategy_path, f+'/backtest/returns_sheet.csv')):
-            ff = open(os.path.join(sm._strategy_path, f+'/backtest/returns_sheet.csv'))
+            ff = open(os.path.join(sm._strategy_path, f+'/backtest/returns_sheet.csv'), encoding='GBK')
             returns = pd.read_csv(ff)
             returns.insert(0, '策略名称', f)
             df = df.append(returns)
