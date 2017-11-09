@@ -222,7 +222,7 @@ class base_data_source(object):
         if (end_date not in dates) and (end_date is not None):
             dates.append(end_date)
         dates.sort()
-        idx = self.get_latest_report_date(dates, report_type).loc[(slice(None), slice(ids)), :]
+        idx = self.get_latest_report_date(dates, report_type).loc[pd.IndexSlice[:, ids], :]
         raw_data = self.h5DB.load_factor(field, '/stock_financial_data/', ids=ids)
         return financial_data_reindex(raw_data, idx)
     
