@@ -75,4 +75,4 @@ def parseCrossSection2DArray(TSData, date):
             temp_table = []
             iter_stock = 0
     table.index = pd.MultiIndex.from_product([[date], table.index], names=['date', 'IDs'])
-    return table
+    return table.sort_index()
