@@ -48,3 +48,31 @@ def parseByStock(TSData, date_parse=None):
     if date_parse:
         table[date_parse] = table[date_parse].applymap(_int2date)
     return table
+
+
+def parseCrossSection2DArray(TSData, date):
+    """
+    解析横截面上的二维数组, 行索引是股票代码，
+    列索引是因子名称。
+    """
+    if TSData[0] != 0:
+        raise ValueError("天软数据提取失败！")
+    iter_stock = 0
+    table = pd.DataFrame()
+    temp_table = []
+    date = pd.to_datetime(date)
+    for stock_id, factors in TSData[1].items():
+        stock_id = stock_id.decode('utf8')[2:]
+        factors = {k.decode('GBK'): v for k, v in factors.items()}
+        stockData = pd.DataFrame(factors, index=pd.Index([stock_id], name='IDs'))
+
+        iter_stock += 1
+        if iter_stock < _max_iter_stocks:
+            temp_table.append(stockData)
+        else:
+            _ = pd.concat(temp_table)
+            table = pd.concat([table, _])
+            temp_table = []
+            iter_stock = 0
+    table.index = pd.MultiIndex.from_product([[date], table.index], names=['date', 'IDs'])
+    return table
