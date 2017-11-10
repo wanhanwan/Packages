@@ -42,6 +42,9 @@ config = {
     },
     "portfolio_persist": {
       "enabled": True
+    },
+    "sys_simulation":{
+      "volume_limit": False
     }
   }
 }

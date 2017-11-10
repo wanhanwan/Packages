@@ -36,13 +36,14 @@ class TinyDB(object):
         """读取子文件夹中的数据"""
         abs_subdir = os.path.join(self._rootdir, sub_dir)
         data = []
+        dates = [x.strftime("%Y%m%d") for x in dates]
         for idate in dates:
             if os.path.isfile(os.path.join(abs_subdir, "%s.csv"%idate)):
                 with open(os.path.join(abs_subdir, "%s.csv"%idate)) as f:
-                    idata = pd.read_csv(f,parse_dates=0, header=0,
+                    idata = pd.read_csv(f,parse_dates=[0], header=0,
                                         converters={'IDs': lambda x: str(x).zfill(6)})
                     data.append(idata)
-        table = pd.concat(data)
+        table = pd.concat(data).set_index(['date', 'IDs'])
         return table.sort_index()
 
     def save_subdir(self, data, sub_dir):

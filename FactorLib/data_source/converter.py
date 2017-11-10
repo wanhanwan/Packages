@@ -15,14 +15,14 @@ Rule = namedtuple('Rule', ['mapping', 'convertfunc', 'name2id_func'])
 
 def read_industry_mapping():
     p = abspath(dirname(__file__)+'/..') + '/resource/level_2_industry_dict.xlsx'
-    file = pd.ExcelFile(p)
-    if pd.__version__ >= '0.21.0':
-        sw_level_2 = dict(file.parse(sheet_name='sw_level_2', header=0).values)
-        cs_level_2 = dict(file.parse(sheet_name='cs_level_2', header=0).values)
-    else:
-        sw_level_2 = dict(file.parse(sheetname='sw_level_2', header=0).values)
-        cs_level_2 = dict(file.parse(sheetname='cs_level_2', header=0).values)
-    file.close()
+    with pd.ExcelFile(p) as file:
+        if pd.__version__ >= '0.21.0':
+            sw_level_2 = dict(file.parse(sheet_name='sw_level_2', header=0, converters={'Code': str}).values)
+            cs_level_2 = dict(file.parse(sheet_name='cs_level_2', header=0, converters={'Code': str}).values)
+        else:
+            sw_level_2 = dict(file.parse(sheetname='sw_level_2', header=0, converters={'Code': str}).values)
+            cs_level_2 = dict(file.parse(sheetname='cs_level_2', header=0, converters={'Code': str}).values)
+    # file.close()
     return sw_level_2, cs_level_2
 
 SW_LEVEL_2_DICT, CS_LEVEL_2_DICT = read_industry_mapping()
@@ -36,6 +36,7 @@ class Converter(object):
             self.unmapping[name] = {rule.mapping[x]: x for x in rule.mapping}
 
     def convert(self, name, data):
+        """行业代码转行业名称"""
         try:
             r = self._rules[name]
         except KeyError:
@@ -50,6 +51,7 @@ class Converter(object):
             return data
 
     def name2id(self, name, data):
+        """行业名称转行业代码"""
         try:
             r = self._rules[name]
             unmapping = self.unmapping[name]

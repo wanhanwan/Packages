@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import statsmodels.api as sm
 from QuantLib.tools import df_rolling2
-
+from FactorLib.data_source.converter import IndustryConverter
 
 # 特异度
 def iffr(start, end, **kwargs):
@@ -61,9 +61,31 @@ def unst(start, end, **kwargs):
         kwargs['data_source'].h5DB.save_factor(unst_stocks, '/stocks/')
 
 
+# 把非银金融行业的股票细分成券商、保险、和其他
+def diversify_finance(start, end, **kwargs):
+    datasource = kwargs['data_source']
+    # 中信行业
+    # cs_level_1 = datasource.sector.get_stock_industry_info(None, industry="中信一级", start_date=start, end_date=end)
+    # cs_level_1_id = IndustryConverter.name2id("cs_level_1", cs_level_1['cs_level_1'])
+    # cs_level_2 = datasource.sector.get_stock_industry_info(None, industry="中信二级", start_date=start, end_date=end)
+    # cs_level_2_id = IndustryConverter.name2id("cs_level_2", cs_level_2['cs_level_2'])
+    # cs_level_1_id.update(cs_level_2_id[cs_level_2_id.isin([5165, 5166, 5167])])
+    # cs_diversified_finance = cs_level_1_id.to_frame("_cs_diversified_finance")
+    # data_source.h5DB.save_factor(cs_diversified_finance, '/indexes/')
+    # 申万行业
+    sw_level_1 = datasource.sector.get_stock_industry_info(None, industry="申万一级", start_date=start, end_date=end)
+    sw_level_1_id = IndustryConverter.name2id("sw_level_1", sw_level_1['sw_level_1'])
+    sw_level_2 = datasource.sector.get_stock_industry_info(None, industry="申万二级", start_date=start, end_date=end)
+    sw_level_2_id = IndustryConverter.name2id("sw_level_2", sw_level_2['sw_level_2'])
+    sw_level_1_id.update(sw_level_2_id[sw_level_2_id.isin([801194, 801193, 801191])])
+    sw_diversified_finance = sw_level_1_id.to_frame("_sw_diversified_finance")
+    data_source.h5DB.save_factor(sw_diversified_finance, '/indexes/')
+
+
+
 AlternativeFuncListMonthly = []
 AlternativeFuncListDaily = [iffr, unst]
 
 if __name__ == '__main__':
-    from data_source import data_source
-    unst('20170701', '20170816', data_source=data_source)
+    from FactorLib.data_source.base_data_source_h5 import data_source
+    diversify_finance('20170701', '20170816', data_source=data_source)
