@@ -385,13 +385,16 @@ class sector(object):
             return all_stocks
         if ids in MARKET_INDEX_DICT:
             index_members = self.h5DB.load_factor('_%s' % ids, '/indexes/', dates=dates)
-        elif ids in SW_INDUSTRY_DICT:
-            temp = self.h5DB.load_factor('sw_level_1', '/indexes/', dates=dates)
-            index_members = temp[temp['sw_level_1'] == int(ids)]
+            return index_members[index_members.index.isin(all_stocks.index)]
         else:
-            temp = self.h5DB.load_factor('cs_level_1', '/indexes/', dates=dates)
-            index_members = temp[temp['cs_level_1'] == int(ids[2:])]
-        return index_members[index_members.index.isin(all_stocks.index)]
+            for industry_name, rule in IndustryConverter._rules.items():
+                if ids in IndustryConverter.all_ids(industry_name):
+                    temp = self.h5DB.load_factor(industry_name, '/indexes/', dates=dates)
+                    index_members = temp[temp[industry_name] == rule.name2id_func(ids)]
+                    return index_members[index_members.index.isin(all_stocks.index)]
+                else:
+                    continue
+        raise KeyError("找不到指数ID对应成分股！")
 
     def get_stock_industry_info(self, ids, industry='中信一级', start_date=None, end_date=None, dates=None):
         """股票行业信息"""

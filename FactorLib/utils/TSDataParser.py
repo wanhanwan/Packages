@@ -20,6 +20,10 @@ def parseByStock(TSData, date_parse=None):
     按照股票为单位，逐个解析数据。
     数据格式为两列的Array,第一列是股票代码，第二列是对应的子Array。
     不同的股票的每个子Array中的列名是相同的，以此保证可以把所有股票的数据按行连接起来。
+
+    Return:
+    =======
+    DataFrame(index=IDs, columns=data)
     """
     if TSData[0] != 0:
         raise ValueError("天软数据提取失败！")
@@ -47,7 +51,7 @@ def parseByStock(TSData, date_parse=None):
             iter_stock = 0
     if date_parse:
         table[date_parse] = table[date_parse].applymap(_int2date)
-    return table
+    return table.sort_index()
 
 
 def parseCrossSection2DArray(TSData, date):

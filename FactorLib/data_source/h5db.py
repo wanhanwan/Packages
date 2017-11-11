@@ -123,10 +123,10 @@ class H5DB(object):
         for column in factor_data.columns:
             factor_path = self.abs_factor_path(factor_dir, column)
             if not self.check_factor_exists(column, factor_dir):
-                factor_data[[column]].to_panel().to_hdf(factor_path, column, complevel=9, complib='blosc')
+                factor_data[[column]].dropna().to_panel().to_hdf(factor_path, column, complevel=9, complib='blosc')
             elif if_exists == 'append':
                 old_panel = pd.read_hdf(factor_path, column)
-                new_frame = old_panel.to_frame().append(factor_data[[column]])
+                new_frame = old_panel.to_frame().append(factor_data[[column]].dropna())
                 new_panel = new_frame[~new_frame.index.duplicated(keep='last')].to_panel()
                 available_name = self.get_available_factor_name(column, factor_dir)
                 new_panel.to_hdf(
@@ -135,7 +135,7 @@ class H5DB(object):
                 self.rename_factor(available_name, column, factor_dir)
             elif if_exists == 'replace':
                 self.delete_factor(column, factor_dir)
-                factor_data[[column]].to_panel().to_hdf(factor_path, column, complevel=9, complib='blosc')
+                factor_data[[column]].dropna().to_panel().to_hdf(factor_path, column, complevel=9, complib='blosc')
             else:
                 self._update_info()
                 raise KeyError("please make sure if_exists is valide")
