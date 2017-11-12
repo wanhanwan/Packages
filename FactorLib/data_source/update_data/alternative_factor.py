@@ -82,6 +82,34 @@ def diversify_finance(start, end, **kwargs):
     datasource.h5DB.save_factor(sw_diversified_finance, '/indexes/')
 
 
+# 中证500、沪深300、中证800指数剔除掉券商银行股之后权重归一化
+def rescale_weight_afterdrop_brokers_and_banks(start, end, **kwargs):
+    datasource = kwargs['data_source']
+    industry_info = datasource.sector.get_stock_industry_info(ids=None, industry="申万细分非银", start_date=start, end_date=end)
+    # 沪深300
+    hs300_weight = datasource.sector.get_index_weight(ids='000300', start_date=start, end_date=end)
+    hs300_weight = hs300_weight.join(industry_info).query('diversified_finance_sw not in ["银行", "券商"]')
+    hs300_weight['_000300_weight'] = hs300_weight['_000300_weight'] / hs300_weight.groupby(level=0)['_000300_weight'].sum()
+    new_index = hs300_weight[['_000300_weight']].rename(columns={'_000300_weight':'_000300_dropbrkbank_weight'})
+    datasource.h5DB.save_factor(new_index, '/indexes/')
+
+    # 中证500
+    zz500_weight = datasource.sector.get_index_weight(ids='000905', start_date=start, end_date=end)
+    zz500_weight = zz500_weight.join(industry_info).query('diversified_finance_sw not in ["银行", "券商"]')
+    zz500_weight['_000905_weight'] = zz500_weight['_000905_weight'] / zz500_weight.groupby(level=0)[
+        '_000905_weight'].sum()
+    new_index = zz500_weight[['_000905_weight']].rename(columns={'_000905_weight': '_000905_dropbrkbank_weight'})
+    datasource.h5DB.save_factor(new_index, '/indexes/')
+
+    # 中证800
+    zz800_weight = datasource.sector.get_index_weight(ids='000906', start_date=start, end_date=end)
+    zz800_weight = zz800_weight.join(industry_info).query('diversified_finance_sw not in ["银行", "券商"]')
+    zz800_weight['_000906_weight'] = zz800_weight['_000906_weight'] / zz800_weight.groupby(level=0)[
+        '_000906_weight'].sum()
+    new_index = zz800_weight[['_000906_weight']].rename(columns={'_000906_weight': '_000906_dropbrkbank_weight'})
+    datasource.h5DB.save_factor(new_index, '/indexes/')
+
+
 # 剔除银行和券商的全部A股(申万行业)
 def excld_broker_banks(start, end, **kwargs):
     datasource = kwargs['data_source']
@@ -94,9 +122,9 @@ def excld_broker_banks(start, end, **kwargs):
 
 
 AlternativeFuncListMonthly = []
-AlternativeFuncListDaily = [iffr, unst, diversify_finance, excld_broker_banks]
+AlternativeFuncListDaily = [iffr, unst, diversify_finance, excld_broker_banks, rescale_weight_afterdrop_brokers_and_banks]
 
 if __name__ == '__main__':
     from FactorLib.data_source.base_data_source_h5 import data_source
     # diversify_finance('20170608', '20170608', data_source=data_source)
-    excld_broker_banks('20050104', '20171109', data_source=data_source)
+    rescale_weight_afterdrop_brokers_and_banks('20070131', '20171110', data_source=data_source)

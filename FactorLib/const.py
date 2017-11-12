@@ -29,7 +29,7 @@ MARKET_INDEX_DICT = {'000905':'中证500','000300':'沪深300','000906':'中证8
                      '101003':'非周期成长指数', '101004':'非周期指数弱', '101005': '全A(剔除银行券商)'}
 
 INDUSTRY_NAME_DICT = {'中信一级':'cs_level_1','申万一级':'sw_level_1', '中信二级': 'cs_level_2', '申万二级': 'sw_level_2',
-                      '万得一级':'wind_level_1', '中信细分非银':'_cs_diversified_finance', '申万细分非银':'_sw_diversified_finance'}
+                      '万得一级':'wind_level_1', '中信细分非银':'diversified_finance_cs', '申万细分非银':'diversified_finance_sw'}
 
 MARKET_INDEX_WINDCODE = {"中证500": "000905.SH",
                          "沪深300": "000300.SH",
