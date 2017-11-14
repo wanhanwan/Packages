@@ -44,6 +44,17 @@ MARKET_INDEX_WINDCODE = {"中证500": "000905.SH",
                          }
 MARKET_INDEX_WINDCODE_REVERSE = {MARKET_INDEX_WINDCODE[x]: x for x in MARKET_INDEX_WINDCODE}
 
+INDEX_WEIGHT_DICT = {
+    "沪深300": "000300",
+    "中证500": "000905",
+    "中证800": "000906",
+    "沪深300非银行券商": "000300_dropbrkbank",
+    "中证500非银行券商": "000905_dropbrkbank",
+    "中证800非银行券商": "000906_dropbrkbank",
+    "中证全指医药": "000991",
+    "中证国企改革": "399974"
+}
+
 DATEMULTIPLIER = {'m':20,'w':5,'Y':252}
 
 
