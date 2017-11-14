@@ -281,6 +281,10 @@ class RiskDataSource(object):
     def max_date_of_factor_return(self):
         return self.h5_db.get_date_range('factor_return', '/%s/'%self._name)[1]
 
+    @property
+    def min_date_of_factor_return(self):
+        return self.h5_db.get_date_range('factor_return', '/%s/' % self._name)[0]
+
     @DateRange2Dates
     def load_factors(self, factor_names, ids=None, start_date=None, end_date=None, dates=None):
         """

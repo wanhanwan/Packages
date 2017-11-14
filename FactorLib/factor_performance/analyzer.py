@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import os
 from empyrical import stats
-from ..data_source.base_data_source_h5 import data_source, tc
+from ..data_source.base_data_source_h5 import data_source, tc, H5DB
 from ..data_source.tseries import resample_returns, resample_func
 from functools import partial
 from datetime import datetime
@@ -240,6 +240,15 @@ class Analyzer(object):
         dates = tc.get_trade_days(start_date, end_date, retstr=None)
         ret_ptf = self.portfolio_return.loc[dates]
         barra_expo, indus_expo, risk_expo = self.portfolio_risk_expo(data_src_name, dates=dates)
+        risk_model = RiskModelAttribution(ret_ptf, barra_expo, indus_expo, bchmrk_name, data_src_name)
+        return risk_model.range_attribute(start_date, end_date)
+
+    def range_attribute_from_strategy(self, sm, strategy_name, start_date, end_date, data_src_name='xy', bchmrk_name=None):
+        bchmrk_name = self.benchmark_name if bchmrk_name is None else bchmrk_name
+        dates = tc.get_trade_days(start_date, end_date, retstr=None)
+        ret_ptf = self.portfolio_return.loc[dates]
+        barra_expo, indus_expo = sm.import_risk_expo(start_date=start_date, end_date=end_date, strategy_name=strategy_name,
+                                                     data_source=data_src_name, bchmrk_name=bchmrk_name)
         risk_model = RiskModelAttribution(ret_ptf, barra_expo, indus_expo, bchmrk_name, data_src_name)
         return risk_model.range_attribute(start_date, end_date)
 

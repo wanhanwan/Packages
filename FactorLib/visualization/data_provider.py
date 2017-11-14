@@ -6,6 +6,7 @@
 
 from FactorLib.factor_performance.analyzer import Analyzer
 from FactorLib.data_source.base_data_source_h5 import data_source
+from FactorLib.utils.strategy_manager import sm
 import pandas as pd
 import fastcache
 import os
@@ -102,19 +103,28 @@ class SingleStrategyResultProvider(object):
         return pd.concat([stock_weight, stock_info, stock_return], axis=1, join='inner')
 
     @fastcache.clru_cache()
-    def load_risk_expo_single_date(self, strategy, date, ds_name='xy', bchrk_name=None):
+    def load_risk_expo_single_date(self, strategy, date, ds_name='xy', bchmrk_name=None):
         """加载单期风险暴露"""
-        analyzer = self.get_analyzer(strategy)
-        barra, indu, risk = analyzer.portfolio_risk_expo(ds_name, [date], bchmrk_name=bchrk_name)
+        if os.path.isfile(os.path.join(sm._strategy_risk_path, str(sm.strategy_id(strategy)), ds_name, 'expo', 'style',
+                                       'portfolio_%s.h5' % bchmrk_name)):
+            barra, indu = sm.import_risk_expo(start_date=date, end_date=date, strategy_name=strategy,
+                                              bchmrk_name=bchmrk_name, data_source=ds_name)
+        else:
+            analyzer = self.get_analyzer(strategy)
+            barra, indu, risk = analyzer.portfolio_risk_expo(ds_name, [date], bchmrk_name=bchmrk_name)
         barra = barra.reset_index(level=0, drop=True).reset_index().to_dict(orient='list')
         indu = indu.reset_index(level=0, drop=True).reset_index().to_dict(orient='list')
         return barra, indu
 
     @fastcache.clru_cache()
-    def load_range_attribution(self, strategy, start_date, end_date, bchmrk_name=None):
+    def load_range_attribution(self, strategy, start_date, end_date, bchmrk_name=None, ds_name='xy'):
         """加载区间收益归因"""
         analyzer = self.get_analyzer(strategy)
-        attr = analyzer.range_attribute(start_date, end_date, bchmrk_name=bchmrk_name)
+        if os.path.isfile(os.path.join(sm._strategy_risk_path, str(sm.strategy_id(strategy)), ds_name, 'expo', 'style',
+                                       'portfolio_%s.h5'%bchmrk_name)):
+            attr = analyzer.range_attribute_from_strategy(sm, strategy, start_date, end_date, bchmrk_name=bchmrk_name)
+        else:
+            attr = analyzer.range_attribute(start_date, end_date, ds_name, bchmrk_name)
         industry_names = [x for x in attr.index if x.startswith('Indu_')]
         style = attr[attr.index.difference(industry_names+['benchmark_ret', 'total_active_ret'])].to_frame('attr').\
             reset_index().rename(columns={'index': 'barra_style'})
@@ -122,3 +132,21 @@ class SingleStrategyResultProvider(object):
         benchmark_ret = attr['benchmark_ret']
         total_active_ret = attr['total_active_ret']
         return benchmark_ret, total_active_ret, style, industry
+
+    @fastcache.clru_cache()
+    def _rebalance_attr(self, strategy, bchmrk_name=None, ds_name='xy'):
+        """加载单个策略所有风险归因数据"""
+        return sm.import_rebalance_attr(strategy_name=strategy, bchmrk_name=bchmrk_name, data_source=ds_name)
+
+    @fastcache.clru_cache()
+    def single_risk_attr(self, start_date, end_date, strategy, bchmrk_name=None, risk_factor='Size', ds_name='xy'):
+        attr = self._rebalance_attr(strategy, bchmrk_name, ds_name)
+        return attr.loc[start_date:end_date, [risk_factor]]
+
+    def all_risk_factors(self, ds_name='xy'):
+        return list(self._rebalance_attr(sm._strategy_dict.loc[0, 'name'], ds_name=ds_name).columns)
+
+
+if __name__ == '__main__':
+    strategy_data_provider = SingleStrategyResultProvider(r"D:\data\factor_investment_strategies")
+    strategy_data_provider.single_risk_attr('20140101', '20151231', '兴基VG_逆向', '000905')

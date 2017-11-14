@@ -4,6 +4,7 @@ from bokeh.io import output_file, curdoc
 from bokeh.layouts import widgetbox, row, column
 from bokeh.models import ColumnDataSource
 from bokeh.plotting import figure
+from bokeh.models.ranges import FactorRange
 from bokeh.models.widgets import DataTable, PreText, TableColumn, Select, NumberFormatter, Panel, Tabs, DatePicker, Button
 from bokeh.transform import dodge
 from bokeh.core.properties import value
@@ -139,7 +140,7 @@ def update_risk_expo_single_date():
     strategy = strategy_select_tb4.value
     benchmark = all_benchmarks[benchmark_select_tb4.value]
     date = as_timestamp(datepicker_tb4.value)
-    barra, indu = strategy_data_provider.load_risk_expo_single_date(strategy, date, bchrk_name=benchmark)
+    barra, indu = strategy_data_provider.load_risk_expo_single_date(strategy, date, bchmrk_name=benchmark)
     barra_expo.data = barra
     indu_expo.data = indu
 
@@ -229,9 +230,50 @@ indu_fig_tb5.hbar(y=dodge('indu', 0, indu_fig_tb5.y_range), right='attr', height
 widgets_tb5 = row(column(startdate_tb5, enddate_tb5), column(strategy_select_tb5, benchmark_select_tb5), calculate_button)
 tab5 = Panel(child=column(widgets_tb5, row(column(barra_fig_tb5, indu_fig_tb5), text_summary)), title="RETURN ATTR")
 
+
+# Tab six
+def max_date_tab6():
+    risk_ds = RiskDataSource('xy')
+    return as_timestamp(risk_ds.max_date_of_factor_return)
+
+
+def min_date_tab6():
+    return as_timestamp('20100101')
+
+
+def update_data_tb6():
+    strategy = strategy_select_tb6.value
+    start_date = as_timestamp(startdate_tb6.value)
+    end_date = as_timestamp(enddate_tb6.value)
+    factor = risk_select_tb6.value
+    attr = strategy_data_provider.single_risk_attr(start_date, end_date, strategy, risk_factor=factor)
+    attr['left'] = attr.index - timedelta(days=0.5)
+    attr['right'] = attr.index + timedelta(days=0.5)
+    attr = attr.rename(columns={factor: 'data'})
+    cum_attr.data = cum_attr.from_df(attr)
+
+strategy_select_tb6 = Select(title='strategy', value=strategy_data_provider.all_strategies[0],
+                             options=strategy_data_provider.all_strategies)
+risk_select_tb6 = Select(title='risk_factor', value=strategy_data_provider.all_risk_factors()[0],
+                         options=strategy_data_provider.all_risk_factors())
+startdate_tb6 = DatePicker(title='Start', min_date=datetime(2010, 1, 1), max_date=datetime.now(),
+                           value=min_date_tab6().date())
+enddate_tb6 = DatePicker(title='End', min_date=datetime(2010, 1, 1), max_date=datetime.now(),
+                         value=max_date_tab6().date())
+calculate_button_tb6 = Button(label="Calculate")
+calculate_button_tb6.on_click(update_data_tb6)
+cum_attr = ColumnDataSource()
+cum_attr_fig = figure(x_axis_type="datetime", plot_width=1400, tools="", toolbar_location=None)
+update_data_tb6()
+cum_attr_fig.vbar(x='date', top='data', width=0.1, source=cum_attr, color="#e84d60",
+                  legend=value('cum_attr'))
+widgets_tb6 = row(column(startdate_tb6, enddate_tb6), column(strategy_select_tb6, risk_select_tb6), calculate_button_tb6)
+tab6 = Panel(child=column(widgets_tb6, row(column(cum_attr_fig))), title="CUM ATTR")
+
+
 # set layout
-tabs = Tabs(tabs=[tab1, tab2, tab3, tab4, tab5])
-# tabs = Tabs(tabs=[tab5])
+tabs = Tabs(tabs=[tab1, tab2, tab3, tab4, tab5, tab6])
+# tabs = Tabs(tabs=[tab6])
 curdoc().add_root(tabs)
 
 

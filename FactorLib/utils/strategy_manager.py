@@ -2,9 +2,11 @@ from .stocklist_manager import StockListManager
 from ..single_factor_test.config import parse_config
 from ..utils import AttrDict
 from datetime import datetime
-from ..data_source.base_data_source_h5 import tc, h5
-from ..utils.tool_funcs import windcode_to_tradecode, import_module, tradecode_to_windcode
+from ..data_source.base_data_source_h5 import tc, h5, H5DB
+from ..data_source.trade_calendar import as_timestamp
+from ..utils.tool_funcs import windcode_to_tradecode, import_module, tradecode_to_windcode, ensure_dir_exists
 from ..factor_performance.analyzer import Analyzer
+from FactorLib.riskmodel.riskmodel_data_source import RiskDataSource
 import pandas as pd
 import numpy as np
 import os
@@ -32,7 +34,9 @@ class StrategyManager(object):
             self._strategy_dict = pd.DataFrame(columns=self.fields)
             self._strategy_dict.to_csv(os.path.join(self._strategy_path, 'summary.csv'), index=False)
         self._strategy_dict = pd.read_csv(os.path.join(self._strategy_path, 'summary.csv'), encoding='GBK',
-                                          converters={'benchmark': str})
+                                          converters={'benchmark': lambda x: str(x).zfill(6)})
+        ensure_dir_exists(os.path.join(os.path.dirname(self._strategy_path), 'factor_investment_risk'))
+        self._strategy_risk_path = os.path.join(os.path.dirname(self._strategy_path), 'factor_investment_risk')
 
     # 保存信息
     def _save(self):
@@ -303,6 +307,48 @@ class StrategyManager(object):
             return_sheet.to_csv("returns_sheet.csv", index=False, float_format='%.4f', encoding='GBK')
         os.chdir(cwd)
 
+    # 导出风险敞口
+    def export_risk_expo(self, start_date, end_date, strategy_name=None, strategy_id=None,
+                         data_source='xy', bchmrk_name=None):
+        """
+        导出组合风险敞口数据
+        文件存储在risk文件夹中,并以数据源(xy)作为子文件夹
+        """
+        if strategy_id is not None:
+            strategy_name = self.strategy_name(strategy_id)
+        strategy_id = self.strategy_id(strategy_name)
+        dates = tc.get_trade_days(start_date, end_date)
+        analyzer = self.performance_analyser(strategy_name=strategy_name)
+        bchmrk_name = bchmrk_name if bchmrk_name is not None else analyzer.benchmark_name
+        barra, indu, risk = analyzer.portfolio_risk_expo(data_source, dates, bchmrk_name=bchmrk_name)
+        barra.rename(columns=lambda x: "%s_%s"%(x, bchmrk_name), inplace=True)
+        barra.index.names = ['date', 'IDs']
+        indu.rename(columns=lambda x: "%s_%s"%(x, bchmrk_name), inplace=True)
+        indu.index.names = ['date', 'IDs']
+        ensure_dir_exists(os.path.join(self._strategy_risk_path, '%d'%strategy_id, data_source, "expo"))
+        ensure_dir_exists(os.path.join(self._strategy_risk_path, '%d'%strategy_id, data_source, "expo", "style"))
+        ensure_dir_exists(os.path.join(self._strategy_risk_path, '%d'%strategy_id, data_source, "expo", "indu"))
+        temp_h5 = H5DB(os.path.join(self._strategy_risk_path, "%d"%strategy_id, data_source))
+        temp_h5.save_factor(barra, '/expo/style/')
+        temp_h5.save_factor(indu, '/expo/indu/')
+
+    # 导入风险敞口
+    def import_risk_expo(self, start_date, end_date, strategy_name=None, strategy_id=None,
+                         data_source='xy', bchmrk_name=None):
+        if strategy_id is not None:
+            strategy_name = self.strategy_name(strategy_id)
+        strategy_id = self.strategy_id(strategy_name)
+        dates = tc.get_trade_days(start_date, end_date)
+        bchmrk_name = bchmrk_name if bchmrk_name is not None else self.get_attribute('benchmark', strategy_name=strategy_name)
+        temp_h5 = H5DB(os.path.join(self._strategy_risk_path, "%d" % strategy_id, data_source))
+        barra = temp_h5.load_factors({'/expo/style/': [x+'_%s'%bchmrk_name for x in ['portfolio', 'benchmark', 'expo']]},
+                                     dates=dates).rename(columns= lambda x: x.replace('_%s'%bchmrk_name, ''))
+        barra.index.names = ['date', 'barra_style']
+        indu = temp_h5.load_factors({'/expo/indu/': [x+'_%s'%bchmrk_name for x in ['portfolio', 'benchmark', 'expo']]},
+                                     dates=dates).rename(columns= lambda x: x.replace('_%s'%bchmrk_name, ''))
+        indu.index.names = ['date', 'industry']
+        return barra, indu
+
     # 策略当日模拟持仓(自定义总市值)
     def history_mimic_position(self, date, total_value=100000000, strategy_name=None, strategy_id=None):
         """
@@ -331,6 +377,51 @@ class StrategyManager(object):
         trades.to_excel('交易记录.xlsx', index=False)
         os.chdir(cwd)
 
+    # 导出调仓区间风险归因
+    def export_rebalance_attr(self, start_date, end_date, strategy_name=None, strategy_id=None, data_source='xy',
+                              bchmrk_name=None):
+        if strategy_id is not None:
+            strategy_name = self.strategy_name(strategy_id)
+        riskdb = RiskDataSource(data_source)
+        strategy_id = self.strategy_id(strategy_name)
+        rebalance_dates = self.rebalance_dates(strategy_name=strategy_name)
+        start_date = max(as_timestamp(start_date), as_timestamp(riskdb.min_date_of_factor_return))
+        end_date = min(as_timestamp(end_date), as_timestamp(riskdb.max_date_of_factor_return))
+        rebalance_dates = [x for x in rebalance_dates if start_date <= x <= end_date]
+        rebalance_attr = []
+        analyzer = self.performance_analyser(strategy_name=strategy_name)
+        bchmrk_name = self.get_attribute('benchmark', strategy_name=strategy_name) if bchmrk_name is None else bchmrk_name
+        for start_date, end_date in zip(rebalance_dates[:-1], rebalance_dates[1:]):
+            if os.path.isfile(
+                    os.path.join(sm._strategy_risk_path, str(strategy_id), data_source, 'expo', 'style',
+                                 'portfolio_%s.h5' % bchmrk_name)):
+                attr = analyzer.range_attribute_from_strategy(self, strategy_name, start_date, end_date,
+                                                              bchmrk_name=bchmrk_name)
+            else:
+                attr = analyzer.range_attribute(start_date, end_date, data_source, bchmrk_name)
+            attr = attr.to_frame(end_date).T
+            rebalance_attr.append(attr)
+        rebalance_attr = pd.concat(rebalance_attr).stack().to_frame("attr_%s"%bchmrk_name).rename_axis(['date','IDs'])
+        # 保存数据
+        ensure_dir_exists(os.path.join(self._strategy_risk_path, str(strategy_id), data_source, 'rebalance_attr'))
+        temp_h5 = H5DB(os.path.join(self._strategy_risk_path, "%d" % strategy_id, data_source))
+        temp_h5.save_factor(rebalance_attr, '/rebalance_attr/')
+
+    # 导入调仓区间风险归因
+    def import_rebalance_attr(self, start_date=None, end_date=None, strategy_name=None, strategy_id=None, data_source='xy',
+                              bchmrk_name=None):
+        if strategy_id is not None:
+            strategy_name = self.strategy_name(strategy_id)
+        strategy_id = self.strategy_id(strategy_name)
+        bchmrk_name = self.get_attribute('benchmark', strategy_name=strategy_name) if bchmrk_name is None else bchmrk_name
+        temp_h5 = H5DB(os.path.join(self._strategy_risk_path, "%d" % strategy_id, data_source))
+        if start_date is None and end_date is None:
+            attr = temp_h5.load_factor("attr_%s"%bchmrk_name, '/rebalance_attr/')
+        else:
+            dates = tc.get_trade_days(start_date, end_date)
+            attr = temp_h5.load_factor("attr_%s"%bchmrk_name, '/rebalance_attr/', dates=dates)
+        return attr['attr_%s'%bchmrk_name].unstack()
+
     # back up
     def backup(self):
         from filemanager import zip_dir
@@ -349,6 +440,14 @@ class StrategyManager(object):
             return pf['portfolio'].index.max()
         else:
             return
+
+    # 调仓日期序列
+    def rebalance_dates(self, strategy_id=None, strategy_name=None):
+        if strategy_id is not None:
+            strategy_name = self.strategy_name(strategy_id)
+        stocklist_name = self.strategy_stocklist(strategy_name=strategy_name)['stocklist_name']
+        positions = self._stocklist_manager.get_position(stocklist_name)
+        return positions.index.get_level_values(0).unique().tolist()
 
 
 def update_nav(start, end):
@@ -404,6 +503,8 @@ def collect_nav(mailling=False):
         mymail.quit()
     return df
 
+# 类实例
+sm = StrategyManager('D:/data/factor_investment_strategies', 'D:/data/factor_investment_stocklists')
 
 if __name__ == '__main__':
     sm = StrategyManager('D:/data/factor_investment_strategies', 'D:/data/factor_investment_stocklists')
