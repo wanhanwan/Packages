@@ -219,11 +219,12 @@ def __StandardFun__(data0, **kwargs):
         data_to_standard[kwargs['factor_name']+'_after_standard'] = 0
     return data_to_standard
 
+
 def __StandardQTFun__(data):
     data0 = data.reset_index(level=0, drop=True)
     NotNAN = pd.notnull(data0)
     quantile = data0.rank(method='min') / NotNAN.sum()
-    quantile.loc[quantile[data.columns[0]]==1, :] = 1 - 10 ** (-6)
+    quantile.loc[quantile[data.columns[0]] == 1, :] = 1 - 10 ** (-6)
     data_after_standard = norm.ppf(quantile)
     return pd.DataFrame(data_after_standard, index=data.index, columns=data.columns)
 
@@ -261,6 +262,7 @@ def Standard(data, factor_name, mean_weight=None, std_weight=None, **kwargs):
 
 def StandardByQT(data, factor_name):
     """横截面上分位数标准化
+
     参数:
     ----------------------
     data: DataFrame
@@ -427,3 +429,41 @@ def ScoringFactors(factor_data, factors, **kwargs):
     d = d.rename(columns=lambda x:x.replace('_after_drop_outlier', ''))
     dd = d.apply(lambda x: Standard(x.reset_index(), factor_name=x.name, **kwargs)[x.name+'_after_standard'])
     return dd.rename(columns=lambda x:x.replace('_after_standard', ''))
+
+
+def NeutralizeBySizeIndu(factor_data, factor_name, std_qt=True, indu_name='中信一级'):
+    """ 为因子进行市值和行业中性化
+
+    市值采用对数市值(百万为单位);
+
+    Paramters:
+    ==========
+    factor_data: pd.DataFrame(index:[date, IDs])
+        因子数值
+    factor_name: str
+        因子名称
+    std_qt: bool
+        在中性化之前是否进行分位数标准化，默认为True
+    indu_name: str
+        行业选取
+    """
+    from FactorLib.data_source.base_data_source_h5 import data_source
+    dates = factor_data.index.get_level_values(0).unique().tolist()
+    ids = factor_data.index.get_level_values(1).unique().tolist()
+    lncap = np.log(data_source.load_factor('float_mkt_value', '/stocks/', dates=dates, ids=ids) / 10000.0). \
+        rename(columns={'float_mkt_value': 'lncap'}).reindex(factor_data.index)
+    indu_flag = data_source.sector.get_industry_dummy(None, industry=indu_name, dates=dates).reindex(factor_data.index)
+
+    if std_qt:
+        factor_data = StandardByQT(factor_data, factor_name).rename(columns=lambda x: factor_name)
+        lncap = StandardByQT(lncap, 'lncap').rename(columns=lambda x: 'lncap')
+    industry_names = list(indu_flag.columns)
+    indep_data = lncap.join(indu_flag)
+    resid = Orthogonalize(factor_data, indep_data, factor_name, industry_names+['lncap'])
+    return resid
+
+
+if __name__ == '__main__':
+    from FactorLib.data_source.base_data_source_h5 import data_source
+    factor_data = data_source.load_factor('pe','/stock_value/', start_date='20100101', end_date='20141231')
+    r = NeutralizeBySizeIndu(factor_data, 'pe')
