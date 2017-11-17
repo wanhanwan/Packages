@@ -133,6 +133,9 @@ def Datetime2IntDate(date):
     Day = date.day
     return Year * 10000 + Month * 100 + Day
 
+def IntDate2Datetime(date):
+    return pd.to_datetime(str(date))
+
 
 # 日期字符串(20120202)转成datetime（timestamp），如果不是日期字符串，则返回None
 def DateStr2Datetime(date_str):

@@ -55,6 +55,15 @@ def tradecode_to_windcode(tradecode):
 def windcode_to_tradecode(windcode):
     return windcode[:6]
 
+def windcode_to_intcode(windcode):
+    return int(windcode[:6])
+
+def intcode_to_tradecode(intcode):
+    return str(intcode).zfill(6)
+
+def tradecode_to_intcode(tradecode):
+    return int(tradecode)
+
 def uqercode_to_windcode(uqercode):
     return uqercode[:6]+'.SH' if uqercode[-4:]=='XSHG' else uqercode[:6]+'.SZ'
 
