@@ -60,4 +60,4 @@ def load_factors(config):
     return factor_list.factor_list
 
 if __name__ == '__main__':
-    run("D:/FactorLib/single_factor_test/config.yml")
+    run(r"D:\factors\全市场(剔除银行券商)_中证500基准_2007年以来\update\config.yml")
