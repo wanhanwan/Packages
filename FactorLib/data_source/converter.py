@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 from os.path import join, abspath, dirname
 from collections import namedtuple
 from ..const import (
@@ -101,3 +102,25 @@ IndustryConverter = Converter({
     'cs_level_2': Rule(CS_LEVEL_2_DICT, lambda x: 'CI'+str(int(x)).zfill(6), lambda x: int(x[2:])),
     'sw_level_2': Rule(SW_LEVEL_2_DICT, lambda x: str(int(x)), int)
 })
+
+
+# ncdb中数据类型decode/encode
+# 日期类型
+DATE_ECODING = {'dtype': 'uint16', 'scale_factor': 1, '_FillValue': 0, 'units': 'days since 1970-01-01'}
+PRICE_ENCODING = {'dtype': 'uint16', 'scale_factor': 10e-3, '_FillValue': 0}
+BIGNUM_ENCODING = {'dtype': 'int64', 'scale_factor': 10e-5, '_FillValue': -9999}
+INTEGER_ENCODING = {'dtype': 'int32', 'scale_factor': 1, '_FillValue': -9999}
+BOOL_ENCODING = {'dtype': 'uint8', 'scale_factor': 1, '_FillValue': 2}
+
+
+def parse_nc_encoding(dtype):
+    if dtype in [np.float32, np.float64]:
+        return BIGNUM_ENCODING
+    elif dtype in [np.int32, np.int16, np.int64]:
+        return INTEGER_ENCODING
+    elif dtype in  [np.bool]:
+        return BOOL_ENCODING
+    elif dtype in [np.datetime64]:
+        return DATE_ECODING
+    else:
+        return {}

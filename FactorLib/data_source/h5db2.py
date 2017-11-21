@@ -1,27 +1,23 @@
 """h5db性能加强版
-保留h5db的框架，提升读写性能
+保留h5db的框架，使用3D-Array保存原始数据提升读写性能
 """
 
 import pandas as pd
 import numpy as np
 import os
-import shutil
 import h5py
-from ..utils.datetime_func import Datetime2DateStr, DateStr2Datetime, IntDate2Datetime, Datetime2IntDate
+from ..utils.datetime_func import Datetime2DateStr, DateStr2Datetime, IntDate2Datetime, Datetime2IntDate,\
+    MatlabDatetime2Datetime, Datetime2MatlabDatetime
 from ..utils.tool_funcs import tradecode_to_intcode, windcode_to_intcode, intcode_to_tradecode
-from filemanager import zip_dir, unzip_file
 from collections import namedtuple
 
-Rule = namedtuple('Rule', ['rule_id', 'read_func', 'write_func'])
+_DataTypeDict = {0: 'WFloat', 1: 'BFloat', 2: 'Date'}
+_Rule = namedtuple('Rule', ['data_type', 'multiplier'])
 # 数值转换
-# 0代表浮点数，1代表日期
-Converters = {
-    0: Rule(0, lambda x: x.astype('float32'), lambda x: x.astype('float32')),
-    1: Rule(1, lambda x: x.astype('str'), lambda x: x.dt.strftime('%Y%m%d').astype('int32'))
-}
-ConvertersDict = {
-    np.float32: Converters[0],
-    np.dtype('<M8[ns]'): Converters[1]
+_Converters = {
+    'WFloat': _Rule(0, 10000),
+    'BFloat': _Rule(1, 100),
+    'Date': _Rule(2, 1)
 }
 
 
@@ -34,15 +30,7 @@ class H5DB2(object):
         self._update_info()
 
     def _update_info(self):
-        factor_list = []
-
-        for root, subdirs, files in os.walk(self.data_path):
-            relpath = "/%s/" % os.path.relpath(root, self.data_path).replace("\\", "/")
-            for file in files:
-                if file.endswith(".hdf5"):
-                    factor_list.append([relpath, file[:-5]])
-        self.data_dict = pd.DataFrame(
-            factor_list, columns=['path', 'name'])
+        pass
 
     def set_data_path(self, path):
         self.data_path = path
@@ -53,7 +41,11 @@ class H5DB2(object):
     def check_factor_exists(self, factor_name, factor_dir='/'):
         return factor_name in self.data_dict[self.data_dict['path'] == factor_dir]['name'].values
 
-    # 删除因子
+    # 查看文件是否存在
+    def check_file_exists(self, file_name, file_dir='/'):
+        return os.path.isfile(self.abs_factor_path(file_dir, file_name))
+
+    # 删除文件
     def delete_factor(self, factor_name, factor_dir='/'):
         factor_path = self.abs_factor_path(factor_dir, factor_name)
         try:
@@ -63,12 +55,40 @@ class H5DB2(object):
             pass
         self._update_info()
 
-    # 列出因子名称
-    def list_factors(self, factor_dir):
-        factors = self.data_dict[self.data_dict.path == factor_dir]['name']
-        return factors.tolist()
+    # 列出单个文件的因子名称
+    def list_file_factors(self, file_name, file_dir):
+        file_path = self.abs_factor_path(file_dir, file_name)
+        with h5py.File(file_path, "r") as file:
+            return (file['data'].attrs['factor_names']).split(",")
 
-    # 重命名因子
+    # 列出文件的shape
+    def list_file_shape(self, file_name, file_dir):
+        file_path = self.abs_factor_path(file_dir, file_name)
+        with h5py.File(file_path, "r") as file:
+            return tuple(file['data'].attrs['shape'])
+
+    # 列出文件的日期
+    def list_file_dates(self, file_name, file_dir):
+        file_path = self.abs_factor_path(file_dir, file_name)
+        with h5py.File(file_path, "r") as file:
+            return file['date'][...]
+
+    # 列出文件的IDs
+    def list_file_ids(self, file_name, file_dir):
+        file_path = self.abs_factor_path(file_dir, file_name)
+        with h5py.File(file_path, "r") as file:
+            return file['IDs'][...]
+
+    # 列出因子数据类型
+    def list_factor_types(self, file_name, file_dir, factors=None):
+        file_path = self.abs_factor_path(file_dir, file_name)
+        with h5py.File(file_path, "r") as file:
+            if factors is None:
+                return [_DataTypeDict[x] for x in file['dtypes'][...]]
+            all_factors = ",".split((file['data'].attrs['factor_names']).decode('utf8'))
+            return [_DataTypeDict[file['dtypes'][all_factors.index(x)]] for x in factors]
+
+    # 重命名文件
     def rename_factor(self, old_name, new_name, factor_dir):
         factor_path = self.abs_factor_path(factor_dir, old_name)
         temp_factor_path = self.abs_factor_path(factor_dir, new_name)
@@ -80,24 +100,27 @@ class H5DB2(object):
             os.makedirs(self.data_path + factor_dir)
 
     # 因子的时间区间
-    def get_date_range(self, factor_name, factor_path):
-        panel = pd.read_hdf(self.abs_factor_path(factor_path, factor_name))
-        min_date = Datetime2DateStr(panel.major_axis.min())
-        max_date = Datetime2DateStr(panel.major_axis.max())
-        return min_date, max_date
+    def get_date_range(self, file_name, factor_path):
+        with h5py.File(self.abs_factor_path(factor_path, file_name), "r") as file:
+            max_date = MatlabDatetime2Datetime(file['date'][0])
+            min_date = MatlabDatetime2Datetime(file['date'][-1])
+        return Datetime2DateStr(min_date), Datetime2DateStr(max_date)
 
     # --------------------------数据管理-------------------------------------------
 
-    def _read_whole(self, factor_path, factor_name):
-        with h5py.File(factor_path, "r") as file:
-            factor_data = np.asarray(file['data'][...])
-            all_dates = np.sort(np.asarray(file['date'][...]))
-            all_ids = np.sort(np.asarray(file['IDs'][...]))
-            data_type = file['data'].attrs['dtype']
-        return factor_data, all_dates, all_ids, data_type
+    def _read_raw(self, file_path, dates_idx, ids_idx, factor_idx):
+        """读取原始数据，numpy作为容器"""
+        s_date, e_date = dates_idx
+        s_id, e_id = ids_idx
+        s_factor, e_factor = factor_idx
 
-    def load_factor(self, factor_name, factor_dir=None, dates=None, ids=None, idx=None,
-                    df=True):
+        with h5py.File(file_path, "r") as file:
+            factor_data = file['data'][s_date:e_date, s_id:e_id, s_factor:e_factor].astype('float64')
+            factor_data[factor_data == -10000*10000.0] = np.nan
+        return factor_data / 10000
+
+    def load_factor(self, file_name, file_dir=None, factor_names=None, dates=None, ids=None,
+                    idx=None, df=True, h5_style=True):
         """" 读取单因子数据
 
         paramters:
@@ -111,37 +134,49 @@ class H5DB2(object):
         df: bool
             是否已DataFrame格式返回. True by default.
         """
-        if not df and idx is not None:
-            raise ValueError("Parameters df must be True if idx is not None")
-        factor_path = self.abs_factor_path(factor_dir, factor_name)
-        factor_data, all_dates, all_ids, data_type = self._read_whole(factor_path, factor_name)
-        dates = all_dates if dates is None else self.save_convert_date(dates)
-        ids = all_ids if ids is None else self.save_convert_ids(ids)
-        dates.sort()
-        ids.sort()
-        temp = np.zeros((len(dates), len(ids))) * np.nan
-        temp[np.in1d(dates, all_dates), np.in1d(ids, all_ids)] = factor_data[np.in1d(all_dates, dates), np.in1d(all_ids, ids)]
 
-        if df:
-            date_index = [IntDate2Datetime(x) for x in dates]
-            ids_index = [intcode_to_tradecode(x) for x in ids]
-            factor_data = pd.DataFrame(temp, index=date_index, columns=ids_index).stack().to_frame(factor_name)
-            factor_data.index.names = ['date', 'IDs']
-            if idx is not None:
-                return factor_data.align(idx, join='right')[0].apply(Converters[data_type].read_func)
-            return factor_data.apply(Converters[data_type].read_func)
+        file_shape = self.list_file_shape(file_name, file_dir)
+        all_factors = self.list_file_factors(file_name, file_dir)
+        all_ids = self.list_file_ids(file_name, file_dir)
+        all_dates = self.list_file_dates(file_name, file_dir)
+        if factor_names is None:
+            factor_idx = (0, file_shape[2])
+            factor_names = all_factors
         else:
-            return temp, dates, ids, data_type
+            temp_factors = np.sort(factor_names)
+            factor_idx = (all_factors.index(temp_factors[0]), all_factors.index(temp_factors[-1]))
+        if dates is None:
+            date_idx = (0, file_shape[0])
+            dates = all_dates
+        else:
+            dates = np.sort(Datetime2MatlabDatetime(pd.DatetimeIndex(dates).values))
+            date_idx = (np.searchsorted(all_dates, dates[0]), np.searchsorted(all_dates, dates[-1], side='right'))
+        if ids is None:
+            ids_idx = (0, file_shape[1])
+            ids = all_ids
+        else:
+            ids = np.sort(ids).astype('int')
+            ids_idx = (np.searchsorted(all_ids, ids[0]), np.searchsorted(all_ids, ids[-1], side='right'))
+        factor_data = self._read_raw(self.abs_factor_path(file_dir, file_name), date_idx, ids_idx, factor_idx)
+        date_idx2 = np.in1d(all_dates[date_idx[0]:date_idx[-1]], dates)
+        ids_idx2 = np.in1d(all_ids[ids_idx[0]:ids_idx[-1]], ids)
+        factor_idx2 = np.in1d(all_factors[factor_idx[0]:factor_idx[-1]], factor_names)
+        factor_data = factor_data[np.ix_(date_idx2, ids_idx2, factor_idx2)]
+        if df:
+            if h5_style:
+                ids_str_func = np.frompyfunc(intcode_to_tradecode, 1, 1)
+                ids_str = ids_str_func(ids)
+                datetimes = MatlabDatetime2Datetime(dates)
+                df = self.arr3d2df(factor_data, datetimes, ids_str, factor_names)
+            else:
+                df = self.arr3d2df(factor_data, dates, ids, factor_names)
+            if idx is not None:
+                df = df.reindex(idx.index)
+            return df
+        return factor_data
 
-    def load_factors(self, factor_names_dict, dates=None, ids=None):
-        _l = []
-        for factor_path, factor_names in factor_names_dict.items():
-            for factor_name in factor_names:
-                df = self.load_factor(factor_name, factor_dir=factor_path, dates=dates, ids=ids)
-                _l.append(df)
-        return pd.concat(_l, axis=1)
 
-    def save_factor(self, factor_data, factor_dir, if_exists='append'):
+    def save_factor(self, factor_data, file_name, file_dir, if_exists='append'):
         """往数据库中写数据
         数据格式：DataFrame(index=[date,IDs],columns=data)
         """
@@ -150,99 +185,51 @@ class H5DB2(object):
                 factor_data['IDs'] = '111111'
                 factor_data.set_index('IDs', append=True, inplace=True)
             else:
-                factor_data['date'] = DateStr2Datetime('19000101')
+                factor_data['date'] = DateStr2Datetime('19700101')
                 factor_data.set_index('date', append=True, inplace=True)
+        factor_data.sort_index(inplace=True)
+        factor_data.reset_index(inplace=True)
+        factor_data.fillna(-10000, inplace=True)
+        datetime_data = factor_data.select_dtypes(include='datetime64').apply(Datetime2MatlabDatetime)
+        factor_data[datetime_data.columns] = datetime_data
+        str_data = factor_data.select_dtypes('object').apply(lambda x: x.astype('int64'))
+        factor_data[str_data.columns] = str_data
+        factor_data.set_index(['date', 'IDs'], inplace=True)
+        othertype_data = (factor_data.select_dtypes(include=['float64', 'float32', 'int32', 'int64',
+                                                             'uint8']) * 10000).astype('int64')
+        factor_data[othertype_data.columns] = othertype_data
+        factor_data = factor_data.astype('int64')
 
-        self.create_factor_dir(factor_dir)
-        all_dates = np.sort([Datetime2IntDate(x) for x in factor_data.index.get_level_values(0).unique()])
-        all_ids = np.sort([tradecode_to_intcode(x) for x in factor_data.index.get_level_values(1).unique()])
-        for column in factor_data.columns:
-            factor_path = self.abs_factor_path(factor_dir, column)
-            temp = factor_data[[column]].dropna().apply(ConvertersDict[factor_data[column].dtype].write_func).unstack().values
-            if not self.check_factor_exists(column, factor_dir):
-                with h5py.File(factor_path, "w") as file:
-                    dset = file.create_dataset("data", temp.shape, dtype=temp.dtype, data=temp)
-                    dset.attrs['dtype'] = ConvertersDict[temp.dtype].rule_id
-                    file.create_dataset("date", (len(all_dates), ), dtype=all_dates.dtype, data=all_dates)
-                    file.create_dataset("IDs", (len(all_ids), ), dtype=all_ids.dtype, data=np.asarray(all_ids))
-            elif if_exists == 'append':
-                old_frame = self.load_factor(column, factor_dir)
-                new_frame = old_frame().append(factor_data[[column]].dropna())
-                new_frame = new_frame[~new_frame.index.duplicated(keep='last')]
-                new_dates = np.sort([Datetime2IntDate(x) for x in new_frame.index.get_level_values(0).unique()])
-                new_ids = np.sort([tradecode_to_intcode(x) for x in new_frame.index.get_level_values(1).unique()])
-                new_value = new_frame.apply(ConvertersDict[new_frame[column].dtype].write_func).unstack().values
-                available_name = self.get_available_factor_name(column, factor_dir)
-                with h5py.File(self.abs_factor_path(factor_dir, available_name), "w") as file:
-                    dset = file.create_dataset("data", new_value.shape, dtype=new_value.dtype, data=new_value)
-                    dset.attrs['dtype'] = ConvertersDict[new_value.dtype].rule_id
-                    file.create_dataset("date", (len(new_dates), ), dtype=new_dates.dtype, data=new_dates)
-                    file.create_dataset("IDs", (len(new_ids), ), dtype=new_ids.dtype, data=np.asarray(new_ids))
-                self.delete_factor(column, factor_dir)
-                self.rename_factor(available_name, column, factor_dir)
-            elif if_exists == 'replace':
-                self.delete_factor(column, factor_dir)
-                with h5py.File(factor_path, "w") as file:
-                    dset = file.create_dataset("data", temp.shape, dtype=temp.dtype, data=temp)
-                    dset.attrs['dtype'] = ConvertersDict[temp.dtype].rule_id
-                    file.create_dataset("date", (len(all_dates), ), dtype=all_dates.dtype, data=all_dates)
-                    file.create_dataset("IDs", (len(all_ids), ), dtype=all_ids.dtype, data=np.asarray(all_ids))
-            else:
-                self._update_info()
-                raise KeyError("please make sure if_exists is valide")
+        self.create_factor_dir(file_dir)
+        all_ids = factor_data.index.get_level_values(1).unique()
+        all_dates = factor_data.index.get_level_values(0).unique()
+        factor_names = ",".join(list(factor_data.columns))
+        if not self.check_file_exists(file_name, file_dir):
+            arr3d = self.df2arr3d(factor_data)
+            shape = arr3d.shape
+            self.save_arr3d(self.abs_factor_path(file_dir, file_name), arr3d, all_dates, all_ids, factor_names, shape)
+        elif if_exists == 'append':
+            old_frame = (self.load_factor(file_name, file_dir, h5_style=False).fillna(-10000) * 10000).astype('int64')
+            new_frame = old_frame.append(factor_data)
+            new_frame = new_frame[~new_frame.index.duplicated(keep='last')].sort_index()
+            new_arr = self.df2arr3d(new_frame)
+            new_ids = new_frame.index.get_level_values(1).unique()
+            new_dates = new_frame.index.get_level_values(0).unique()
+            new_shape = new_arr.shape
+            new_factors = ",".join(list(new_frame.columns))
+            available_name = self.get_available_factor_name(file_name, file_dir)
+            self.save_arr3d(self.abs_factor_path(file_dir, available_name), new_arr, new_dates, new_ids, new_factors, new_shape)
+            self.delete_factor(file_name, file_dir)
+            self.rename_factor(available_name, file_name, file_dir)
+        elif if_exists == 'replace':
+            self.delete_factor(file_name, file_dir)
+            arr3d = self.df2arr3d(factor_data)
+            shape = arr3d.shape
+            self.save_arr3d(self.abs_factor_path(file_dir, file_name), arr3d, all_dates, all_ids, factor_names, shape)
+        else:
+            self._update_info()
+            raise KeyError("please make sure if_exists is valide")
         self._update_info()
-
-    def snapshot(self, dates, zipname=None, mail=False):
-        """获取数据库快照并保存"""
-        self._update_info()
-        dates = list(dates)
-        date_now = max(dates).strftime("%Y%m%d")
-        if os.path.isdir(os.path.join(self.snapshots_path, date_now)):
-            shutil.rmtree(os.path.join(self.snapshots_path, date_now), True)
-        os.mkdir(os.path.join(self.snapshots_path, date_now))
-        target_path = os.path.join(self.snapshots_path, date_now)
-        for d in self.data_dict['path'].unique():
-            os.makedirs(target_path + d)
-        for idx, row in self.data_dict.iterrows():
-            data = self.load_factor(row['name'], row['path']).reset_index()
-            snapshot = data[data['date'].isin(dates)]
-            if snapshot.empty:
-                snapshot = data[data['date'] == data['date'].max()]
-            snapshot.to_csv(target_path + row['path'] + row['name'] + '.csv', index=False)
-        if zipname is not None:
-            zip_dir(target_path, os.path.join(self.snapshots_path, '%s_%s.zip' % (date_now, zipname)))
-        if mail:
-            from mailing.mailmanager import mymail
-            mymail.connect()
-            mymail.login()
-            content = "hello everyone, this is factor data on %s" % date_now
-            attachment = os.path.join(self.snapshots_path, '%s_%s.zip' % (date_now, zipname))
-            try:
-                mymail.send_mail("base factor data on %s" % date_now, content, {attachment})
-            except:
-                mymail.connect()
-                mymail.send_mail("base factor data on %s" % date_now, content, {attachment})
-            mymail.quit()
-
-    def read_snapshot(self, name):
-        snapshotzip = self.snapshots_path + "/%s" % name
-        unzip_file(snapshotzip, snapshotzip.replace('.zip', ''))
-        snapshotdir = snapshotzip.replace('.zip', '')
-        for dirpath, subdirs, filenames in os.walk(snapshotdir):
-            factor_dir = '/%s/' % os.path.relpath(dirpath, snapshotdir).replace('\\', '/')
-            for file in filenames:
-                print(file)
-                if file.endswith(".csv"):
-                    try:
-                        data = pd.read_csv(os.path.join(dirpath, file), converters={'IDs': str}, parse_dates=['date'])
-                    except:
-                        data = pd.read_csv(os.path.join(dirpath, file), converters={'IDs': str}, encoding="GBK",
-                                           parse_dates=['date'])
-                    data['IDs'] = data['IDs'].str.zfill(6)
-                    data.set_index(['date', 'IDs'], inplace=True)
-                    if data.columns.isin(['list_date', 'backdoordate']).any():
-                        data = data.astype('str')
-                    self.save_factor(data, factor_dir)
 
     # -------------------------工具函数-------------------------------------------
     def abs_factor_path(self, factor_path, factor_name):
@@ -254,18 +241,21 @@ class H5DB2(object):
             i += 1
         return factor_name + str(i)
 
-    def save_convert_ids(self, ids):
-        if isinstance(ids[0], str):
-            return [tradecode_to_intcode(x) if len(x) > 6 else windcode_to_intcode(x) for x in ids]
-        elif isinstance(ids[0], int):
-            return ids
-        else:
-            raise TypeError
+    def arr3d2df(self, arr3d, dim1, dim2, col_names):
+        idx = pd.MultiIndex.from_product([dim1, dim2], names=['date', 'IDs'])
+        new_arr = arr3d.reshape((-1, arr3d.shape[-1]))
+        return pd.DataFrame(new_arr, index=idx, columns=col_names)
 
-    def save_convert_date(self, dates):
-        if isinstance(dates, pd.DatetimeIndex):
-            return dates.strftime("%Y%m%d").astype('int32').tolist()
-        elif isinstance(dates[0], str):
-            return [int(x) for x in dates]
-        else:
-            raise TypeError
+    def df2arr3d(self, df):
+        n_factors = df.shape[1]
+        values = df.unstack().fillna(-10000 * 10000).values
+        arr3d = values.reshape((values.shape[0], -1, n_factors), order='F')
+        return arr3d
+
+    def save_arr3d(self, path, arr3d, date, IDs, factor_names, shape):
+        with h5py.File(path, "w") as file:
+            dset = file.create_dataset("data", dtype=np.int64, data=arr3d, compression='lzf')
+            dset.attrs['factor_names'] = str(factor_names)
+            dset.attrs['shape'] = np.array(shape)
+            file.create_dataset("date", dtype=np.int64, data=date, compression='lzf')
+            file.create_dataset("IDs", dtype=np.int64, data=IDs, compression='lzf')
