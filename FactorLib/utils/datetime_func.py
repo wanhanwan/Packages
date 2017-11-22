@@ -1,7 +1,9 @@
 # coding: utf-8
 from pandas import datetime as pdDateTime
 from FactorLib.data_source.trade_calendar import tc
+from collections import Iterable
 import pandas as pd
+import numpy as np
 
 
 # 获取某个日期序列的每月最后一天序列
@@ -133,6 +135,9 @@ def Datetime2IntDate(date):
     Day = date.day
     return Year * 10000 + Month * 100 + Day
 
+def IntDate2Datetime(date):
+    return pd.to_datetime(str(date))
+
 
 # 日期字符串(20120202)转成datetime（timestamp），如果不是日期字符串，则返回None
 def DateStr2Datetime(date_str):
@@ -141,6 +146,19 @@ def DateStr2Datetime(date_str):
     except:
         return None
 
+
+# matlab格式的日期
+def Datetime2MatlabDatetime(dates):
+    if isinstance(dates, Iterable):
+        return ((np.array(dates, dtype='datetime64') - np.datetime64('1970-01-01T00:00:00')) /
+                np.timedelta64(1, 'D')).astype('int32')
+    else:
+        return int((np.datetime64(dates) - np.datetime64('1970-01-01T00:00:00')) /
+                   np.timedelta64(1, 'D'))
+
+# matlab格式转datetime
+def MatlabDatetime2Datetime(dates):
+    return pd.to_datetime(dates, unit='D')
 
 def GetDatetimeLastDayOfMonth(idx_datetime):
     s = pd.Series(idx_datetime, index=idx_datetime)

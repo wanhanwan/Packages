@@ -10,7 +10,7 @@ from FactorLib.const import (INDUSTRY_NAME_DICT,
                    )
 import pandas as pd
 import os
-
+from fastcache import clru_cache
 
 def dict_reverse(_dict):
     return {_dict[x]:x for x in _dict}
@@ -54,6 +54,16 @@ def tradecode_to_windcode(tradecode):
 
 def windcode_to_tradecode(windcode):
     return windcode[:6]
+
+def windcode_to_intcode(windcode):
+    return int(windcode[:6])
+
+@clru_cache()
+def intcode_to_tradecode(intcode):
+    return str(intcode).zfill(6)
+
+def tradecode_to_intcode(tradecode):
+    return int(tradecode)
 
 def uqercode_to_windcode(uqercode):
     return uqercode[:6]+'.SH' if uqercode[-4:]=='XSHG' else uqercode[:6]+'.SZ'

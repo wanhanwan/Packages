@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import statsmodels.api as sm
 from QuantLib.tools import df_rolling2
+from FactorLib.const import INDUSTRY_NAME_DICT
 from FactorLib.data_source.converter import IndustryConverter
 
 # 特异度
@@ -121,10 +122,33 @@ def excld_broker_banks(start, end, **kwargs):
     datasource.h5DB.save_factor(new_list, '/indexes/')
 
 
+# 行业哑变量
+def update_indu_dummy(start, end, **kwargs):
+    from FactorLib.data_source.converter import INTEGER_ENCODING
+    datasource = kwargs['data_source']
+    dummies = []
+    file_attr = {}
+    for k, v in INDUSTRY_NAME_DICT.items():
+        industry_info = datasource.sector.get_stock_industry_info(None, k, start, end)
+        dummy = pd.get_dummies(industry_info, drop_first=False).rename(columns=lambda x: x.replace(v+'_', ""))
+        dummy = dummy.drop('T00018', axis=0, level=1).fillna(0)
+        dummy2 = np.packbits(dummy.values.view(dtype='uint8'), axis=1)
+        length, width = dummy2.shape
+        dummy2 = pd.DataFrame(dummy2, index=dummy.index, columns=[v+'_%d'%x for x in range(width)])
+        dummies.append(dummy2)
+        file_attr[v] = ",".join(list(dummy.columns))
+    dummy = pd.concat(dummies, axis=1)
+    datasource.ncDB.save_factor(dummy, 'industry_dummy', '/dummy/',
+                                dtypes={str(x): INTEGER_ENCODING for x in dummy.columns.values})
+    datasource.ncDB.add_file_attr('industry_dummy', '/dummy/', file_attr)
+
+
 AlternativeFuncListMonthly = []
-AlternativeFuncListDaily = [iffr, unst, diversify_finance, excld_broker_banks, rescale_weight_afterdrop_brokers_and_banks]
+AlternativeFuncListDaily = [iffr, unst, diversify_finance, excld_broker_banks,
+                            rescale_weight_afterdrop_brokers_and_banks, update_indu_dummy]
 
 if __name__ == '__main__':
     from FactorLib.data_source.base_data_source_h5 import data_source
     # diversify_finance('20170608', '20170608', data_source=data_source)
-    rescale_weight_afterdrop_brokers_and_banks('20070131', '20171110', data_source=data_source)
+    # rescale_weight_afterdrop_brokers_and_banks('20070131', '20171110', data_source=data_source)
+    update_indu_dummy('20100101', '20171121', data_source=data_source)

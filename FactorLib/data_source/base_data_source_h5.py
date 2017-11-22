@@ -7,6 +7,8 @@ import numpy as np
 import pandas as pd
 from ..const import SW_INDUSTRY_DICT, MARKET_INDEX_DICT
 from .h5db import H5DB
+from .h5db2 import H5DB2
+from .ncdb import NCDB
 from .trade_calendar import tc
 from .tseries import resample_func, resample_returns
 from ..utils.datetime_func import DateStr2Datetime
@@ -20,6 +22,8 @@ class base_data_source(object):
         self.h5DB = sector.h5DB
         self.trade_calendar = sector.trade_calendar
         self.sector = sector
+        self.hdf5DB = sector.hdf5DB
+        self.ncDB = sector.ncDB
         self.dividend = None
         # self._load_dividends()
     
@@ -328,9 +332,11 @@ class base_data_source(object):
 
 
 class sector(object):
-    def __init__(self, h5, trade_calendar):
+    def __init__(self, h5, trade_calendar, hdf5=None, nc=None):
         self.h5DB = h5
         self.trade_calendar = trade_calendar
+        self.hdf5DB = hdf5
+        self.ncDB = nc
 
     def get_st(self, dates=None, start_date=None, end_date=None):
         """某一个时间段内st的股票"""
@@ -408,13 +414,19 @@ class sector(object):
     def get_industry_dummy(self, ids, industry='中信一级', start_date=None, end_date=None, dates=None,
                            drop_first=True):
         """股票行业哑变量"""
-        industry_info = self.get_stock_industry_info(None, industry, start_date, end_date, dates)
-        dummy = Generate_Dummy(industry_info.iloc[:, 0], drop_first)
-        if ids is not None:
-            if not isinstance(ids, list):
-                ids = [ids]
-            return dummy.loc[pd.IndexSlice[:, ids], :]
-        return dummy
+        dates = self.trade_calendar.get_trade_days(start_date, end_date) if dates is None else dates
+        industry_id = parse_industry(industry)
+        all_industries = self.ncDB.list_file_factors('industry_dummy', '/dummy/')
+        factor_names = [x for x in all_industries if x.startswith(industry_id)]
+        dummy = (self.ncDB
+                     .load_factor('industry_dummy', '/dummy/', factor_names=factor_names, ids=ids, dates=dates)
+                     .dropna(how='all').sort_index(axis=1))
+        industry_names = self.ncDB.load_file_attr('industry_dummy', '/dummy/', industry_id).split(",")
+        dummy_value = np.unpackbits(dummy.values.astype('uint8'), axis=1)[:, :len(industry_names)]
+        new_dummy = pd.DataFrame(dummy_value, index=dummy.index, columns=industry_names)
+        if drop_first:
+            return new_dummy.iloc[:, 1:]
+        return new_dummy
 
     def get_index_weight(self, ids, start_date=None, end_date=None, dates=None):
         """获取指数个股权重"""
@@ -494,8 +506,10 @@ class sector(object):
 
 
 h5 = H5DB("D:/data/h5")
+hdf5 = H5DB2("D:/data/hdf5")
+ncdb = NCDB("D:/data/nc")
 riskDB = H5DB("D:/data/risk_model")
-sec = sector(h5, tc)
+sec = sector(h5, tc, hdf5, ncdb)
 data_source = base_data_source(sec)
 
 if __name__ == '__main__':
