@@ -34,14 +34,13 @@ class NCDB(object):
         return path.isfile(self.abs_factor_path(file_dir, file_name))
 
     # 删除文件
-    def delete_factor(self, factor_name, factor_dir='/'):
+    def delete_factor(self, factor_name, factor_dir):
         factor_path = self.abs_factor_path(factor_dir, factor_name)
         try:
             os.remove(factor_path)
         except Exception as e:
-            print(e)
-            pass
-        self._update_info()
+            self._update_info()
+            raise e
 
     # 列出单个文件的因子名称
     def list_file_factors(self, file_name, file_dir):
@@ -130,14 +129,16 @@ class NCDB(object):
             else:
                 factor_data['date'] = np.datetime64('1970-01-01')
                 factor_data.set_index('date', append=True, inplace=True)
+        if isinstance(factor_data.columns, pd.MultiIndex):
+            factor_data = factor_data.stack()
         # factor_data.sort_index(inplace=True)
         new_dtypes = dict(date=parse_nc_encoding(np.datetime64), IDs=parse_nc_encoding(np.object))
         dtypes = {} if dtypes is None else dtypes
         for k, v in factor_data.dtypes.iteritems():
-            if k in dtypes:
-                new_dtypes[k] = dtypes[k]
+            if str(k) in dtypes:
+                new_dtypes[str(k)] = dtypes[str(k)]
             else:
-                new_dtypes[k] = parse_nc_encoding(v)
+                new_dtypes[str(k)] = parse_nc_encoding(v)
 
         self.create_factor_dir(file_dir)
         new_dset = factor_data.to_xarray()
@@ -150,7 +151,7 @@ class NCDB(object):
                 for factor in factors:
                     old_dtype = file[factor].encoding
                     new_dtypes[factor] = {k: v for k, v in old_dtype.items() if k
-                                          in ['_FillValue', 'dtype', 'scale_factor', 'units']}
+                                          in ['_FillValue', 'dtype', 'scale_factor', 'units', 'zlib', 'complevel']}
                 new_data = new_dset.combine_first(file)
             available_name = self.get_available_factor_name(file_name, file_dir)
             new_data.to_netcdf(self.abs_factor_path(file_dir, available_name),
@@ -164,6 +165,37 @@ class NCDB(object):
             self._update_info()
             raise KeyError("please make sure if_exists is valide")
         self._update_info()
+
+    def add_factor_attr(self, file_name, file_dir, attr_dict):
+        """添加因子属性
+        """
+        file_path = self.abs_factor_path(file_dir, file_name)
+        with xr.open_dataset(file_path, "data", engine="h5netcdf") as file:
+            for k, v in attr_dict.items():
+                file[k].attrs.update(**v)
+            available_name = self.get_available_factor_name(file_name, file_dir)
+            file.to_netcdf(self.abs_factor_path(file_dir, available_name), "w", engine="h5netcdf", group="data")
+        self.delete_factor(file_name, file_dir)
+        self.rename_factor(available_name, file_name, file_dir)
+
+    def add_file_attr(self, file_name, file_dir, attr_dict):
+        file_path = self.abs_factor_path(file_dir, file_name)
+        with xr.open_dataset(file_path, "data", engine="h5netcdf") as file:
+            new_dset = file.assign_attrs(**attr_dict)
+            available_name = self.get_available_factor_name(file_name, file_dir)
+            new_dset.to_netcdf(self.abs_factor_path(file_dir, available_name), "w", engine="h5netcdf", group="data")
+        self.delete_factor(file_name, file_dir)
+        self.rename_factor(available_name, file_name, file_dir)
+
+    def load_factor_attr(self, file_name, file_dir, factor, key):
+        file_path = self.abs_factor_path(file_dir, file_name)
+        with xr.open_dataset(file_path, "data", engine="h5netcdf") as file:
+            return file[factor].attrs.get(key, None)
+
+    def load_file_attr(self, file_name, file_dir, key):
+        file_path = self.abs_factor_path(file_dir, file_name)
+        with xr.open_dataset(file_path, "data", engine="h5netcdf") as file:
+            return file.attrs.get(key, None)
 
     # -------------------------工具函数-------------------------------------------
     def abs_factor_path(self, factor_path, factor_name):

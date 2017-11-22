@@ -106,11 +106,16 @@ IndustryConverter = Converter({
 
 # ncdb中数据类型decode/encode
 # 日期类型
-DATE_ECODING = {'dtype': 'uint16', 'scale_factor': 1, '_FillValue': 0, 'units': 'days since 1970-01-01'}
-PRICE_ENCODING = {'dtype': 'uint16', 'scale_factor': 10e-3, '_FillValue': 0}
-BIGNUM_ENCODING = {'dtype': 'int64', 'scale_factor': 10e-5, '_FillValue': -9999}
-INTEGER_ENCODING = {'dtype': 'int32', 'scale_factor': 1, '_FillValue': -9999}
-BOOL_ENCODING = {'dtype': 'uint8', 'scale_factor': 1, '_FillValue': 2}
+DATE_ECODING = {'dtype': 'uint16', 'scale_factor': 1, '_FillValue': 0, 'units': 'days since 1970-01-01', 'zlib': True,
+'complevel': 9}
+PRICE_ENCODING = {'dtype': 'uint16', 'scale_factor': 10e-3, '_FillValue': 0, 'zlib': True,
+'complevel': 9}
+BIGNUM_ENCODING = {'dtype': 'int64', 'scale_factor': 10e-5, '_FillValue': -9999,'zlib': True,
+'complevel': 9}
+INTEGER_ENCODING = {'dtype': 'int32', 'scale_factor': 1, '_FillValue': -9999, 'zlib': True,
+'complevel': 9}
+BOOL_ENCODING = {'dtype': 'uint8', 'scale_factor': 1, '_FillValue': 2, 'zlib': True,
+'complevel': 9}
 
 
 def parse_nc_encoding(dtype):

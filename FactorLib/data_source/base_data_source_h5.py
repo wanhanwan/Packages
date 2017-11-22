@@ -416,10 +416,17 @@ class sector(object):
         """股票行业哑变量"""
         dates = self.trade_calendar.get_trade_days(start_date, end_date) if dates is None else dates
         industry_id = parse_industry(industry)
-        dummy = self.ncDB.load_factor(industry_id, '/dummy/', ids=ids, dates=dates)
+        all_industries = self.ncDB.list_file_factors('industry_dummy', '/dummy/')
+        factor_names = [x for x in all_industries if x.startswith(industry_id)]
+        dummy = (self.ncDB
+                     .load_factor('industry_dummy', '/dummy/', factor_names=factor_names, ids=ids, dates=dates)
+                     .dropna(how='all').sort_index(axis=1))
+        industry_names = self.ncDB.load_file_attr('industry_dummy', '/dummy/', industry_id).split(",")
+        dummy_value = np.unpackbits(dummy.values.astype('uint8'), axis=1)[:, :len(industry_names)]
+        new_dummy = pd.DataFrame(dummy_value, index=dummy.index, columns=industry_names)
         if drop_first:
-            return dummy.iloc[:, 1:]
-        return dummy
+            return new_dummy.iloc[:, 1:]
+        return new_dummy
 
     def get_index_weight(self, ids, start_date=None, end_date=None, dates=None):
         """获取指数个股权重"""
