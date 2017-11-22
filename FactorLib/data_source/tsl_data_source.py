@@ -16,21 +16,21 @@ def _gstr_from_func(func_name, func_args):
     return func_str
 
 
-def CsQuery(filed_dict, curr_date, bk_name=_ashare, stock_list=None, condition="1"):
+def CsQuery(filed_dict, end_date, bk_name=_ashare, stock_list=None, condition="1"):
     """对天软Query函数的封装
     """
     if stock_list is None:
         stock_list = "''"
     else:
         stock_list = "'%s'" % ";".join(map(tradecode_to_tslcode, stock_list))
-    encode_date = tsl.EncodeDate(curr_date.year, curr_date.month, curr_date.day)
+    encode_date = tsl.EncodeDate(end_date.year, end_date.month, end_date.day)
     func_name = "Query"
     func_args = [bk_name, stock_list, condition, "''"] + list(reduce(lambda x, y: x+y, filed_dict.items()))
     script_str = _gstr_from_func(func_name, func_args)
     data = tsl.RemoteExecute(script_str, {'CurrentDate': encode_date})
     df = parse2DArray(data, column_decode=['IDs'])
     df['IDs'] = df['IDs'].apply(tslcode_to_tradecode)
-    df['date'] = curr_date
+    df['date'] = end_date
     return df.set_index(['date', 'IDs'])
 
 

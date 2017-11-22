@@ -342,6 +342,15 @@ class base_data_source(object):
             return new_data[pd.isnull(new_data).any(axis=1)]
         return new_data[pd.isnull(new_data).any(axis=1)].index.get_level_values(0).unique()
 
+    def update_factor(self, file_name, file_dir, update_func, data_src='h5DB'):
+        dates = self.test_completeness(file_name, file_dir, data_src)
+        data = []
+        for date in dates:
+            new_data = update_func(end_date=pd.to_datetime(date))
+            data.append(new_data)
+        data = pd.concat(data)
+        getattr(self, data_src).save_factor(data, file_dir)
+
 
 class sector(object):
     def __init__(self, h5, trade_calendar, hdf5=None, nc=None):
