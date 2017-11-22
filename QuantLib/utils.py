@@ -465,5 +465,6 @@ def NeutralizeBySizeIndu(factor_data, factor_name, std_qt=True, indu_name='ä¸­ä¿
 
 if __name__ == '__main__':
     from FactorLib.data_source.base_data_source_h5 import data_source
-    factor_data = data_source.load_factor('pe','/stock_value/', start_date='20100101', end_date='20141231')
-    r = NeutralizeBySizeIndu(factor_data, 'pe')
+    factor_data = data_source.load_factor('ths_click_ratio','/stock_alternative/', start_date='20120409', end_date='20141231')
+    r = NeutralizeBySizeIndu(factor_data, 'ths_click_ratio')
+    data_source.h5DB.save_factor(r, '/stock_alternative/')
