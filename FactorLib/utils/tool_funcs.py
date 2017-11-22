@@ -231,3 +231,12 @@ def searchNameInStrList(str_list, name_list):
     if Rslt is None:
         Rslt = str_list[0]
     return Rslt
+
+
+# 生成多维索引
+def generate_mulindex(method='product', **kwargs):
+    if method == 'product':
+        return pd.MultiIndex.from_product(kwargs.values(), names=list(kwargs))
+    elif method == 'array':
+        return pd.MultiIndex.from_arrays(kwargs.values(), names=list(kwargs))
+    raise KeyError
