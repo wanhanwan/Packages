@@ -151,4 +151,4 @@ if __name__ == '__main__':
     from FactorLib.data_source.base_data_source_h5 import data_source
     # diversify_finance('20170608', '20170608', data_source=data_source)
     # rescale_weight_afterdrop_brokers_and_banks('20070131', '20171110', data_source=data_source)
-    update_indu_dummy('20100101', '20161231', data_source=data_source)
+    update_indu_dummy('20100101', '20171121', data_source=data_source)
