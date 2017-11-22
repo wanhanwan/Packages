@@ -68,6 +68,11 @@ def tradecode_to_intcode(tradecode):
 def uqercode_to_windcode(uqercode):
     return uqercode[:6]+'.SH' if uqercode[-4:]=='XSHG' else uqercode[:6]+'.SZ'
 
+def tradecode_to_tslcode(code):
+    return 'SH'+code if code[0] == '6' else 'SZ'+code
+
+def tslcode_to_tradecode(code):
+    return code[2:] + '.' + code[:2]
 
 def drop_patch(code):
     return code.split(".")[0]

@@ -80,3 +80,15 @@ def parseCrossSection2DArray(TSData, date):
             iter_stock = 0
     table.index = pd.MultiIndex.from_product([[date], table.index], names=['date', 'IDs'])
     return table.sort_index()
+
+
+def parse2DArray(TSData, column_decode=None, encoding='utf8'):
+    """解析天软二维数组"""
+    if TSData[0] != 0:
+        raise ValueError("天软数据提取失败！")
+    data = pd.DataFrame(TSData[1])
+    data.rename(columns=lambda x: x.decode('utf8'), inplace=True)
+    if column_decode:
+        for column in column_decode:
+            data[column] = data[column].str.decode(encoding)
+    return data
