@@ -59,12 +59,12 @@ class H5DB(object):
         factor_data.to_hdf(temp_factor_path, new_name, complevel=9, complib='blosc')
         self.delete_factor(old_name, factor_dir)
 
-    #新建因子文件夹
+    # 新建因子文件夹
     def create_factor_dir(self, factor_dir):
         if not os.path.isdir(self.data_path+factor_dir):
             os.makedirs(self.data_path+factor_dir)
     
-    #因子的时间区间
+    # 因子的时间区间
     def get_date_range(self, factor_name, factor_path):
         panel = pd.read_hdf(self.abs_factor_path(factor_path, factor_name))
         min_date = Datetime2DateStr(panel.major_axis.min())

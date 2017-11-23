@@ -330,6 +330,28 @@ class base_data_source(object):
             d = pd.concat(l)
         return d[d.index.get_level_values(1).isin(ids)]
 
+    def test_completeness(self, file_name, file_dir, data_src='h5DB', details=False):
+        if not hasattr(self, data_src):
+            return KeyError("data source not found")
+        src = getattr(self, data_src)
+        data = src.load_factor(file_name, file_dir)
+        dates = data.index.get_level_values(0).unique().tolist()
+        ashare = self.sector.get_ashare_onlist(dates=dates, months_filter=1)
+        new_data = data.reindex(ashare.index)
+        if details:
+            return new_data[pd.isnull(new_data).any(axis=1)]
+        return new_data[pd.isnull(new_data).any(axis=1)].index.get_level_values(0).unique()
+
+    def update_factor(self, file_name, file_dir, update_func, data_src='h5DB'):
+        dates = self.test_completeness(file_name, file_dir, data_src)
+        data = []
+        for i, date in enumerate(dates):
+            print("当前时间:%s, 总进度: %d / %d"%(date.strftime("%Y-%m-%d"), i+1, len(dates)))
+            new_data = update_func(end_date=pd.to_datetime(date))
+            data.append(new_data)
+        data = pd.concat(data)
+        getattr(self, data_src).save_factor(data, file_dir)
+
 
 class sector(object):
     def __init__(self, h5, trade_calendar, hdf5=None, nc=None):

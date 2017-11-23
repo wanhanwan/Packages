@@ -68,6 +68,11 @@ def tradecode_to_intcode(tradecode):
 def uqercode_to_windcode(uqercode):
     return uqercode[:6]+'.SH' if uqercode[-4:]=='XSHG' else uqercode[:6]+'.SZ'
 
+def tradecode_to_tslcode(code):
+    return 'SH'+code if code[0] == '6' else 'SZ'+code
+
+def tslcode_to_tradecode(code):
+    return code[2:]
 
 def drop_patch(code):
     return code.split(".")[0]
@@ -231,3 +236,12 @@ def searchNameInStrList(str_list, name_list):
     if Rslt is None:
         Rslt = str_list[0]
     return Rslt
+
+
+# 生成多维索引
+def generate_mulindex(method='product', **kwargs):
+    if method == 'product':
+        return pd.MultiIndex.from_product(kwargs.values(), names=list(kwargs))
+    elif method == 'array':
+        return pd.MultiIndex.from_arrays(kwargs.values(), names=list(kwargs))
+    raise KeyError
