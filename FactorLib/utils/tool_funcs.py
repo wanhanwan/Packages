@@ -72,7 +72,7 @@ def tradecode_to_tslcode(code):
     return 'SH'+code if code[0] == '6' else 'SZ'+code
 
 def tslcode_to_tradecode(code):
-    return code[2:] + '.' + code[:2]
+    return code[2:]
 
 def drop_patch(code):
     return code.split(".")[0]

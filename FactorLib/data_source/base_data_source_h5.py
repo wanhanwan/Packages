@@ -345,7 +345,8 @@ class base_data_source(object):
     def update_factor(self, file_name, file_dir, update_func, data_src='h5DB'):
         dates = self.test_completeness(file_name, file_dir, data_src)
         data = []
-        for date in dates:
+        for i, date in enumerate(dates):
+            print("当前时间:%s, 总进度: %d / %d"%(date.strftime("%Y-%m-%d"), i+1, len(dates)))
             new_data = update_func(end_date=pd.to_datetime(date))
             data.append(new_data)
         data = pd.concat(data)
