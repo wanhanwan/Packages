@@ -36,11 +36,16 @@ def cal_ic(factor_data, factor_name, window='1m', rank=False, stock_validation=N
         new_factor = factor_data[factor_name]
 
     start_dt = new_factor.index.get_level_values(0).min()
-    offset_of_start_dt = data_source.trade_calendar.tradeDayOffset(start_dt, -1, window)
+    offset_of_start_dt = data_source.trade_calendar.tradeDayOffset(start_dt, 1, '1d')
     end_dt = new_factor.index.get_level_values(0).max()
     offset_of_end_dt = data_source.trade_calendar.tradeDayOffset(end_dt, 1, window)
     ids = new_factor.index.get_level_values(1).unique().tolist()
 
+    max_data_of_ret = data_source.h5DB.get_date_range('daily_returns', '/stocks/')[1]
+    if max_data_of_ret < offset_of_start_dt:
+        if retstocknums:
+            return None, 0
+        return None
     ret = data_source.get_fix_period_return(ids, freq=window, start_date=offset_of_start_dt, end_date=offset_of_end_dt)
     future_ret = date_shift(ret, -1).rename(columns={'daily_returns_%':'future_ret'})
     new_factor = pd.concat([new_factor, future_ret], axis=1, join='inner')

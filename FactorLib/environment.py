@@ -88,7 +88,11 @@ class Environment(object):
                 sector_name, dates=self._factor_group_info_dates)
         ids = stocks.index.get_level_values(1).unique().tolist()
         for factor in factors:
-            factor_data = self._env._data_source.load_factor(factor.name, factor.axe, ids=ids, dates=self._factor_group_info_dates)
+            if factor.alias_name is not None:
+                factor_data = self._env._data_source.load_factor(factor.alias_name, factor.axe, ids=ids, dates=self._factor_group_info_dates)
+                factor_data.columns = [factor.name]
+            else:
+                factor_data = self._env._data_source.load_factor(factor.name, factor.axe, ids=ids, dates=self._factor_group_info_dates)
             if not factor.data.empty:
                 old = factor.data[~factor.data.index.isin(factor_data.index)]
             else:

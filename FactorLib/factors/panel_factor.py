@@ -5,7 +5,7 @@ from ..factor_performance.ic_analyser import IC_Analyzer
 import pandas as pd
 
 class panelFactor(factor):
-    def __init__(self, name, axe, direction=1):
+    def __init__(self, name, axe, direction=1, alias=None):
         super(panelFactor, self).__init__(name, axe)
         self.direction = direction
         self.group_info = FactorGroups()
@@ -15,6 +15,10 @@ class panelFactor(factor):
         self.long_short_return = LongShortReturn()
         self.first_group_active_return = LongShortReturn()
         self.ic_series = IC_Analyzer()
+        self.alias_name = None
+        if alias:
+            self.alias_name = self.name
+            self.name = alias
 
     def set_state(self, state):
         self.group_return.set_state(state['group_return'])

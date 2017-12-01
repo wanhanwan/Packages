@@ -53,7 +53,8 @@ class BarraFactorReturn(object):
         风格因子
         估计时间区间
         """
-        self.args['所有日期'] = tc.get_trade_days(self.args['开始时间'], self.args['结束时间'], retstr=None)
+        self.args['因子开始时间'] = tc.tradeDayOffset(self.args['开始时间'], -1)
+        self.args['所有日期'] = tc.get_trade_days(self.args['因子开始时间'], self.args['结束时间'], retstr=None)
         estu = self.riskdb.load_factors(['Estu'], dates=self.args['所有日期'])
         self.all_ids = estu.index.get_level_values(1).unique().tolist()
         self.estu = estu[estu['Estu'] == 1]
@@ -72,7 +73,7 @@ class BarraFactorReturn(object):
     def prepareFactorReturnResults(self):
         """初始化回归结果"""
         all_ids = self.all_ids
-        dates = self.args['所有日期']
+        dates = self.args['所有日期'][1:]
         self.factor_return = pd.DataFrame(index=dates, columns=self.args['风格因子']+self.args['行业因子'][1])
         self.tvalue = pd.DataFrame(index=dates, columns=self.args['风格因子']+self.args['行业因子'][1])
         self.resid_return = pd.DataFrame(index=dates, columns=all_ids)
@@ -287,7 +288,7 @@ class BarraFactorReturn(object):
         nindustry = industry_dummy.shape[1]
         nfactor = factor_data.shape[1] + 1
         self.prepareFactorReturnResults()
-        for idate in dates:
+        for i, idate in enumerate(dates[:-1]):
             ifactor_data = pd.concat([factor_data.loc[idate], industry_dummy.loc[idate]], axis=1).sort_index()
             if np.any(ifactor_data.isnull()):
                 warn("因子数据存在缺失值，请检查！")
@@ -312,20 +313,20 @@ class BarraFactorReturn(object):
                 industry_return = np.ones(nindustry) * market_return_1dayfwd.loc[idate].iloc[0]
                 industry_return[ind] = params[nfactor:]
                 params = np.hstack((params[:nfactor], industry_return))
-            self.factor_return.loc[idate] = params
+            self.factor_return.loc[dates[i+1]] = params
             resid = result.resid / np.squeeze(isqrt_weight).values
-            self.resid_return.loc[idate, ids] = resid[:len(ids)]
+            self.resid_return.loc[dates[i+1], ids] = resid[:len(ids)]
             ind = np.hstack((np.ones(nfactor), ind)).astype('bool')
-            self.tvalue.loc[idate, ind] = result.tvalues
-            self.vifvalue.loc[idate] = vif
+            self.tvalue.loc[dates[i+1], ind] = result.tvalues
+            self.vifvalue.loc[dates[i+1]] = vif
             try:
-                self.fvalue.loc[idate] = result.fvalue
-                self.rsquared.loc[idate] = result.rsquared
-                self.adjust_rsquared.loc[idate] = result.rsquared_adj
+                self.fvalue.loc[dates[i+1]] = result.fvalue
+                self.rsquared.loc[dates[i+1]] = result.rsquared
+                self.adjust_rsquared.loc[dates[i+1]] = result.rsquared_adj
             except:
-                self.fvalue.loc[idate] = 0
-                self.rsquared.loc[idate] = 0
-                self.adjust_rsquared.loc[idate] = 0
+                self.fvalue.loc[dates[i+1]] = 0
+                self.rsquared.loc[dates[i+1]] = 0
+                self.adjust_rsquared.loc[dates[i+1]] = 0
         return 1
 
     def save_results(self):

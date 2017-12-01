@@ -35,16 +35,17 @@ class IC_Analyzer(object):
         return self.ic_series.rolling(window).mean()
 
     def update_info(self, new_values, new_hold_nums):
-        try:
-            old = self.ic_series[~self.ic_series.index.isin(new_values.index)]
-        except:
-            old = pd.Series()
-        try:
-            old_hold_nums = self.hold_nums[~self.hold_nums.index.isin(new_hold_nums.index)]
-        except:
-            old_hold_nums = pd.Series()
-        self.ic_series = old.append(new_values).sort_index()
-        self.hold_nums = old_hold_nums.append(new_hold_nums).sort_index()
+        if new_values is not None:
+            try:
+                old = self.ic_series[~self.ic_series.index.isin(new_values.index)]
+            except:
+                old = pd.Series()
+            try:
+                old_hold_nums = self.hold_nums[~self.hold_nums.index.isin(new_hold_nums.index)]
+            except:
+                old_hold_nums = pd.Series()
+            self.ic_series = old.append(new_values).sort_index()
+            self.hold_nums = old_hold_nums.append(new_hold_nums).sort_index()
     
     def get_state(self):
         return {'ic_series':self.ic_series, 'hold_nums': self.hold_nums}

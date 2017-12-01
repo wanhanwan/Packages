@@ -34,7 +34,7 @@ snowball_orthogonalized = ('xueqiu_orthogonalized', '/stock_alternative/', -1)
 StyleTechnicalFactor_AmountAvg_1M_orthogonalized = ('StyleTechnicalFactor_AmountAvg_1M_orthogonalized', '/stock_alternative/', -1)
 
 # 动量类因子
-six_month_highest_returns_plus = ('six_month_highest_returns', '/stock_reversal/', -1)
+six_month_highest_returns_plus = ('six_month_highest_returns', '/stock_reversal/', -1, 'six_month_highest_returns_plus')
 return_60d_plus = ('return_60d_plus', '/stock_momentum/', 1)
 
 # 成长性因子
@@ -153,8 +153,8 @@ factor_list_style = [StyleFactor_GM, StyleFactor_GrowthFactor, StyleFactor_Momen
                StyleFactor_TB_adjM, StyleFactor_TradingBehaviorFactor, StyleFactor_ValueFactor,StyleFactor_VG,
                StyleFactor_VGS, StyleFactor_VGS_TB, StyleFactor_VGS_TBadjM, StyleFactor_VS]
 
-self_defined = [bp_divide_median, bp_divide_median, float_mkt_value, six_month_highest_returns,
-                iffr, return_60d, turnover_adjust_total_mkt_value, ths_click_ratio_orthogonalized]
+self_defined = [bp_divide_median, bp_divide_median, float_mkt_value, six_month_highest_returns, six_month_highest_returns_plus,
+                iffr, return_60d, turnover_adjust_total_mkt_value]
 
 factor_list_others = [FamaFrenchFactor_IVR, RVFactor_RV, SpreadBiasFactor_SpreadBias_120D, ValueBiasFactor_EP_DR,
                       ValueBiasFactor_BP_DR, ValueBiasFactor_SP_DR, VWAPPFactor_VWAPP_OLS]

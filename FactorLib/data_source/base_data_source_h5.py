@@ -13,8 +13,8 @@ from .trade_calendar import tc
 from .tseries import resample_func, resample_returns
 from ..utils.datetime_func import DateStr2Datetime
 from ..utils.tool_funcs import parse_industry, financial_data_reindex, windcode_to_tradecode
-from QuantLib.utils import Generate_Dummy
 from .converter import IndustryConverter
+from PkgConstVars import *
 
 
 class base_data_source(object):
@@ -527,15 +527,15 @@ class sector(object):
         return latest_unst.set_index(['date', 'IDs']).drop('unst_date', axis=1)
 
 
-h5 = H5DB("D:/data/h5")
-hdf5 = H5DB2("D:/data/hdf5")
-ncdb = NCDB("D:/data/nc")
-riskDB = H5DB("D:/data/risk_model")
+h5 = H5DB(H5_PATH)
+hdf5 = H5DB2(HDF5_PATH)
+ncdb = NCDB(NC_PATH)
+riskDB = H5DB(RISKMODEL_PATH)
 sec = sector(h5, tc, hdf5, ncdb)
 data_source = base_data_source(sec)
 
 if __name__ == '__main__':
-    data_source.get_history_bar(['000001','000002'], start ='20100101',end='20161231', freq='2w')
+    data_source.get_history_bar(['000001','000002'], start='20100101',end='20161231', freq='2w')
 
 
 
