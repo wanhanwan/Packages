@@ -149,6 +149,18 @@ class H5DB(object):
         data = self.load_factor(factor_name, factor_dir).reset_index()
         data.to_feather(self.feather_data_path+factor_dir+factor_name+'.feather')
 
+    def combine_factor(self, left_name, right_name, factor_dir, drop_right=True):
+        """把两个因子合并，并删除右边的因子"""
+        right_data = self.load_factor(right_name, factor_dir).rename(columns={right_name: left_name})
+        self.save_factor(right_data, factor_dir)
+        if drop_right:
+            self.delete_factor(right_name, factor_dir)
+
+    def import_factor(self, factor_name, factor_dir, src_file):
+        fanme = os.path.split(src_file)[1].replace('.h5', '')
+        data = pd.read_hdf(src_file, fanme).to_frame().rename(columns={fanme: factor_name})
+        self.save_factor(data, factor_dir)
+
     def snapshot(self, dates, zipname=None, mail=False):
         """获取数据库快照并保存"""
         self._update_info()

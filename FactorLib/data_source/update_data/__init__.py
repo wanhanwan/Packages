@@ -12,9 +12,9 @@ index_weights = ['000905.SH', '000300.SH', '000991.SH', '000906.SH', '399974.SZ'
 slfdef_index = [{'func': 'typical_add_latest_st', 'func_args': {'st_months': 12}, 'name': 'barramodel1'}]
 
 # 更新行业分类
-industry_classes = {'sw_level_1':('industry_sw', 1),
-                    'cs_level_1':('industry_citic', 1),
-                    'sw_level_2':('industry_sw', 2),
-                    'cs_level_2':('industry_citic', 2),
-                    'wind_level_1':('industry_gics', 1)
+industry_classes = {'sw_level_1':('indexcode_sw', 1),
+                    'cs_level_1':('indexcode_citic', 1),
+                    'sw_level_2':('indexcode_sw', 2),
+                    'cs_level_2':('indexcode_citic', 2),
+                    'wind_level_1':('indexcode_wind', 1)
                     }

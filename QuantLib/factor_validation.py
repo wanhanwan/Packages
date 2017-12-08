@@ -2,7 +2,7 @@ import pandas as pd
 from . import stockFilter
 
 from FactorLib.data_source.base_data_source_h5 import data_source
-from FactorLib.data_source.tseries import date_shift
+from FactorLib.data_source.tseries import move_dtindex
 
 # 计算因子的IC值
 def cal_ic(factor_data, factor_name, window='1m', rank=False, stock_validation=None,
@@ -47,7 +47,7 @@ def cal_ic(factor_data, factor_name, window='1m', rank=False, stock_validation=N
             return None, 0
         return None
     ret = data_source.get_fix_period_return(ids, freq=window, start_date=offset_of_start_dt, end_date=offset_of_end_dt)
-    future_ret = date_shift(ret, -1).rename(columns={'daily_returns_%':'future_ret'})
+    future_ret = move_dtindex(ret, -1, window).rename(columns={'daily_returns_%':'future_ret'})
     new_factor = pd.concat([new_factor, future_ret], axis=1, join='inner')
 
     ic = new_factor.groupby(level=0).apply(corr, rank=rank)

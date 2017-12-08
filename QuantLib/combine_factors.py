@@ -11,6 +11,7 @@ import numpy as np
 import QuantLib as qlib
 from QuantLib.factor_validation import cal_ic
 
+
 def combine_factors_by_ic(factor_list):
     '''通过IC最优加权，将单因子合并成复合因子
 
@@ -73,3 +74,28 @@ def combine_factors_by_ic(factor_list):
     compound_factors.rename(columns={0: 'compound_factor'}, inplace=True)
 
     return factor_weight, compound_factors
+
+
+def weighted_combine(factor_list, standard=True, weights=None, new_name=None,
+                     join_method='inner'):
+    """加权合成因子
+    Params:
+    ========
+    factor_list: list
+        list of factors
+    """
+    factor_frame = pd.concat(factor_list, axis=1, join=join_method)
+    if standard:
+        factor_frame = factor_frame.apply(
+            lambda x: qlib.StandardByQT(x.to_frame(), x.name)[x.name])
+    # 去极端值
+    factor_frame = factor_frame.apply(
+        lambda x: qlib.DropOutlier(x.to_frame(), x.name, method='MAD')[x.name+'_after_drop_outlier']
+    )
+    factor_values = np.ma.array(factor_frame.values, mask=np.isnan(factor_frame.values))
+    if weights is None:
+        new_factor = np.ma.average(factor_values, axis=1)
+    else:
+        new_factor = np.ma.average(factor_values, axis=1, weights=weights)
+    new_name = 'new_factor' if new_name is None else new_name
+    return pd.DataFrame(new_factor, columns=[new_name], index=factor_frame.index)

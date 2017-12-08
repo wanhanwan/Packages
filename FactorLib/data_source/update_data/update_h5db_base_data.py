@@ -3,12 +3,13 @@ import numpy as np
 from functools import lru_cache
 from WindPy import *
 
-from FactorLib.utils.tool_funcs import get_industry_code, ReportDateAvailable, windcode_to_tradecode
+from FactorLib.utils.tool_funcs import get_industry_code, ReportDateAvailable, windcode_to_tradecode, drop_patch
 from FactorLib.utils.datetime_func import DateStr2Datetime
 from FactorLib.data_source.base_data_source_h5 import h5, sec, tc
 from FactorLib.data_source.wind_plugin import get_history_bar, get_wsd, _load_wsd_data
 from FactorLib.data_source.data_api import get_trade_days, trade_day_offset
 from FactorLib.data_source.update_data import index_members, sector_members, index_weights, industry_classes, slfdef_index
+from FactorLib.data_source.converter import IndustryConverter
 
 w.start()
 
@@ -56,10 +57,10 @@ def updateSectorConstituent2(dates, sectorid, column_mark):
     d = d.set_index(['date','IDs']).sort_index()
     return d
 
-def get_stock_industryname(stocks, date, industryid, industrytype):
+def get_stock_industryid(stocks, date, industryid, industrytype):
     data = w.wsd(stocks, industryid, date, date, "industryType=%s"%industrytype)
-    idx = pd.MultiIndex.from_product([[DateStr2Datetime(date)], [x[:6] for x in stocks]])
-    d = pd.Series(data.Data[0], index=idx)
+    idx = pd.MultiIndex.from_product([[DateStr2Datetime(date)], [x[:6] for x in stocks]], names=['date', 'IDs'])
+    d = pd.Series(data.Data[0], index=idx).dropna().apply(drop_patch)
     return d
 
 def index_weight_panel(dates, index_id):
@@ -183,9 +184,9 @@ def update_industry_name(start, end):
         l = []
         for idate in all_dates:
             ids = get_ashare(idate)
-            l.append(get_stock_industryname(ids, idate, *indutryparams))
-        industry = pd.concat(l).to_frame().rename(columns={0:column})
-        industry = get_industry_code(column, industry)
+            l.append(get_stock_industryid(ids, idate, *indutryparams))
+        industry = pd.concat(l).to_frame().rename(columns={0: column})
+        industry[column] = industry[column].apply(IndustryConverter._rules[column].name2id_func)
         h5.save_factor(industry, '/indexes/')
 
 
@@ -226,4 +227,4 @@ def update_slfdef_index(start, end):
         h5.save_factor(stocklist, '/indexes/')
 
 if __name__ == '__main__':
-    update_idx_weight('20140829', '20140829')
+    update_industry_name('20171111', '20171203')

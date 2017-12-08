@@ -142,7 +142,7 @@ def DropOutlier(data, factor_name, method='FixedRatio',
     参数
     ------------
     data: DataFrame
-          [IDs,date,Factor1,Factor2...]
+          [index:[date, IDs],Factor1,Factor2...]
     factor_name: str
           which column to be used
     method: str

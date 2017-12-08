@@ -65,21 +65,20 @@ def unst(start, end, **kwargs):
 # 把非银金融行业的股票细分成券商、保险、和其他
 def diversify_finance(start, end, **kwargs):
     datasource = kwargs['data_source']
+    dates = datasource.trade_calendar.get_trade_days(start, end)
     # 中信行业
-    cs_level_1 = datasource.sector.get_stock_industry_info(None, industry="中信一级", start_date=start, end_date=end)
-    cs_level_1_id = IndustryConverter.name2id("cs_level_1", cs_level_1['cs_level_1'])
-    cs_level_2 = datasource.sector.get_stock_industry_info(None, industry="中信二级", start_date=start, end_date=end)
-    cs_level_2_id = IndustryConverter.name2id("cs_level_2", cs_level_2['cs_level_2'])
-    cs_level_1_id.update(cs_level_2_id[cs_level_2_id.isin([5165, 5166, 5167])])
-    cs_diversified_finance = cs_level_1_id.to_frame("diversified_finance_cs")
+    cs_level_1_id = datasource.h5DB.load_factor('cs_level_1', '/indexes/', dates=dates)
+    cs_level_2_id = datasource.h5DB.load_factor('cs_level_2', '/indexes/', dates=dates)
+    cs_level_2_id.columns = ['cs_level_1']
+    cs_level_1_id.update(cs_level_2_id[cs_level_2_id['cs_level_1'].isin([5165, 5166, 5167])])
+    cs_diversified_finance = cs_level_1_id.rename(columns={'cs_level_1': 'diversified_finance_cs'})
     datasource.h5DB.save_factor(cs_diversified_finance, '/indexes/')
     # 申万行业
-    sw_level_1 = datasource.sector.get_stock_industry_info(None, industry="申万一级", start_date=start, end_date=end)
-    sw_level_1_id = IndustryConverter.name2id("sw_level_1", sw_level_1['sw_level_1'])
-    sw_level_2 = datasource.sector.get_stock_industry_info(None, industry="申万二级", start_date=start, end_date=end)
-    sw_level_2_id = IndustryConverter.name2id("sw_level_2", sw_level_2['sw_level_2'])
-    sw_level_1_id.update(sw_level_2_id[sw_level_2_id.isin([801194, 801193, 801191])])
-    sw_diversified_finance = sw_level_1_id.to_frame("diversified_finance_sw")
+    sw_level_1_id = datasource.h5DB.load_factor('sw_level_1', '/indexes/', dates=dates)
+    sw_level_2_id = datasource.h5DB.load_factor('sw_level_2', '/indexes/', dates=dates)
+    sw_level_2_id.columns = ['sw_level_1']
+    sw_level_1_id.update(sw_level_2_id[sw_level_2_id['sw_level_1'].isin([801194.0, 801193.0, 801191.0, 801192.0])])
+    sw_diversified_finance = sw_level_1_id.rename(columns={'sw_level_1': 'diversified_finance_sw'})
     datasource.h5DB.save_factor(sw_diversified_finance, '/indexes/')
 
 
@@ -149,6 +148,7 @@ AlternativeFuncListDaily = [iffr, unst, diversify_finance, excld_broker_banks,
 
 if __name__ == '__main__':
     from FactorLib.data_source.base_data_source_h5 import data_source
-    # diversify_finance('20170608', '20170608', data_source=data_source)
-    # rescale_weight_afterdrop_brokers_and_banks('20070131', '20171110', data_source=data_source)
-    update_indu_dummy('20100101', '20171121', data_source=data_source)
+    # diversify_finance('20050104', '20171204', data_source=data_source)
+    # excld_broker_banks('20050104', '20171204', data_source=data_source)
+    # rescale_weight_afterdrop_brokers_and_banks('20050104', '20171204', data_source=data_source)
+    update_indu_dummy('20050104', '20171204', data_source=data_source)
