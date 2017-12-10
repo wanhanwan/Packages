@@ -9,6 +9,7 @@ from ..const import SW_INDUSTRY_DICT, MARKET_INDEX_DICT
 from .h5db import H5DB
 from .h5db2 import H5DB2
 from .ncdb import NCDB
+from .csv_db import CsvDB
 from .trade_calendar import tc
 from .tseries import resample_func, resample_returns
 from ..utils.datetime_func import DateStr2Datetime
@@ -533,6 +534,7 @@ ncdb = NCDB(NC_PATH)
 riskDB = H5DB(RISKMODEL_PATH)
 sec = sector(h5, tc, hdf5, ncdb)
 data_source = base_data_source(sec)
+csv = CsvDB()
 
 if __name__ == '__main__':
     data_source.get_history_bar(['000001','000002'], start='20100101',end='20161231', freq='2w')
