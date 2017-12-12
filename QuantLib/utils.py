@@ -221,12 +221,12 @@ def __StandardFun__(data0, **kwargs):
 
 
 def __StandardQTFun__(data):
-    data0 = data.reset_index(level=0, drop=True)
-    NotNAN = pd.notnull(data0)
-    quantile = data0.rank(method='min') / NotNAN.sum()
-    quantile.loc[quantile[data.columns[0]] == 1, :] = 1 - 10 ** (-6)
+    # data0 = data.reset_index(level=0, drop=True)
+    NotNAN = pd.notnull(data)
+    quantile = data.rank(method='min') / (NotNAN.sum() + 1)
+    # quantile.loc[quantile[data.columns[0]] == 1, :] = 1 - 10 ** (-6)
     data_after_standard = norm.ppf(quantile)
-    return pd.DataFrame(data_after_standard, index=data.index, columns=data.columns)
+    return pd.DataFrame(data_after_standard, index=data.index.get_level_values(1), columns=data.columns)
 
 
 def Standard(data, factor_name, mean_weight=None, std_weight=None, **kwargs):
@@ -267,6 +267,8 @@ def StandardByQT(data, factor_name):
     ----------------------
     data: DataFrame
     [index:date,IDs,data:factor1,factor2,...]
+
+    factor_name: str
     """
     factor_name = [factor_name]
     after_standard = data[factor_name].groupby(level=0).apply(__StandardQTFun__)
@@ -411,6 +413,7 @@ def NonLinearSize(factor_data, factor_name, new_name):
         inl_size.loc[temp_ind] = iresi
     nl_size.columns = new_name
     return nl_size
+
 
 def Generate_Dummy(category_data, drop_first=True):
     """哑变量生成函数"""
