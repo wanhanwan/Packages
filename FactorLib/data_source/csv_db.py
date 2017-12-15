@@ -16,6 +16,16 @@ class CsvDB(object):
         """列出所有文件夹"""
         return os.listdir(self.root_path)
 
+    def list_dates(self, sub_dir):
+        """列出所有日期"""
+        dir_name = os.path.join(self.root_path, sub_dir)
+        return [x[:8] for x in os.listdir(dir_name)]
+
+    def date_range(self, sub_dir):
+        """列出某个文件夹的日期区间"""
+        all_dates = self.list_dates(sub_dir)
+        return min(all_dates), max(all_dates)
+
     def iter_by_dates(self, sub_dir, dates, factors=None):
         """按照日期，逐一迭代csv文件"""
         dir_name = os.path.join(self.root_path, sub_dir)

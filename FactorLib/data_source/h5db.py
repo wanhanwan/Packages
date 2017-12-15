@@ -5,6 +5,7 @@ import pandas as pd
 import os
 import shutil
 from ..utils.datetime_func import Datetime2DateStr, DateStr2Datetime
+from ..utils.tool_funcs import ensure_dir_exists
 from filemanager import zip_dir, unzip_file
 
 
@@ -12,6 +13,7 @@ class H5DB(object):
     def __init__(self, data_path):
         self.data_path = data_path
         self.feather_data_path = os.path.abspath(data_path+'/../feather')
+        self.csv_data_path = os.path.abspath(data_path+'/../csv')
         self.snapshots_path = os.path.abspath(data_path+'/../snapshots')
         self.data_dict = None
         self._update_info()
@@ -144,10 +146,25 @@ class H5DB(object):
     def to_feather(self, factor_name, factor_dir):
         """将某一个因子转换成feather格式，便于跨平台使用"""
         target_dir = self.feather_data_path + factor_dir
-        if not os.path.isdir(target_dir):
-            os.mkdir(target_dir)
-        data = self.load_factor(factor_name, factor_dir).reset_index()
-        data.to_feather(self.feather_data_path+factor_dir+factor_name+'.feather')
+        ensure_dir_exists(target_dir)
+        if factor_name is None:
+            factor_name = self.list_factors(factor_dir)
+        elif isinstance(factor_name, str):
+            factor_name = [factor_name]
+        for f in factor_name:
+            data = self.load_factor(f, factor_dir).reset_index()
+            data.to_feather(self.feather_data_path+factor_dir+f+'.feather')
+
+    def to_csv(self,factor_name, factor_dir):
+        target_dir = self.csv_data_path + factor_dir
+        ensure_dir_exists(target_dir)
+        if factor_name is None:
+            factor_name = self.list_factors(factor_dir)
+        elif isinstance(factor_name, str):
+            factor_name = [factor_name]
+        for f in factor_name:
+            data = self.load_factor(f, factor_dir).reset_index()
+            data.to_csv(self.csv_data_path + factor_dir + f + '.csv')
 
     def combine_factor(self, left_name, right_name, factor_dir, drop_right=True):
         """把两个因子合并，并删除右边的因子"""

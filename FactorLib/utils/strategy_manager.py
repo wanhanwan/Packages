@@ -17,10 +17,11 @@ class StrategyManager(object):
     fields = ['id', 'name', 'researcher', 'latest_rebalance_date', 'stocklist_name', 'stocklist_id','stockpool',
               'benchmark', 'first_rebalance_date', 'rebalance_frequence', 'industry_neutral', 'industry_class']
 
-    def __init__(self, strategy_path, stocklist_path):
+    def __init__(self, strategy_path, stocklist_path, risk_path=None):
         self._strategy_path = strategy_path
         self._stocklist_path = stocklist_path
         self._strategy_dict = None
+        self._strategy_risk_path = risk_path
         self._stocklist_manager = StockListManager(self._stocklist_path)
         self._init()
 
@@ -36,7 +37,8 @@ class StrategyManager(object):
         self._strategy_dict = pd.read_csv(os.path.join(self._strategy_path, 'summary.csv'), encoding='GBK',
                                           converters={'benchmark': lambda x: str(x).zfill(6)})
         ensure_dir_exists(os.path.join(os.path.dirname(self._strategy_path), 'factor_investment_risk'))
-        self._strategy_risk_path = os.path.join(os.path.dirname(self._strategy_path), 'factor_investment_risk')
+        if self._strategy_risk_path is None:
+            self._strategy_risk_path = os.path.join(os.path.dirname(self._strategy_path), 'factor_investment_risk')
 
     # 保存信息
     def _save(self):
@@ -505,6 +507,7 @@ def collect_nav(mailling=False):
 
 # 类实例
 sm = StrategyManager('D:/data/factor_investment_strategies', 'D:/data/factor_investment_stocklists')
+sm_l2 = StrategyManager('D:/data/level2_strategies','D:/data/level2_stocklists', 'D:/data/level2_risks')
 
 if __name__ == '__main__':
     sm = StrategyManager('D:/data/factor_investment_strategies', 'D:/data/factor_investment_stocklists')

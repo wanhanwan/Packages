@@ -62,6 +62,7 @@ StyleQualityFactor_OperatingProfitMargin_TTM = ('StyleQualityFactor_OperatingPro
 StyleQualityFactor_ROA_TTM = ('StyleQualityFactor_ROA_TTM', '/XYData/Quality/', 1)
 StyleQualityFactor_ROE_TTM = ('StyleQualityFactor_ROE_TTM', '/XYData/Quality/', 1)
 StyleQualityFactor_ThreeCosts2Sales_TTM = ('StyleQualityFactor_ThreeCosts2Sales_TTM', '/XYData/Quality/', 1)
+StyleQualityFactor_ROE_TTM_after_drop_outlier = ('StyleQualityFactor_ROE_TTM_after_drop_outlier', '/XYData/Quality/', 1)
 
 # Sentiment
 StyleSentimentFactor_EPSChange_FY0_1M = ('StyleSentimentFactor_EPSChange_FY0_1M', '/XYData/Sentiment', 1)
@@ -130,7 +131,8 @@ factor_list_quality = [StyleQualityFactor_AssetTurnover, StyleQualityFactor_Curr
                StyleQualityFactor_Debt2Equity_LR, StyleQualityFactor_GrossMargin_TTM,
                StyleQualityFactor_OperatingCashFlows2OperatingProfits_TTM,
                StyleQualityFactor_OperatingProfitMargin_TTM, StyleQualityFactor_ROA_TTM,
-               StyleQualityFactor_ROE_TTM, StyleQualityFactor_ThreeCosts2Sales_TTM]
+               StyleQualityFactor_ROE_TTM, StyleQualityFactor_ROE_TTM_after_drop_outlier,
+               StyleQualityFactor_ThreeCosts2Sales_TTM]
 
 factor_list_sentiment = [StyleSentimentFactor_EPSChange_FY0_1M, StyleSentimentFactor_EPSChange_FY0_3M,
                StyleSentimentFactor_RatingChange_1M, StyleSentimentFactor_RatingChange_3M,

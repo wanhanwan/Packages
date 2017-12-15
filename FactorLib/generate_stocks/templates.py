@@ -47,9 +47,9 @@ class AbstractStockGenerator(object):
             raw = pd.read_csv(csvf, converters={'date': lambda x: datetime.strptime(x, "%Y-%m-%d")}).set_index('date')
             stocks = stocks[~stocks.index.isin(raw.index)]
             new = raw.append(stocks)
-            new.reset_index().to_csv(self.config.stocklist.output, float_format="%.6f", index=False)
+            new.sort_index().reset_index().to_csv(self.config.stocklist.output, float_format="%.6f", index=False)
         else:
-            stocks.reset_index().to_csv(self.config.stocklist.output, float_format="%.6f", index=False)
+            stocks.sort_index().reset_index().to_csv(self.config.stocklist.output, float_format="%.6f", index=False)
 
     def _update_tempdata(self, start, end, **kwargs):
         temp = self.generate_tempdata(start, end, **kwargs)
@@ -91,22 +91,9 @@ class FactorInvestmentStocksGenerator(AbstractStockGenerator):
                                                                    self.config.stocklist.industry_neutral,
                                                                    self.config.stocklist.benchmark,
                                                                    self.config.stocklist.industry,
-                                                                   prc=self.config.stocklist.prc)
+                                                                   prc=self.config.stocklist.prc,
+                                                                   top = self.config.stocklist.top)
         return stocks
 
     def generate_tempdata(self, start, end, **kwargs):
-        temp = []
-        for i in [x for x in self.factor_data.columns if x != 'total_score']:
-            temp.append(
-                getattr(stocklist, self.config.stocklist.function)(self.factor_data,
-                                                                   i,
-                                                                   self.direction[i],
-                                                                   self.config.stocklist.industry_neutral,
-                                                                   self.config.stocklist.benchmark,
-                                                                   self.config.stocklist.industry,
-                                                                   prc=self.config.stocklist.prc))
-        temp = pd.concat(temp, axis=1, ignore_index=True).fillna(0)
-        temp.columns = [x + '_weight' for x in self.factor_data.columns if x != 'total_score']
-        temp['Weight'] = temp.mean(axis=1)
-        temp = pd.concat([temp, self.factor_data.reindex(temp.index)], axis=1)
-        return {'score_details': temp}
+        return {'score_details': self.factor_data}
