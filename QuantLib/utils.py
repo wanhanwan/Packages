@@ -2,8 +2,7 @@
 import pandas as pd
 import numpy as np
 import statsmodels.api as sm
-from scipy.stats import norm
-
+from scipy.stats import norm, rankdata
 
 def __DropOutlierFixedRate__(data, **kwargs):
     """以固定比率截断一部分异常值
@@ -56,7 +55,6 @@ def __DropOutlierMeanVariance__(data, **kwargs):
     after_dropOutlier.rename(data.name+'_after_drop_outlier', inplace=True)
 
     return pd.concat([data, after_dropOutlier], axis=1)
-
 
 def __DropOutlierBarra__(data, **kwargs):
     """
@@ -222,11 +220,11 @@ def __StandardFun__(data0, **kwargs):
 
 def __StandardQTFun__(data):
     # data0 = data.reset_index(level=0, drop=True)
-    NotNAN = pd.notnull(data)
-    quantile = data.rank(method='min') / (NotNAN.sum() + 1)
+    NotNAN = (~np.isnan(data.values)).sum()
+    quantile = rankdata(data.values, method='min') / (NotNAN + 1)
     # quantile.loc[quantile[data.columns[0]] == 1, :] = 1 - 10 ** (-6)
     data_after_standard = norm.ppf(quantile)
-    return pd.DataFrame(data_after_standard, index=data.index.get_level_values(1), columns=data.columns)
+    return pd.Series(data_after_standard, index=data.index.get_level_values(1), name=data.name)
 
 
 def Standard(data, factor_name, mean_weight=None, std_weight=None, **kwargs):
@@ -270,9 +268,22 @@ def StandardByQT(data, factor_name):
 
     factor_name: str
     """
-    factor_name = [factor_name]
-    after_standard = data[factor_name].groupby(level=0).apply(__StandardQTFun__)
+    # factor_name = [factor_name]
+    after_standard = data.groupby(level=0)[factor_name].transform(__StandardQTFun__)
     return after_standard
+
+
+def _resid_ols(y, x):
+    beta = np.linalg.inv(x.T.dot(x)).dot(x.T).dot(y)
+    resid = y - x.dot(beta)
+    return resid
+
+
+def OLS(df):
+    v = df.values
+    # v2 = right.loc[df.index.values].values
+    resid = _resid_ols(v[:, 0], v[:, 1:])
+    return pd.DataFrame(resid, index=df.index, columns=['resid'])
 
 
 def Orthogonalize(left_data, right_data, left_name, right_name):
@@ -288,25 +299,19 @@ def Orthogonalize(left_data, right_data, left_name, right_name):
         是否加入行业哑变量，None表示不加入行业因子
     """
 
-    def OLS(data, left_name):
-        tempData = data.copy()
-        yData = np.array(tempData.pop(left_name))
-        xData = np.array(tempData)
-        NaNInd = pd.notnull(yData) & pd.notnull(xData).all(axis=1)
-        model = sm.OLS(yData, xData, missing='drop')
-        res = model.fit()
-        data[left_name+'_orthogonalized'] = np.nan
-        data.ix[NaNInd, left_name+'_orthogonalized'] = res.resid
-        return data
-
-    factor_1 = left_data[[left_name]]
+    factor_1 = left_data[[left_name]].dropna().reset_index()
+    factor_1['IDs'] = factor_1['IDs'].astype('category', copy=False)
     if not isinstance(right_name, list):
-        right_name = [right_name]
-    factor_2 = right_data[right_name]
-    factor = pd.concat([factor_1, factor_2], axis=1)
-    factor['alpha'] = 1  # 加入常数项
-    factor = factor.groupby(level=0).apply(OLS, left_name=left_name)
-    return factor[[left_name+'_orthogonalized']]
+        right_name = [right_name, 'alpha']
+    else:
+        right_name.append('alpha')
+    right_data['alpha'] = 1.0  # 加入常数项
+    factor_2 = right_data[right_name].dropna().reset_index()
+    factor_2['IDs'] = factor_2['IDs'].astype('category')
+    factor = pd.merge(factor_1, factor_2, on=['date', 'IDs'], how='inner')
+    new_factor = factor.groupby('date')[[left_name]+right_name].apply(OLS)
+    new_factor.index = pd.MultiIndex.from_arrays([factor['date'].values, factor['IDs'].values], names=['date', 'IDs'])
+    return new_factor
 
 
 def Fillna_Barra(factor_data, factor_names, ref_name, classify_name):
@@ -447,7 +452,7 @@ def NeutralizeBySizeIndu(factor_data, factor_name, std_qt=True, indu_name='中�
         因子名称
     std_qt: bool
         在中性化之前是否进行分位数标准化，默认为True
-    indu_name: str
+    indu_name: strs
         行业选取
     """
     from FactorLib.data_source.base_data_source_h5 import data_source
@@ -458,8 +463,8 @@ def NeutralizeBySizeIndu(factor_data, factor_name, std_qt=True, indu_name='中�
     indu_flag = data_source.sector.get_industry_dummy(None, industry=indu_name, dates=dates).reindex(factor_data.index)
 
     if std_qt:
-        factor_data = StandardByQT(factor_data, factor_name).rename(columns=lambda x: factor_name)
-        lncap = StandardByQT(lncap, 'lncap').rename(columns=lambda x: 'lncap')
+        factor_data = StandardByQT(factor_data, factor_name).to_frame()
+        lncap = StandardByQT(lncap, 'lncap').to_frame()
     industry_names = list(indu_flag.columns)
     indep_data = lncap.join(indu_flag)
     resid = Orthogonalize(factor_data, indep_data, factor_name, industry_names+['lncap'])
@@ -468,6 +473,8 @@ def NeutralizeBySizeIndu(factor_data, factor_name, std_qt=True, indu_name='中�
 
 if __name__ == '__main__':
     from FactorLib.data_source.base_data_source_h5 import data_source
-    factor_data = data_source.load_factor('ths_click_ratio','/stock_alternative/', start_date='20120409', end_date='20141231')
+    factor_data = data_source.load_factor('ths_click_ratio','/stock_alternative/', start_date='20120409', end_date='20170531')
+    # profile
     r = NeutralizeBySizeIndu(factor_data, 'ths_click_ratio')
-    data_source.h5DB.save_factor(r, '/stock_alternative/')
+    print(r)
+    # data_source.h5DB.save_factor(r, '/stock_alternative/')
