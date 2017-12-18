@@ -1,3 +1,5 @@
+# coding: utf-8
+
 """基于hdf5的netcdf数据库
 保留h5db的框架，使用xarry保存原始数据提升读写性能
 支持单文件多因子存储

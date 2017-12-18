@@ -1,3 +1,5 @@
+# coding: utf-8
+
 import pandas as pd
 import numpy as np
 from os.path import join, abspath, dirname
@@ -20,16 +22,16 @@ def read_industry_mapping():
         if pd.__version__ >= '0.21.0':
             sw_level_2 = dict(file.parse(sheet_name='sw_level_2', header=0, converters={'Code': str}).values)
             cs_level_2 = dict(file.parse(sheet_name='cs_level_2', header=0, converters={'Code': str}).values)
-            divrsfd_finan_sw = dict(file.parse(sheet_name='细分银行券商保险(申万)', header=0,
+            divrsfd_finan_sw = dict(file.parse(sheet_name='divrsfd_finan_sw', header=0,
                                                    converters={'Code': str}).values)    # 把申万非银金融改成其二级行业
-            divrsfd_finan_cs = dict(file.parse(sheet_name='细分银行券商保险(中信)', header=0,
+            divrsfd_finan_cs = dict(file.parse(sheet_name='divrsfd_finan_cs', header=0,
                                                converters={'Code': str}).values)        # 中信同理
         else:
             sw_level_2 = dict(file.parse(sheetname='sw_level_2', header=0, converters={'Code': str}).values)
             cs_level_2 = dict(file.parse(sheetname='cs_level_2', header=0, converters={'Code': str}).values)
-            divrsfd_finan_sw = dict(file.parse(sheet_name='细分银行券商保险(申万)', header=0,
+            divrsfd_finan_sw = dict(file.parse(sheet_name='divrsfd_finan_sw', header=0,
                                                converters={'Code': str}).values)
-            divrsfd_finan_cs = dict(file.parse(sheet_name='细分银行券商保险(中信)', header=0,
+            divrsfd_finan_cs = dict(file.parse(sheet_name='divrsfd_finan_cs', header=0,
                                                converters={'Code': str}).values)
     # file.close()
     return sw_level_2, cs_level_2, divrsfd_finan_sw, divrsfd_finan_cs

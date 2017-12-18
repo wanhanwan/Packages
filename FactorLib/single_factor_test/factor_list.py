@@ -21,7 +21,7 @@ return_25d = ('return_25d', '/stock_momentum/', -1)
 
 # 流动性因子
 turnover_adjust_total_mkt_value = ('turnover_adjust_total_mkt_value', '/stock_liquidity/', -1)
-ths_amount_combined = ('ths_amount_combined', '/stock_alternative/', -1)
+turn_60d = ('turn_60d', '/stock_liquidity/', -1)
 
 # 其他因子
 iffr = ('iffr', '/stock_alternative/', 1)

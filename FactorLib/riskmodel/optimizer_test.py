@@ -9,11 +9,11 @@ from FactorLib.riskmodel.optimizer_xyquant import Optimizer
 from FactorLib.data_source.base_data_source_h5 import data_source, tc
 import pandas as pd
 
+secID = '399974'    # 指数代码(中证国企改革指数)
+signal_name = 'StyleFactor_VGS'  # 待优化的单因子
 optimal_assets = []
-for date in tc.get_trade_days('20140801', '20170831', freq='1m', retstr=None):
+for date in tc.get_trade_days('20170801', '20171130', freq='1m', retstr=None):
     # date = datetime(2017, 2, 24)
-    secID = '399974'
-    signal_name = 'StyleFactor_VGS'
     stockIDs = data_source.sector.get_index_members(ids=secID, dates=[date])
     # stockIDs = stockIDs[stockIDs.iloc[:, 0] == 1.0]
     # stockIDs = drop_suspendtrading(stockIDs)    # 剔除停牌股票
@@ -26,6 +26,8 @@ for date in tc.get_trade_days('20140801', '20170831', freq='1m', retstr=None):
     # opt.add_constraint('Style', {'MOMENTUM': 0.0, 'RESVOL': 0.0})
     opt.add_constraint('TrackingError', 0.0020/12)
     # opt.add_constraint('Indu')
+    opt.add_constraint('UserLimit', {'factor_name': 'close', 'factor_dir': '/stocks/',
+                                     'standard': True}, active=True)
     opt.solve()
 
     if opt.optimal:
