@@ -221,7 +221,7 @@ def __StandardFun__(data0, **kwargs):
 def __StandardQTFun__(data):
     # data0 = data.reset_index(level=0, drop=True)
     NotNAN = (~np.isnan(data.values)).sum()
-    quantile = rankdata(data.values, method='min') / (NotNAN + 1)
+    quantile = rankdata(data.values, method='min').astype('float64') / (NotNAN + 1.0)
     # quantile.loc[quantile[data.columns[0]] == 1, :] = 1 - 10 ** (-6)
     data_after_standard = norm.ppf(quantile)
     return pd.Series(data_after_standard, index=data.index.get_level_values(1), name=data.name)

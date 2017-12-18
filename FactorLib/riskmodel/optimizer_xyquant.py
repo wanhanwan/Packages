@@ -12,7 +12,7 @@ from FactorLib.data_source.base_data_source_h5 import data_source
 from QuantLib.stockFilter import suspendtrading
 from .riskmodel_data_source import RiskDataSource
 from itertools import combinations_with_replacement
-
+from QuantLib.utils import StandardByQT
 
 class Optimizer(object):
     """
@@ -37,7 +37,8 @@ class Optimizer(object):
     """
 
     def __init__(self, signal, target_ids, date, ds_name, asset=None, active=False, benchmark='000905', risk_mul=0):
-        self.target_ids = target_ids
+        self.target_ids = list(set(signal.index.values).intersection(set(target_ids)))
+        self.target_ids.sort()
         self._date = date
         self._rskds = RiskDataSource(ds_name)
         self._active = active
@@ -277,6 +278,41 @@ class Optimizer(object):
                                           name='tracking_error')
         self._signalrisk = sigma
 
+    def _add_userlimit(self, user_conf, **kwargs):
+        """添加用户自定义的因子限制"""
+        factor_name = user_conf.pop('factor_name')
+        factor_dir = user_conf.pop('factor_dir')
+        limit = user_conf.pop('limit')
+        is_standard = user_conf.get('standard', False)
+        is_active = kwargs.get('active', False)
+        factor_data = data_source.load_factor(factor_name, factor_dir, dates=[self._date])
+        if is_standard:
+            factor_data = StandardByQT(factor_data, factor_name).loc[self._date].reindex(self._allids, fill_value=0)
+        else:
+            factor_data = factor_data.loc[self._date, factor_name].reindex(self._allids, fill_value=0)
+        if is_active:
+            limit += self._prepare_benchmark_userexpo(factor_data)
+        portfolio_factor = factor_data.loc[self._allids]
+        if np.any(np.isnan(portfolio_factor.values)):
+            raise ValueError("风格因子数据存在缺失值")
+        lin_expr = []
+        sense = ['E']
+        rhs = [limit]
+        name = ['user_%s'%factor_name]
+        lin_expr.append([portfolio_factor.index.tolist(), portfolio_factor.values.tolist()])
+        self._c.linear_constraints.add(lin_expr=lin_expr, senses=sense, rhs=rhs, names=name)
+
+    def _prepare_benchmark_userexpo(self, data):
+        """计算基准指数的用户因子暴露"""
+        weight = self._bchmrk_weight
+        members = weight.index.tolist()
+        userexpo_benchmark = data.loc[members].mul(weight, axis='index').sum() / weight.sum()
+        return userexpo_benchmark
+
+    # def _prepare_portfolio_userexpo(self, name):
+    #
+
+
     def _load_portfolio_risk(self):
         """
         加载股票组合风险矩阵
@@ -317,6 +353,8 @@ class Optimizer(object):
             self._add_trckerr(*args, **kwargs)
         elif key == 'StockLimit':
             self._add_stock_limit(*args, **kwargs)
+        elif key == 'UserLimit':
+            self._add_userlimit(*args, **kwargs)
         else:
             raise NotImplementedError("不支持的限制类型:%s" % key)
 
@@ -380,5 +418,7 @@ class Optimizer(object):
             if self._signalrisk is not None:
                 active_weight = optimal_weight - self._bchmrk_weight
                 terr_expo = np.dot(np.dot(active_weight.values, self._signalrisk), active_weight.values)
+            # 计算用户因子敞口
+
         return style_expo, indu_expo, terr_expo
 
