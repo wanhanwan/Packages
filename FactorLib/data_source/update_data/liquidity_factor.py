@@ -3,6 +3,9 @@ import pandas as pd
 import numpy as np
 import statsmodels.api as sm
 import QuantLib as qlib
+import numba
+from numba import float64
+
 
 # 市值调整换手率
 def turnover_adjust_by_float_mv(start, end, **kwargs):
@@ -44,10 +47,35 @@ def _resid_ols(data):
     data.loc[notNanInd, 'resid'] = ols.resid
     return data[['resid']]
 
-LiquidityFuncListDaily = [turnover_adjust_by_float_mv]
+
+@numba.jit(float64(float64[:], float64), nogil=True)
+def _avg_turn2(datanp, valid_prc=0.8):
+    new_arr = np.zeros(len(datanp), dtype=np.float64)
+    for x in np.arange(60, len(datanp)):
+        if np.isnan(datanp[x-60:x]).sum() / len(datanp[x-60:x]) > 1 - valid_prc:
+            new_arr[x-1] = np.nan
+        else:
+            new_arr[x-1] = np.nanmean(datanp[x-60:x])
+    return new_arr
+
+
+def _avg_turn3(df):
+    new = _avg_turn2(df.values, 0.8)
+    return new
+
+def avg_turnover(start, end, **kwargs):
+    """60日日均换手率"""
+    datasource = kwargs['data_source']
+    start = datasource.trade_calendar.tradeDayOffset(start, -60)
+    trade_days = datasource.trade_calendar.get_trade_days(start, end)
+    turn = datasource.h5DB.load_factor('turn', '/stock_liquidity/', dates=trade_days)
+    avg_turn = turn.groupby(level=1)['turn'].transform(_avg_turn3)
+    datasource.h5DB.save_factor(avg_turn[avg_turn!=0].to_frame('turn_60d'), '/stock_liquidity/')
+
+LiquidityFuncListDaily = [turnover_adjust_by_float_mv, avg_turnover]
 LiquidityFuncListMonthly = []
 
 
 if __name__ == '__main__':
-    from data_source import data_source
-    turnover_adjust_by_float_mv('20170701', '20170731', data_source=data_source)
+    from FactorLib.data_source.base_data_source_h5 import data_source
+    avg_turnover('20070101', '20171215', data_source=data_source)
