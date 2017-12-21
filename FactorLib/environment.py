@@ -60,6 +60,10 @@ class Environment(object):
         self._factor_group_info_dates = self._trade_calendar.get_trade_days(
             group_start_date, self._config.end_date, self._config.freq, retstr=None
         )
+        if self._config.user_rebalance_dates is not None:
+            with open(self._config.user_rebalance_dates) as csv_file:
+                dates = pd.DatetimeIndex(pd.read_csv(csv_file, header=0, squeeze=True, parse_dates=['date']).values)
+            self._factor_group_info_dates = dates
 
         # IC计算器初始化
         self._ic_calculator.set_stock_returns(self)

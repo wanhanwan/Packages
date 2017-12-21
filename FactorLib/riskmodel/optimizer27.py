@@ -1,4 +1,4 @@
-    # coding: utf-8
+# coding: utf-8
 
 """
 股票组合优化器
@@ -398,7 +398,7 @@ class PortfolioOptimizer(object):
         self.log = {}
 
     @staticmethod
-    def _create_signal_and_stockpool(self, signal, stock_pool, dates):
+    def _create_signal_and_stockpool(signal, stock_pool, dates):
         if isinstance(signal, dict):
             signal = data_source.load_factor(signal['factor_name'], signal['factor_dir'], dates=dates).iloc[:, 0]
         elif dates is not None:
@@ -422,10 +422,10 @@ class PortfolioOptimizer(object):
         dates = self.signal.index.get_level_values(0).unique()
         optimal_assets = []
         for i, idate in enumerate(dates):
-            print("当前日期:%s, 总进度:%d/%d" % (idate.strftime("%Y-%m-%d", i+1, len(dates))))
+            print("当前日期:%s, 总进度:%d/%d" % (idate.strftime("%Y-%m-%d"), i+1, len(dates)))
             signal = self.signal.loc[idate]
             stock_pool = self.stock_pool.loc[idate].tolist()
-            optimizer = Optimizer(signal, stock_pool, self.ds, benchmark=self.benchmark)
+            optimizer = Optimizer(signal, stock_pool, idate, self.ds, benchmark=self.benchmark)
 
             for k, v in self.constraints.items():
                 optimizer.add_constraint(k, **v)

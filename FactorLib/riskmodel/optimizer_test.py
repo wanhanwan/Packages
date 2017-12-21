@@ -13,7 +13,7 @@ import pandas as pd
 secID = '全A'
 # 基准指数
 benchmark = '000905'
-# 待优化的单因子
+# 待优化的信号
 signal_name = 'StyleFactor_VG'
 signal_dir = '/XYData/StyleFactor/'
 

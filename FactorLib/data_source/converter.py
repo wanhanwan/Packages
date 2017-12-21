@@ -125,7 +125,7 @@ def parse_nc_encoding(dtype):
         return BIGNUM_ENCODING
     elif dtype in [np.int32, np.int16, np.int64]:
         return INTEGER_ENCODING
-    elif dtype in  [np.bool]:
+    elif dtype in [np.bool]:
         return BOOL_ENCODING
     elif dtype in [np.datetime64]:
         return DATE_ECODING

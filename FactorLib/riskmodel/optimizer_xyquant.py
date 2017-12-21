@@ -7,9 +7,10 @@
 import numpy as np
 import pandas as pd
 import cplex as cpx
+import os
 import sys
 from FactorLib.data_source.base_data_source_h5 import data_source
-from QuantLib.stockFilter import suspendtrading
+from QuantLib.stockFilter import suspendtrading, typical, _intersection
 from .riskmodel_data_source import RiskDataSource
 from itertools import combinations_with_replacement
 from QuantLib.utils import StandardByQT
@@ -40,7 +41,11 @@ class Optimizer(object):
         self.target_ids = list(set(signal.index.values).intersection(set(target_ids)))
         self.target_ids.sort()
         self._date = date
-        self._rskds = RiskDataSource(ds_name)
+
+        if isinstance(ds_name, str):
+            self._rskds = RiskDataSource(ds_name)
+        else:
+            self._rskds = ds_name
         self._active = active
         self._benchmark = benchmark
         self._riskmul = risk_mul
@@ -280,9 +285,9 @@ class Optimizer(object):
 
     def _add_userlimit(self, user_conf, **kwargs):
         """添加用户自定义的因子限制"""
-        factor_name = user_conf.pop('factor_name')
-        factor_dir = user_conf.pop('factor_dir')
-        limit = user_conf.pop('limit')
+        factor_name = user_conf.get('factor_name')
+        factor_dir = user_conf.get('factor_dir')
+        limit = user_conf.get('limit')
         is_standard = user_conf.get('standard', False)
         is_active = kwargs.get('active', False)
         factor_data = data_source.load_factor(factor_name, factor_dir, dates=[self._date])
@@ -421,4 +426,70 @@ class Optimizer(object):
             # 计算用户因子敞口
 
         return style_expo, indu_expo, terr_expo
+
+
+class PortfolioOptimizer(object):
+    """股票组合优化器"""
+    ds = RiskDataSource('xy')
+
+    def __init__(self, signal, stock_pool, benchmark, constraints, dates=None):
+        self.signal, self.stock_pool = self._create_signal_and_stockpool(signal, stock_pool, dates)
+        self.benchmark = benchmark
+        self.constraints = constraints
+        self.result = None
+        self.log = {}
+
+    @staticmethod
+    def _create_signal_and_stockpool(signal, stock_pool, dates):
+        if isinstance(signal, dict):
+            signal = data_source.load_factor(signal['factor_name'], signal['factor_dir'], dates=dates).iloc[:, 0]
+        elif dates is not None:
+            signal = signal.loc[dates]
+        else:
+            raise KeyError("Incorrect Parameters!")
+        signal.dropna(inplace=True)
+
+        if isinstance(stock_pool, pd.Series):
+            stock_pool_valid = typical(stock_pool.to_frame())
+        elif isinstance(stock_pool, str):
+            stock_pool = data_source.sector.get_index_members(ids=stock_pool, dates=dates)
+            stock_pool_valid = typical(stock_pool)
+        else:
+            stock_pool_valid = typical(stock_pool)
+        stock_pool_valid = _intersection(signal, stock_pool_valid)
+        estu = PortfolioOptimizer.ds.load_factors(['Estu'], dates=dates)
+        stock_pool_valid = _intersection(estu[estu['Estu']==1], stock_pool_valid)
+        return signal, stock_pool_valid.reset_index(level=1)['IDs']
+
+    def optimize_weights(self):
+        print("正在优化...")
+        dates = self.signal.index.get_level_values(0).unique()
+        optimal_assets = []
+        for i, idate in enumerate(dates):
+            print("当前日期:%s, 总进度:%d/%d" % (idate.strftime("%Y-%m-%d"), i + 1, len(dates)))
+            signal = self.signal.loc[idate]
+            stock_pool = self.stock_pool.loc[idate].tolist()
+            if 'TrackingError' in self.constraints:
+                ids = pd.read_csv(os.path.join(self.ds.h5_db.data_path, 'stockRisk', '%s.csv'%idate.strftime("%Y%m%d")),
+                                  header=0, usecols=[0], dtype={0: 'str'})
+                stock_pool = list(set(stock_pool).intersection(set(ids.iloc[:, 0].values)))
+            optimizer = Optimizer(signal, stock_pool, idate, PortfolioOptimizer.ds, benchmark=self.benchmark)
+
+            for k, v in self.constraints.items():
+                optimizer.add_constraint(k, **v)
+            optimizer.solve()
+
+            if optimizer.optimal:
+                print("%s权重优化成功" % idate.strftime("%Y-%m-%d"))
+                optimal_assets.append(optimizer.asset.loc[optimizer.asset['optimal_weight'] > 0.000001, 'optimal_weight'])
+            else:
+                print("%s权重优化失败:%s" % (idate.strftime("%Y-%m-%d"), optimizer.solution_status))
+                self.log[idate.strftime("%Y-%m-%d")] = optimizer.solution_status
+        print("优化结束...")
+        self.result = pd.concat(optimal_assets).to_frame()
+
+    def save_results(self, name, path=None):
+        import os
+        path = os.getcwd() if path is None else path
+        self.result.reset_index().to_csv(os.path.join(path, name), index=False)
 

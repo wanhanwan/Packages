@@ -484,20 +484,26 @@ class sector(object):
 
     def get_ashare_onlist(self, dates, months_filter=24):
         """获得某一天已经上市的公司，并且上市日期不少于24个月"""
-        ashare = self.get_history_ashare(dates).swaplevel()
-        ashare_onlist_date = self.h5DB.load_factor(
-            'list_date', '/stocks/').reset_index(level=0, drop=True)
-        ashare_backdoordate = self.h5DB.load_factor(
-            'backdoordate', '/stocks/').reset_index(level=0, drop=True)   # 借壳上市日期
-        ashare_info = pd.merge(ashare, ashare_onlist_date, left_index=True, right_index=True, how='left')
-        ashare_info = ashare_info.join(ashare_backdoordate).reset_index()
-        ashare_info['backdoordate'] = ashare_info['backdoordate'].fillna('21000101')
+        import sys
+        if sys.version_info.major > 2:
+            ashare = self.get_history_ashare(dates).swaplevel()
+            ashare_onlist_date = self.h5DB.load_factor(
+                'list_date', '/stocks/').reset_index(level=0, drop=True)
+            ashare_backdoordate = self.h5DB.load_factor(
+                'backdoordate', '/stocks/').reset_index(level=0, drop=True)   # 借壳上市日期
+            ashare_info = pd.merge(ashare, ashare_onlist_date, left_index=True, right_index=True, how='left')
+            ashare_info = ashare_info.join(ashare_backdoordate).reset_index()
+            ashare_info['backdoordate'] = ashare_info['backdoordate'].fillna('21000101')
 
-        backdoordate = ashare_info['backdoordate'].apply(DateStr2Datetime)
-        ashare_info['new_listdate'] = np.where(ashare_info['date']>=backdoordate, ashare_info['backdoordate'], ashare_info['list_date'])
-        onlist_period = ashare_info['date'] - ashare_info['new_listdate'].apply(DateStr2Datetime)
-        temp_ind = (onlist_period / timedelta(1)) > months_filter * 30
-        return ashare_info.set_index(['date', 'IDs']).loc[temp_ind.values, ['list_date']].copy()
+            backdoordate = ashare_info['backdoordate'].apply(DateStr2Datetime)
+            ashare_info['new_listdate'] = np.where(ashare_info['date']>=backdoordate, ashare_info['backdoordate'], ashare_info['list_date'])
+            onlist_period = ashare_info['date'] - ashare_info['new_listdate'].apply(DateStr2Datetime)
+            temp_ind = (onlist_period / timedelta(1)) > months_filter * 30
+            return ashare_info.set_index(['date', 'IDs']).loc[temp_ind.values, ['list_date']].copy()
+        else:
+            ashare = self.h5DB.load_factor('list_days', '/stocks/', dates=dates)
+            ashare = ashare[ashare.list_days/30>months_filter]
+            return pd.DataFrame(np.ones(len(ashare)), index=ashare.index, columns=['ashare'])
 
     def get_stock_info(self, ids, date):
         """获得上市公司的信息。

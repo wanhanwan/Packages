@@ -47,8 +47,10 @@ class NCDB(object):
     # 列出单个文件的因子名称
     def list_file_factors(self, file_name, file_dir):
         file_path = self.abs_factor_path(file_dir, file_name)
-        with xr.open_dataset(file_path, "data", engine="h5netcdf") as file:
-            return list(file.data_vars)
+        with xr.open_dataset(file_path, "data", engine="netcdf4") as file:
+            t = list(file.data_vars)
+            t.sort()
+            return t
 
     # 列出文件的日期
     def list_file_dates(self, file_name, file_dir):
@@ -59,7 +61,7 @@ class NCDB(object):
     # 列出文件的IDs
     def list_file_ids(self, file_name, file_dir):
         file_path = self.abs_factor_path(file_dir, file_name)
-        with xr.open_dataset(file_path, "data", engine="h5netcdf") as file:
+        with xr.open_dataset(file_path, "data", engine="netcdf4") as file:
             return file.indexes['IDs']
 
     # 重命名文件
@@ -81,8 +83,7 @@ class NCDB(object):
     # --------------------------数据管理-------------------------------------------
     def load_factor(self, file_name, file_dir=None, factor_names=None, dates=None, ids=None,
                     idx=None, ret='df', reset_index=False):
-        """" 读取单因子数据
-
+        """ 读取单因子数据
         paramters:
         ==========
         idx: DataFrame
@@ -93,10 +94,15 @@ class NCDB(object):
             ids终将把每个元素转换成string格式
         df: bool
             是否已DataFrame格式返回. True by default.
+        ret: str
+            数据返回的格式，选项包括df,ndarray,xarray
         """
 
-        if factor_names is None:
-            factor_names = self.list_file_factors(file_name, file_dir)
+        if factor_names is not None:
+            all_names = self.list_file_factors(file_name, file_dir)
+            factor_names_drop = [x for x in all_names if x not in factor_names]
+        else:
+            factor_names_drop = None
         if dates is None:
             dates = self.list_file_dates(file_name, file_dir)
         else:
@@ -107,8 +113,8 @@ class NCDB(object):
         if idx is not None:
             idx1 = idx1.intersection(idx.index)
         file_path = self.abs_factor_path(file_dir, file_name)
-        with xr.open_dataset(file_path, "data", engine="h5netcdf") as file:
-            factor_data = file[factor_names].sel_points(date=idx1.get_level_values(0), IDs=idx1.get_level_values(1))
+        file = xr.open_dataset(file_path, "data", engine="netcdf4", drop_variables=factor_names_drop)
+        factor_data = file.sel(date=idx1.get_level_values(0).unique(), IDs=idx1.get_level_values(1).unique())
         if ret == 'ndarry':
             length = len(ids)
             width = len(dates)
@@ -117,8 +123,10 @@ class NCDB(object):
         elif ret == 'xarray':
             return factor_data
         elif reset_index:
-            return factor_data.to_dataframe()
-        return factor_data.to_dataframe().set_index(['date', 'IDs'])
+            return factor_data.to_dataframe().reset_index()
+        else:
+            df = factor_data.to_dataframe()
+        return df
 
     def save_factor(self, factor_data, file_name, file_dir, if_exists='append', dtypes=None):
         """往数据库中写数据
@@ -146,10 +154,10 @@ class NCDB(object):
         new_dset = factor_data.to_xarray()
         file_path = self.abs_factor_path(file_dir, file_name)
         if not self.check_file_exists(file_name, file_dir):
-            new_dset.to_netcdf(file_path, "w", engine="h5netcdf", encoding=new_dtypes, group="data")
+            new_dset.to_netcdf(file_path, "w", engine="netcdf4", encoding=new_dtypes, group="data")
         elif if_exists == 'append':
             factors = self.list_file_factors(file_name, file_dir)
-            with xr.open_dataset(file_path, "data", engine="h5netcdf") as file:
+            with xr.open_dataset(file_path, "data", engine="netcdf4") as file:
                 for factor in factors:
                     old_dtype = file[factor].encoding
                     new_dtypes[factor] = {k: v for k, v in old_dtype.items() if k
@@ -157,46 +165,69 @@ class NCDB(object):
                 new_data = new_dset.combine_first(file)
             available_name = self.get_available_factor_name(file_name, file_dir)
             new_data.to_netcdf(self.abs_factor_path(file_dir, available_name),
-                               "w", engine="h5netcdf", encoding=new_dtypes, group="data")
+                               "w", engine="netcdf4", encoding=new_dtypes, group="data")
             self.delete_factor(file_name, file_dir)
             self.rename_factor(available_name, file_name, file_dir)
         elif if_exists == 'replace':
             self.delete_factor(file_name, file_dir)
-            new_dset.to_netcdf(file_path, "w", engine="h5netcdf", encoding=new_dtypes, group="data")
+            new_dset.to_netcdf(file_path, "w", engine="netcdf4", encoding=new_dtypes, group="data")
         else:
             self._update_info()
             raise KeyError("please make sure if_exists is valide")
         self._update_info()
 
+    def save_as_dummy(self, factor_data, file_name, file_dir, if_exists='append'):
+        """把数据当成哑变量保存，节省空间
+        factor_data： DataFrame(index:[date, IDs], columns:[industry_1, industry_2, ...])
+        """
+        from .converter import INTEGER_ENCODING
+        factor_data = factor_data.drop('T00018', axis=0, level=1).fillna(0)
+        dummy_pack = np.packbits(factor_data.values.astype(dtype='uint8', copy=False), axis=1)
+        new_dummy = pd.DataFrame(dummy_pack, index=factor_data.index, columns=[str(x) for x in range(dummy_pack.shape[1])])
+        indu_names = ",".join(factor_data.columns)
+        self.save_factor(new_dummy, file_name, file_dir, dtypes={str(x): INTEGER_ENCODING for x in new_dummy.columns},
+                         if_exists=if_exists)
+        self.add_file_attr(file_name, file_dir, {'indu_names': indu_names})
+
+    def load_as_dummy(self, file_name, file_dir, dates=None, ids=None, idx=None, drop_first=False):
+        """加载哑变量数据"""
+        dummy = self.load_factor(file_name, file_dir, ids=ids, dates=dates, idx=idx).dropna(how='all').sort_index(axis=1)
+        industry_names = self.load_file_attr(file_name, file_dir, 'indu_names').split(",")
+        dummy_value = np.unpackbits(dummy.values.astype('uint8'), axis=1)[:, :len(industry_names)]
+        new_dummy = pd.DataFrame(dummy_value, index=dummy.index, columns=industry_names)
+        if drop_first:
+            return new_dummy.iloc[:, 1:]
+        return new_dummy
+
     def add_factor_attr(self, file_name, file_dir, attr_dict):
         """添加因子属性
         """
         file_path = self.abs_factor_path(file_dir, file_name)
-        with xr.open_dataset(file_path, "data", engine="h5netcdf") as file:
+        with xr.open_dataset(file_path, "data", engine="netcdf4") as file:
             for k, v in attr_dict.items():
                 file[k].attrs.update(**v)
             available_name = self.get_available_factor_name(file_name, file_dir)
-            file.to_netcdf(self.abs_factor_path(file_dir, available_name), "w", engine="h5netcdf", group="data")
+            file.to_netcdf(self.abs_factor_path(file_dir, available_name), "w", engine="netcdf4", group="data")
         self.delete_factor(file_name, file_dir)
         self.rename_factor(available_name, file_name, file_dir)
 
     def add_file_attr(self, file_name, file_dir, attr_dict):
         file_path = self.abs_factor_path(file_dir, file_name)
-        with xr.open_dataset(file_path, "data", engine="h5netcdf") as file:
+        with xr.open_dataset(file_path, "data", engine="netcdf4") as file:
             new_dset = file.assign_attrs(**attr_dict)
             available_name = self.get_available_factor_name(file_name, file_dir)
-            new_dset.to_netcdf(self.abs_factor_path(file_dir, available_name), "w", engine="h5netcdf", group="data")
+            new_dset.to_netcdf(self.abs_factor_path(file_dir, available_name), "w", engine="netcdf4", group="data")
         self.delete_factor(file_name, file_dir)
         self.rename_factor(available_name, file_name, file_dir)
 
     def load_factor_attr(self, file_name, file_dir, factor, key):
         file_path = self.abs_factor_path(file_dir, file_name)
-        with xr.open_dataset(file_path, "data", engine="h5netcdf") as file:
+        with xr.open_dataset(file_path, "data", engine="netcdf4") as file:
             return file[factor].attrs.get(key, None)
 
     def load_file_attr(self, file_name, file_dir, key):
         file_path = self.abs_factor_path(file_dir, file_name)
-        with xr.open_dataset(file_path, "data", engine="h5netcdf") as file:
+        with xr.open_dataset(file_path, "data", engine="netcdf4") as file:
             return file.attrs.get(key, None)
 
     # -------------------------工具函数-------------------------------------------

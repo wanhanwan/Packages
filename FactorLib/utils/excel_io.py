@@ -1,7 +1,7 @@
 from openpyxl.styles import Font
 from openpyxl import Workbook
-from ..utils.tool_funcs import write_df_to_excel, tradecode_to_windcode
-from ..single_factor_test.factor_list import factor_direction
+from ..utils.tool_funcs import write_df_to_excel, tradecode_to_windcode, import_module
+# from ..single_factor_test.factor_list import factor_direction
 import os
 import pandas as pd
 
@@ -103,6 +103,7 @@ def save_details_to_excel(factor,file_path, env):
 
 def save_summary_to_excel(factors, file_path, env, method='typical'):
     """按照兴业证券的简要模板存储"""
+    factor_direction = import_module('factor_list', env._config.factor_list_file).factor_direction
     factor_names = []
     ic_series = []
     long_short = []

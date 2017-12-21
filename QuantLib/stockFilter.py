@@ -30,7 +30,10 @@ def _union(stockA, stockB):
 def _intersection(stockA, stockB):
     """取stockA和stockB的交集"""
     intersection_index = stockA.index.intersection(stockB.index)
-    new_stocks = pd.DataFrame([1]*len(intersection_index), index=intersection_index, columns=stockA.columns)
+    if isinstance(stockA, pd.DataFrame):
+        new_stocks = pd.DataFrame([1]*len(intersection_index), index=intersection_index, columns=stockA.columns)
+    else:
+        new_stocks = pd.DataFrame([1]*len(intersection_index), index=intersection_index, columns=[stockA.name])
     return new_stocks
 
 

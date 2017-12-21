@@ -142,9 +142,22 @@ def update_indu_dummy(start, end, **kwargs):
     datasource.ncDB.add_file_attr('industry_dummy', '/dummy/', file_attr)
 
 
+# 上市天数
+def list_days(start, end, **kwargs):
+    from FactorLib.data_source.tsl_data_source import CsQuery
+    datasource = kwargs['data_source']
+    field = {"'IDs'": 'DefaultStockID()', "'list_days'": 'StockGoMarketDays()'}
+    c = []
+    for d in datasource.trade_calendar.get_trade_days(start, end):
+        data = CsQuery(field, pd.to_datetime(d))
+        c.append(data)
+    c = pd.concat(c).sort_index()
+    datasource.h5DB.save_factor(c, '/stocks/')
+
+
 AlternativeFuncListMonthly = []
 AlternativeFuncListDaily = [iffr, unst, diversify_finance, excld_broker_banks,
-                            rescale_weight_afterdrop_brokers_and_banks, update_indu_dummy]
+                            rescale_weight_afterdrop_brokers_and_banks, update_indu_dummy, list_days]
 
 if __name__ == '__main__':
     from FactorLib.data_source.base_data_source_h5 import data_source

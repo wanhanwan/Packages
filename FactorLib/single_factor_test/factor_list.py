@@ -32,6 +32,10 @@ ths_click_ratio = ('ths_click_ratio', '/stock_alternative/', -1)
 snowball = ('xueqiu', '/stock_alternative/', -1)
 snowball_orthogonalized = ('xueqiu_orthogonalized', '/stock_alternative/', -1)
 StyleTechnicalFactor_AmountAvg_1M_orthogonalized = ('StyleTechnicalFactor_AmountAvg_1M_orthogonalized', '/stock_alternative/', -1)
+CGO = ('CGO', '/stock_alternative/', -1)
+PB_LRJ = ('PB_LRJ', '/stock_alternative/', -1)
+PE_GL = ('PE_GL', '/stock_alternative', -1)
+SPE_CAP = ('SPE_CAP', '/stock_alternative', -1)
 
 # 动量类因子
 six_month_highest_returns_plus = ('six_month_highest_returns', '/stock_reversal/', -1, 'six_month_highest_returns_plus')
@@ -161,6 +165,7 @@ self_defined = [bp_divide_median, bp_divide_median, float_mkt_value, six_month_h
 factor_list_others = [FamaFrenchFactor_IVR, RVFactor_RV, SpreadBiasFactor_SpreadBias_120D, ValueBiasFactor_EP_DR,
                       ValueBiasFactor_BP_DR, ValueBiasFactor_SP_DR, VWAPPFactor_VWAPP_OLS]
 
+lrj = [CGO, PB_LRJ, PE_GL, SPE_CAP]
 
 # BARRA因子
 BETA = ('BETA', '/barra/descriptors/', 1)

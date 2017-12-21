@@ -18,6 +18,9 @@ def _gstr_from_func(func_name, func_args):
 
 def CsQuery(field_dict, end_date, bk_name=_ashare, stock_list=None, condition="1"):
     """对天软Query函数的封装
+    Parameters:
+    ===========
+    field_dict:
     """
     if stock_list is None:
         stock_list = "''"
@@ -40,4 +43,6 @@ def partialCsQueryFunc(*args, **kwargs):
 
 
 if __name__ == '__main__':
-    pass
+    field = {"'IDs'": 'DefaultStockID()', "'list_days'": 'StockGoMarketDays()'}
+    data = CsQuery(field, pd.to_datetime('20171130'))
+    print(data)
