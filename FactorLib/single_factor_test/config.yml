@@ -10,6 +10,8 @@ factor_list_file : 'D:/Packages/FactorLib/single_factor_test/factor_list.py'
 universe : '全A'
 # 因子换仓频率
 freq : '1m'
+# 自定义换仓日期
+user_rebalance_dates : ~
 # 对比基准,默认为中证500
 benchmark : '000905'
 
