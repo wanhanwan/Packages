@@ -1,0 +1,38 @@
+# 因子
+factors : ['value', 'growth']
+
+# 股票池, 默认为全部A股
+stockpool : '全A'
+
+# 定义不交易股票，默认为一字涨跌停、停牌、ST、新股
+stocks_unable_trade : 'typical'
+
+# 各因子的权重, 默认为None(等权)
+weight : None
+
+# 打分方式
+scoring_mode:
+  function: 'realtime_limit'
+  # 因子变量去除异常值方法, 方法包括: FixedRatio\Mean-Variance\MAD\BoxPlot
+  drop_outlier_method : 'Mean-Variance'
+
+# 生成股票列表参数
+stocklist:
+  mode: 'realtime'
+  # h函数名称
+  function: 'typical'
+  # 是否行业中性
+  industry_neutral: true
+  # 基准指数
+  benchmark : '000905'
+  # 行业分类
+  industry : '中信一级'
+  # 分位数入选门槛
+  prc : 0.05
+  # 绝对数入选门槛
+  top : 50
+  # 虚拟总资金
+  cash: 10000000
+
+
+
