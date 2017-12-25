@@ -6,6 +6,11 @@ import pandas as pd
 
 def typical(factor, name, direction=None, industry_neutral=True, benchmark=None, industry_name='中信一级', prc=0.05,
             top=None, **kwargs):
+    """给定因子数据生成股票列表
+    Paramters
+    =========================
+    factor_data: DataFrame(index:[date,IDs],factor1,factor2...)
+    """
     factor_data = factor.reset_index()
     if prc is not None:
         prc = 1 - prc if (direction == 1 or direction is None) else prc

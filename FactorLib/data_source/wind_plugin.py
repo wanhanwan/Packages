@@ -69,7 +69,7 @@ def realtime_quote(fieldnames, ids=None):
     _l = []
     for field in fieldnames:
         data = w.wsq(list(map(tradecode_to_windcode, ids)), field)
-        _l.append(_bar_to_dataframe(data))
+        _l.append(_bar_to_dataframe(data, False))
     data = pd.concat(_l, axis=1)
     return data
 
@@ -93,7 +93,7 @@ def _parse_args(args,**kwargs):
     return ";".join(arg_str)
 
 
-def _bar_to_dataframe(data):
+def _bar_to_dataframe(data, use_dateindex=True):
     """把windAPI数据转换成dataframe"""
     if data.ErrorCode != 0:
         raise ValueError(str(data.ErrorCode))
@@ -106,7 +106,9 @@ def _bar_to_dataframe(data):
         df = pd.DataFrame(data.Data).T
     df.index = pd.DatetimeIndex(dates, name='date')
     df.columns = col
-    df = df.stack().to_frame().sort_index().rename(columns={0: data.Fields[0].lower()})
+    df = df.stack().to_frame(data.Fields[0].lower()).sort_index()
+    if not use_dateindex:
+        df.reset_index(level=0, drop=True, inplace=True)
     return df
 
 
@@ -140,6 +142,7 @@ def _load_wsd_data(ids, fields, start, end, **kwargs):
         _l.append(_bar_to_dataframe(d))
     data = pd.concat(_l, axis=1)
     return data
+
 
 if __name__ == '__main__':
     from const import CS_INDUSTRY_DICT

@@ -12,6 +12,16 @@ def _load_factors(factor_dict, stocklist):
     return data.reindex(stocklist.index).dropna()
 
 
+def _load_latest_factors(factor_dict, stocklist):
+    l = []
+    ids = stocklist.index.tolist()
+    for factor_dir in factor_dict:
+        for factor in factor_dict[factor_dir]:
+            d = data_source.h5DB.load_latest_period(factor, factor_dir, ids=ids)
+            l.append(d)
+    data = pd.concat(l, axis=1).dropna()
+    return data
+
 def _rawstockpool(sectorid, dates):
     stockpool = data_source.sector.get_index_members(sectorid, dates=dates)
     return stockpool

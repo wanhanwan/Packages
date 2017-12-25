@@ -6,6 +6,7 @@
 from multiprocessing import Lock
 from ..data_source.trade_calendar import trade_calendar
 from ..data_source.base_data_source_h5 import H5DB, h5
+from ..data_source.ncdb import NCDB
 from ..utils.datetime_func import DateRange2Dates
 from ..utils.disk_persist_provider import DiskPersistProvider
 from ..utils.tool_funcs import ensure_dir_exists, drop_patch
@@ -14,6 +15,7 @@ from warnings import warn
 import pandas as pd
 import numpy as np
 import os
+import xarray as xr
 tc = trade_calendar()
 default_riskds_root = 'D:/data/risk_model'
 
@@ -243,7 +245,6 @@ class RiskDataSource(object):
         每个因子是一个h5文件， 以因子名称命名。DataFrame(index:[date IDs], columns:[factor_name])
     """
     root_dir = default_riskds_root
-    h5_db = H5DB(data_path=default_riskds_root)
     base_db = h5
 
     def __init__(self, name):
@@ -251,6 +252,7 @@ class RiskDataSource(object):
         self._dspath = path.join(RiskDataSource.root_dir, self._name)
         self._h5_dir = '/%s/' % self._name
         self.h5_db = H5DB(data_path=self._dspath)
+        self.nc_db = NCDB(data_path=self._dspath)
         self.persist_helper = DiskPersistProvider(self._dspath)
         ensure_dir_exists(self._dspath)
         self.initialize()
@@ -285,7 +287,6 @@ class RiskDataSource(object):
     def min_date_of_factor_return(self):
         return self.h5_db.get_date_range('factor_return', '/%s/' % self._name)[0]
 
-    @DateRange2Dates
     def load_factors(self, factor_names, ids=None, start_date=None, end_date=None, dates=None):
         """
         加载风险因子数据
@@ -299,13 +300,20 @@ class RiskDataSource(object):
             DataFrame(index:[date IDs], columns:[factor_names])
         """
         if factor_names == 'ALL':
-            factor_names = [x.replace(".h5", "") for x in os.listdir(self._dspath+'/factorData')]
-        if factor_names == 'STYLE':
-            factor_names = [x.replace(".h5", "") for x in os.listdir(self._dspath+'/factorData') if not x.startswith('Indu_')]
-            factor_names = [x for x in factor_names if x not in ['Estu']]
-        data_dict = {'/factorData/': factor_names}
-        data = self.h5_db.load_factors(data_dict, dates=dates, ids=ids).rename(columns=lambda x: x[5:] if x.startswith("Indu_") else x)
-        return data
+            style = self.nc_db.load_factor('risk_factor', '/factorData/', dates=dates, ret='xarray', ids=ids)
+            indu = self.nc_db.load_as_dummy('industry', '/factorData/', dates=dates, ids=ids).to_xarray()
+            new = style.update(indu).to_dataframe().set_index(['date', 'IDs'])
+        elif factor_names == 'STYLE':
+            new = self.nc_db.load_factor('risk_factor', '/factorData/', dates=dates, ids=ids)
+        elif 'Estu' not in factor_names:
+            style = self.nc_db.load_factor('risk_factor', '/factorData/', dates=dates, ret='xarray', ids=ids)
+            indu = self.nc_db.load_as_dummy('industry', '/factorData/', dates=dates, ids=ids).to_xarray()
+            t = style.update(indu).to_dataframe().set_index(['date', 'IDs'])
+            new = t.loc[:, factor_names].copy()
+        else:
+            new = self.h5_db.load_factor('Estu', '/factorData/', ids=ids, dates=dates)
+        new.rename(columns=lambda x: x[5:] if x.startswith("Indu_") else x, inplace=True)
+        return new
 
     @DateRange2Dates
     def load_industry(self, ids=None, start_date=None, end_date=None, dates=None):
@@ -318,10 +326,9 @@ class RiskDataSource(object):
         industry: DataFrame
             DataFrame(index:[date IDs], columns:[industry_names])
         """
-        all_industries = [x[:-3] for x in os.listdir(path.join(self._dspath, 'factorData')) if x.startswith('Indu_')]
-        data_dict = {'/factorData/': all_industries}
-        data = self.h5_db.load_factors(data_dict, dates=dates, ids=ids)
-        return data
+        indu = self.nc_db.load_factor('industry', '/factorData/', dates=dates, ids=ids)
+        indu.rename(columns=lambda x: x[5:] if x.startswith("Indu_") else x, inplace=True)
+        return indu
 
     @DateRange2Dates
     def load_returns(self, start_date=None, end_date=None, dates=None):

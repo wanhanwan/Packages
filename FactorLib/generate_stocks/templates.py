@@ -1,6 +1,7 @@
 from ..utils import AttrDict
 from ..single_factor_test.config import parse_config
 from ..data_source.base_data_source_h5 import data_source
+from ..data_source.wind_plugin import realtime_quote
 from ..single_factor_test.factor_list import *
 from ..single_factor_test.selfDefinedFactors import *
 from ..utils.disk_persist_provider import DiskPersistProvider
@@ -96,4 +97,69 @@ class FactorInvestmentStocksGenerator(AbstractStockGenerator):
         return stocks
 
     def generate_tempdata(self, start, end, **kwargs):
-        return {'score_details': self.factor_data}
+        dates = self.factor_data.index.get_level_values(0).unique().tolist()
+        ids = self.factor_data.index.get_level_values(1).unique().tolist()
+        indu = data_source.sector.get_stock_industry_info(ids, industry=self.config.stocklist.industry, dates=dates)
+        temp = self.factor_data.join(indu, how='left')
+        return {'score_details': temp}
+
+
+class FactorTradesListGenerator(AbstractStockGenerator):
+    def __init__(self):
+        super(FactorTradesListGenerator, self).__init__()
+        self.factors = None
+        self.direction = None
+        self.factor_data = None
+
+    def _set_factors(self):
+        self.factors, self.direction = funcs._to_factordict(self.config.factors)
+
+    def _prepare_data(self):
+        date = data_source.trade_calendar.get_latest_trade_days(datetime.today().date())
+        yesterday = data_source.trade_calendar.tradeDayOffset(date, -1)
+        stockpool = funcs._stockpool(self.config.stockpool, [yesterday], self.config.stocks_unable_trade)
+        factor_data = funcs._load_latest_factors(self.factors, stockpool.xs(yesterday, level=0))
+        factor_data.index = pd.MultiIndex.from_product([[pd.to_datetime(yesterday)], factor_data.index], names=['date', 'IDs'])
+
+        score = getattr(funcs, self.config.scoring_mode.function)(factor_data, industry_name=self.config.stocklist.industry,
+                                                                  method=self.config.scoring_mode.drop_outlier_method)
+        total_score = funcs._total_score(score, self.direction, self.config.weight)
+        factor_data = factor_data.merge(total_score, left_index=True, right_index=True, how='left')
+        self.direction['total_score'] = 1
+        self.factor_data = factor_data
+
+    def generate_stocks(self, start, end):
+        self._set_factors()
+        self._prepare_data()
+        stocks = getattr(stocklist,self.config.stocklist.function)(self.factor_data, 'total_score', 1,
+                                                                   self.config.stocklist.industry_neutral,
+                                                                   self.config.stocklist.benchmark,
+                                                                   self.config.stocklist.industry,
+                                                                   prc=self.config.stocklist.prc,
+                                                                   top = self.config.stocklist.top)
+        return stocks
+
+    def generate_tempdata(self, start, end, **kwargs):
+        dates = self.factor_data.index.get_level_values(0).unique().tolist()
+        ids = self.factor_data.index.get_level_values(1).unique().tolist()
+        indu = data_source.sector.get_stock_industry_info(ids, industry=self.config.stocklist.industry, dates=dates)
+        temp = self.factor_data.join(indu, how='left')
+        return {'_'.join(self.factor_data.columns): temp}
+
+    def _update_stocks(self, start, end):
+        stocks = self.generate_stocks(start, end).reset_index(level=0, drop=True)
+        stocks.rename_axis('股票代码', inplace=True)
+
+        capital = self.config.stocklist.cash
+        stock_ids = stocks.index.tolist()
+        tradeprice = realtime_quote(['rt_last'], ids=stock_ids)['rt_last']
+        tradeorders = (stocks['Weight'] * capital / tradeprice / 100).to_frame('手数').reset_index()
+        tradeorders = tradeorders.join(stocks, on=['股票代码']).rename(columns={'Weight': '权重'})
+        writer = pd.ExcelWriter('权重文件.xlsx', engine='xlsxwriter')
+
+        tradeorders[['股票代码', '权重', '手数']].to_excel(writer, index=False, float_format='%.6f', sheet_name='Sheet1')
+        workbook = writer.book
+        worksheet = writer.sheets['Sheet1']
+        format1 = workbook.add_format({'num_format': '0.0000'})
+        worksheet.set_column('C:C', None, format1)
+        writer.save()

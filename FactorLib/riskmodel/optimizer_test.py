@@ -9,8 +9,14 @@ from FactorLib.riskmodel.optimizer_xyquant import Optimizer
 from FactorLib.data_source.base_data_source_h5 import data_source, tc
 import pandas as pd
 
-secID = '399974'    # 指数代码(中证国企改革指数)
-signal_name = 'StyleFactor_VGS'  # 待优化的单因子
+# 待优化股票池
+secID = '全A'
+# 基准指数
+benchmark = '000905'
+# 待优化的信号
+signal_name = 'StyleFactor_VG'
+signal_dir = '/XYData/StyleFactor/'
+
 optimal_assets = []
 for date in tc.get_trade_days('20170801', '20171130', freq='1m', retstr=None):
     # date = datetime(2017, 2, 24)
@@ -18,16 +24,16 @@ for date in tc.get_trade_days('20170801', '20171130', freq='1m', retstr=None):
     # stockIDs = stockIDs[stockIDs.iloc[:, 0] == 1.0]
     # stockIDs = drop_suspendtrading(stockIDs)    # 剔除停牌股票
     stockIDs = stockIDs[stockIDs.iloc[:, 0] == 1.0].index.get_level_values(1).tolist()
-    signal = data_source.load_factor(signal_name, '/XYData/StyleFactor/',
+    signal = data_source.load_factor(signal_name, signal_dir,
                                      dates=[date])[signal_name].reset_index(level=0, drop=True)
 
-    opt = Optimizer(signal, stockIDs, date, ds_name='xy', benchmark='399974')
+    opt = Optimizer(signal, stockIDs, date, ds_name='xy', benchmark=benchmark)
     opt.add_constraint('StockLimit', default_max=0.08)
-    # opt.add_constraint('Style', {'MOMENTUM': 0.0, 'RESVOL': 0.0})
-    opt.add_constraint('TrackingError', 0.0020/12)
+    opt.add_constraint('Style', {'Size': 0.0})
+    opt.add_constraint('TrackingError', 0.01/12)
     # opt.add_constraint('Indu')
-    opt.add_constraint('UserLimit', {'factor_name': 'close', 'factor_dir': '/stocks/',
-                                     'standard': True}, active=True)
+    opt.add_constraint('UserLimit', {'factor_name': 'turn_60d', 'factor_dir': '/stock_liquidity/',
+                                     'standard': True, 'limit': -0.1}, active=True)
     opt.solve()
 
     if opt.optimal:

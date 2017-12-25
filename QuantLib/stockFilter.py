@@ -30,7 +30,10 @@ def _union(stockA, stockB):
 def _intersection(stockA, stockB):
     """取stockA和stockB的交集"""
     intersection_index = stockA.index.intersection(stockB.index)
-    new_stocks = pd.DataFrame([1]*len(intersection_index), index=intersection_index, columns=stockA.columns)
+    if isinstance(stockA, pd.DataFrame):
+        new_stocks = pd.DataFrame([1]*len(intersection_index), index=intersection_index, columns=stockA.columns)
+    else:
+        new_stocks = pd.DataFrame([1]*len(intersection_index), index=intersection_index, columns=[stockA.name])
     return new_stocks
 
 
@@ -106,4 +109,33 @@ def typical(stocklist):
 
 def typical_add_latest_st(stocklist, st_months):
     return _drop_latest_st(typical(stocklist), st_months)
+
+
+def realtime_trade_limit(stocklist):
+    """实时行情限制，剔除当日停牌和涨跌停的股票"""
+    from FactorLib.data_source.wind_plugin import realtime_quote
+    stock_ids = stocklist.index.get_level_values(1).tolist()
+    date = stocklist.index.get_level_values(0).unique().tolist()
+    data = realtime_quote(['rt_last', 'rt_susp_flag', 'rt_high_limit', 'rt_low_limit'], ids=stock_ids)
+    limit_stocks = data.query("rt_susp_flag%10 !=0.0 or abs(rt_last-rt_high_limit)<0.02 or abs(rt_last-rt_low_limit)<0.02")
+    limit_stocks.index = pd.MultiIndex.from_product([date, limit_stocks.index], names=['date', 'IDs'])
+    return _difference(stocklist, limit_stocks)
+
+
+def realtime_typical(stocklist):
+    """
+    剔除如下股票：
+        1. st
+        2. 最近10日内停牌
+        3. 上市不满6个月
+        4. 涨跌停
+    :param stocklist:
+    :return:
+    """
+    from functools import partial
+    __funclist = [_dropst, partial(_drop_suspendtrading, hold_days=10),
+                  partial(_drop_newstocks, months=6), realtime_trade_limit]
+    for func in __funclist:
+        stocklist = func(stocklist)
+    return stocklist
 

@@ -100,6 +100,11 @@ class H5DB(object):
             df.index.names = ['date', 'IDs']
             df.columns = [factor_name]              
             return df
+
+    def load_latest_period(self, factor_name, factor_dir=None, ids=None, idx=None):
+        max_date = self.get_date_range(factor_name, factor_dir)[1]
+        return self.load_factor(factor_name, factor_dir, dates=[max_date], ids=ids, idx=idx).reset_index(level=0, drop=True)
+
     
     def load_factors(self, factor_names_dict, dates=None, ids=None):
         _l = []
