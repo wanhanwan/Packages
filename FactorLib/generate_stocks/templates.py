@@ -153,9 +153,9 @@ class FactorTradesListGenerator(AbstractStockGenerator):
         capital = self.config.stocklist.cash
         stock_ids = stocks.index.tolist()
         tradeprice = realtime_quote(['rt_last'], ids=stock_ids)['rt_last']
-        tradeorders = (stocks['Weight'] * capital / tradeprice / 100).to_frame('手数').reset_index()
+        tradeorders = (stocks['Weight'] * capital / tradeprice / 100).to_frame('手数').rename_axis('股票代码').reset_index()
         tradeorders = tradeorders.join(stocks, on=['股票代码']).rename(columns={'Weight': '权重'})
-        writer = pd.ExcelWriter('权重文件.xlsx', engine='xlsxwriter')
+        writer = pd.ExcelWriter(self.config.stocklist.output, engine='xlsxwriter')
 
         tradeorders[['股票代码', '权重', '手数']].to_excel(writer, index=False, float_format='%.6f', sheet_name='Sheet1')
         workbook = writer.book

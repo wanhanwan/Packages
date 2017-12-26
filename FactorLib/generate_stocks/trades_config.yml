@@ -19,7 +19,7 @@ scoring_mode:
 # 生成股票列表参数
 stocklist:
   mode: 'realtime'
-  # h函数名称
+  # 函数名称
   function: 'typical'
   # 是否行业中性
   industry_neutral: true

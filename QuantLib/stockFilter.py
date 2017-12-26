@@ -106,6 +106,20 @@ def typical(stocklist):
         stocklist = func(stocklist)
     return stocklist
 
+def drop_st_suspend(stocklist):
+    """
+    剔除如下股票：
+        1. st
+        2. 最近10日内停牌
+    :param stocklist:
+    :return:
+    """
+    from functools import partial
+    __funclist = [_dropst, partial(_drop_suspendtrading, hold_days=10)]
+    for func in __funclist:
+        stocklist = func(stocklist)
+    return stocklist
+
 
 def typical_add_latest_st(stocklist, st_months):
     return _drop_latest_st(typical(stocklist), st_months)
@@ -135,6 +149,22 @@ def realtime_typical(stocklist):
     from functools import partial
     __funclist = [_dropst, partial(_drop_suspendtrading, hold_days=10),
                   partial(_drop_newstocks, months=6), realtime_trade_limit]
+    for func in __funclist:
+        stocklist = func(stocklist)
+    return stocklist
+
+
+def realtime_typical2(stocklist):
+    """
+    剔除如下股票：
+        1. st
+        2. 最近10日内停牌
+        4. 涨跌停
+    :param stocklist:
+    :return:
+    """
+    from functools import partial
+    __funclist = [_dropst, partial(_drop_suspendtrading, hold_days=10), realtime_trade_limit]
     for func in __funclist:
         stocklist = func(stocklist)
     return stocklist
