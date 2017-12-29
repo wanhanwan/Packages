@@ -127,6 +127,14 @@ ValueBiasFactor_SP_DR = ('ValueBiasFactor_SP_DR', '/XYData/Others/', 1)
 ValueBiasFactor_BP_DR = ('ValueBiasFactor_BP_DR', '/XYData/Others/', 1)
 VWAPPFactor_VWAPP_OLS = ('VWAPPFactor_VWAPP_OLS', '/XYData/Others/', 1)
 
+# 临时因子
+Earning_YOY = ('EARNING_YOY', '/temp/', 1)
+SALES_YOY = ('SALES_YOY', '/temp/', 1)
+ROE = ('ROE', '/temp/', 1)
+BP = ('BP', '/temp/', 1)
+EP = ('EP', '/temp/', 1)
+TURN = ('TURN', '/temp/', -1)
+
 factor_list_growth = [StyleGrowthFactor_Earnings_LTG, StyleGrowthFactor_Earnings_SFG, StyleGrowthFactor_Earnings_SQ_YoY,
                StyleGrowthFactor_SaleEarnings_SQ_YoY, StyleGrowthFactor_Sales_LTG, StyleGrowthFactor_Sales_SFG,
                StyleGrowthFactor_Sales_SQ_YoY]

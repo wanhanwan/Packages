@@ -50,7 +50,7 @@ def score_by_industry(factor_data, industry_name, factor_names=None, **kwargs):
 
 def score_typical(factor_data, factor_names=None, **kwargs):
     factor_names = factor_names if factor_names is not None else list(factor_data.columns)
-    score = ScoringFactors(factor_data, factor_names)
+    score = ScoringFactors(factor_data, factor_names, **kwargs)
     return score
 
 
