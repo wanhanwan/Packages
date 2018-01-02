@@ -113,7 +113,7 @@ class NCDB(object):
         if idx is not None:
             idx1 = idx1.intersection(idx.index)
         file_path = self.abs_factor_path(file_dir, file_name)
-        file = xr.open_dataset(file_path, "data", engine="netcdf4", drop_variables=factor_names_drop)
+        file = xr.open_dataset(file_path, "data", engine="netcdf4", drop_variables=factor_names_drop, autoclose=True)
         factor_data = file.sel(date=idx1.get_level_values(0).unique(), IDs=idx1.get_level_values(1).unique())
         if ret == 'ndarry':
             length = len(ids)

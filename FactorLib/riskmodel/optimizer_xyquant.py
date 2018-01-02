@@ -140,7 +140,7 @@ class Optimizer(object):
             self.asset = pd.concat([asset, asset], axis=1)
             self.asset.columns = ['previous_weight', 'optimal_weight']
 
-    def _add_style_cons(self, style_dict, active=True):
+    def _add_style_cons(self, style_dict, active=True, sense='E'):
         """
         设置风格限制
 
@@ -160,15 +160,15 @@ class Optimizer(object):
             raise ValueError("风格因子数据存在缺失值!")
         lin_exprs = []
         rhs = []
-        senses = ['E'] * len(cons)
+        senses = [sense] * len(cons)
         names = []
         for style, value in portf_style.iteritems():
-            lin_exprs.append([value.index.tolist(), value.values.tolist()])
+            lin_exprs.append([[x.encode('utf8') for x in value.index.tolist()], value.values.tolist()])
             rhs.append(cons[style])
             names.append(style)
         self._c.linear_constraints.add(lin_expr=lin_exprs, senses=senses, rhs=rhs, names=names)
 
-    def _add_industry_cons(self, industry_dict=None, active=True):
+    def _add_industry_cons(self, industry_dict=None, active=True, sense='E'):
         """
         添加行业约束，默认所有行业都进行行业中性处理
 
@@ -195,10 +195,10 @@ class Optimizer(object):
         # todo: 检查组合中某个行业的权重为零，但是基准指数对应行业的权重不为零
         lin_exprs = []
         rhs = []
-        senses = ['E'] * len(cons)
+        senses = [sense] * len(cons)
         names = []
         for indu, value in portf_indu.iteritems():
-            lin_exprs.append([value.index.tolist(), value.values.tolist()])
+            lin_exprs.append([[x.encode('utf8') for x in value.index.tolist()], value.values.tolist()])
             rhs.append(cons[indu])
             names.append(indu)
         self._c.linear_constraints.add(lin_expr=lin_exprs, rhs=rhs, senses=senses, names=names)
@@ -227,7 +227,7 @@ class Optimizer(object):
             DataFrame(index:[industry_names], columns:[IDs])
         """
         portfolio = self._signal.index.tolist()
-        data = self._rskds.load_industry(ids=portfolio, dates=[self._date]).reset_index(level=0, drop=True)
+        data = self._rskds.load_industry(ids=portfolio, dates=[self._date]).reset_index(level='date', drop=True)
         return data.reindex(self._signal.index)
 
     def _prepare_benchmark_indu(self):
@@ -235,7 +235,7 @@ class Optimizer(object):
         基准的行业因子
         """
         weight = self._bchmrk_weight
-        indu = self._rskds.load_industry(ids=weight.index.tolist(), dates=[self._date]).reset_index(level=0, drop=True)
+        indu = self._rskds.load_industry(ids=weight.index.tolist(), dates=[self._date]).reset_index(level='date', drop=True)
         indu = indu.mul(weight, axis='index').sum() / weight.sum()
         return indu
 
@@ -249,7 +249,7 @@ class Optimizer(object):
             DataFrame(index:[factor_names], columns:[IDs])
         """
         portfolio = self._signal.index.tolist()
-        data = self._rskds.load_factors(styles, ids=portfolio, dates=[self._date]).reset_index(level=0, drop=True)
+        data = self._rskds.load_factors(styles, ids=portfolio, dates=[self._date]).reset_index(level='date', drop=True)
         return data.reindex(self._signal.index)
 
     def _prepare_benchmark_style(self, styles):
@@ -263,7 +263,7 @@ class Optimizer(object):
         """
         weight = self._bchmrk_weight
         members = weight.index.tolist()
-        style_data = self._rskds.load_factors(styles, ids=members, dates=[self._date]).reset_index(level=0, drop=True)
+        style_data = self._rskds.load_factors(styles, ids=members, dates=[self._date]).reset_index(level='date', drop=True)
         style_benchmark = style_data.mul(weight, axis='index').sum() / weight.sum()
         return style_benchmark
 
@@ -490,6 +490,9 @@ class PortfolioOptimizer(object):
 
     def save_results(self, name, path=None):
         import os
+        from FactorLib.utils.tool_funcs import tradecode_to_windcode
         path = os.getcwd() if path is None else path
-        self.result.reset_index().to_csv(os.path.join(path, name), index=False)
+        weight_data = self.result.reset_index()
+        weight_data['IDs'] = weight_data['IDs'].apply(tradecode_to_windcode)
+        weight_data.to_csv(os.path.join(path, name), index=False)
 

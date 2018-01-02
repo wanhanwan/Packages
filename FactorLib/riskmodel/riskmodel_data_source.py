@@ -308,7 +308,7 @@ class RiskDataSource(object):
         elif 'Estu' not in factor_names:
             style = self.nc_db.load_factor('risk_factor', '/factorData/', dates=dates, ret='xarray', ids=ids)
             indu = self.nc_db.load_as_dummy('industry', '/factorData/', dates=dates, ids=ids).to_xarray()
-            t = style.update(indu).to_dataframe().set_index(['date', 'IDs'])
+            t = style.update(indu).to_dataframe()
             new = t.loc[:, factor_names].copy()
         else:
             new = self.h5_db.load_factor('Estu', '/factorData/', ids=ids, dates=dates)
@@ -326,7 +326,7 @@ class RiskDataSource(object):
         industry: DataFrame
             DataFrame(index:[date IDs], columns:[industry_names])
         """
-        indu = self.nc_db.load_factor('industry', '/factorData/', dates=dates, ids=ids)
+        indu = self.nc_db.load_as_dummy('industry', '/factorData/', dates=dates, ids=ids)
         indu.rename(columns=lambda x: x[5:] if x.startswith("Indu_") else x, inplace=True)
         return indu
 

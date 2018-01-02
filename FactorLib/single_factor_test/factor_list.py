@@ -81,6 +81,7 @@ StyleSentimentFactor_TargetReturn = ('StyleSentimentFactor_TargetReturn', '/XYDa
 StyleTechnicalFactor_AmountAvg_1M = ('StyleTechnicalFactor_AmountAvg_1M', '/XYData/Technical', -1)
 StyleTechnicalFactor_ILLIQ_20DAvg = ('StyleTechnicalFactor_ILLIQ_20DAvg', '/XYData/Technical', 1)
 StyleTechnicalFactor_LnFloatCap = ('StyleTechnicalFactor_LnFloatCap', '/XYData/Technical', -1)
+StyleTechnicalFactor_LnFloatCap_Big = ('StyleTechnicalFactor_LnFloatCap', '/XYData/Technical', 1)
 StyleTechnicalFactor_RealizedVolatility_1Y = ('StyleTechnicalFactor_RealizedVolatility_1Y', '/XYData/Technical', -1)
 StyleTechnicalFactor_SmallTradeFlow = ('StyleTechnicalFactor_SmallTradeFlow', '/XYData/Technical', -1)
 StyleTechnicalFactor_TSKEW_20D = ('StyleTechnicalFactor_TSKEW_20D', '/XYData/Technical', -1)
