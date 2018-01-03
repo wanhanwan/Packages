@@ -144,7 +144,7 @@ factor_list_quality = [StyleQualityFactor_AssetTurnover, StyleQualityFactor_Curr
                StyleQualityFactor_Debt2Equity_LR, StyleQualityFactor_GrossMargin_TTM,
                StyleQualityFactor_OperatingCashFlows2OperatingProfits_TTM,
                StyleQualityFactor_OperatingProfitMargin_TTM, StyleQualityFactor_ROA_TTM,
-               StyleQualityFactor_ROE_TTM, StyleQualityFactor_ROE_TTM_after_drop_outlier,
+               # StyleQualityFactor_ROE_TTM, StyleQualityFactor_ROE_TTM_after_drop_outlier,
                StyleQualityFactor_ThreeCosts2Sales_TTM]
 
 factor_list_sentiment = [StyleSentimentFactor_EPSChange_FY0_1M, StyleSentimentFactor_EPSChange_FY0_3M,

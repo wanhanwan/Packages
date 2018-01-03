@@ -40,6 +40,12 @@ def typical(factor, name, direction=None, industry_neutral=True, benchmark=None,
         # 配置权重
         benchmark_weight = data_source.sector.get_index_industry_weight(
             benchmark, industry_name=industry_name, dates=all_dates)  # 基准指数的行业权重
+        if kwargs.get('indu_weight', None):
+            user_weight = pd.Series(kwargs.get('indu_weight').__dict__, name=benchmark_weight.name)
+            user_weight.index.name = industry_str
+            a = benchmark_weight.reset_index(level=0, drop=True)
+            a.update(user_weight)
+            benchmark_weight = pd.Series(a.values, index=benchmark_weight.index, name=benchmark_weight.name)
         stock_counts_per_industry = stocks.groupby(['date', industry_str])['IDs'].count()
         weight = (benchmark_weight / stock_counts_per_industry).rename('Weight')
         stocks = stocks.join(weight, on=['date', industry_str], how='left').set_index(['date', 'IDs'])[['Weight']]

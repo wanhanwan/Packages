@@ -455,7 +455,6 @@ class sector(object):
         """获取指数个股权重"""
         dates = self.trade_calendar.get_trade_days(start_date, end_date) if dates is None else dates
         symbol = '_{id}_weight'.format(id=ids)
-
         weight = self.h5DB.load_factor(symbol, '/indexes/').sort_index()
         weight = weight.unstack().reindex(pd.DatetimeIndex(dates), method='ffill').stack()
         weight.index.names = ['date', 'IDs']

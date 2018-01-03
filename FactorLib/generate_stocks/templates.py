@@ -45,7 +45,8 @@ class AbstractStockGenerator(object):
         stocks['IDs'] = stocks['IDs'].apply(tradecode_to_windcode)
         if os.path.isfile(self.config.stocklist.output):
             csvf = open(self.config.stocklist.output)
-            raw = pd.read_csv(csvf, converters={'date': lambda x: datetime.strptime(x, "%Y-%m-%d")}).set_index('date')
+            raw = pd.read_csv(csvf, parse_dates=['date']).set_index('date')
+            csvf.close()
             stocks = stocks[~stocks.index.isin(raw.index)]
             new = raw.append(stocks)
             new.sort_index().reset_index().to_csv(self.config.stocklist.output, float_format="%.6f", index=False)
@@ -93,7 +94,8 @@ class FactorInvestmentStocksGenerator(AbstractStockGenerator):
                                                                    self.config.stocklist.benchmark,
                                                                    self.config.stocklist.industry,
                                                                    prc=self.config.stocklist.prc,
-                                                                   top = self.config.stocklist.top)
+                                                                   top=self.config.stocklist.__dict__.get('top', None)
+                                                                   )
         return stocks
 
     def generate_tempdata(self, start, end, **kwargs):
@@ -136,7 +138,8 @@ class FactorTradesListGenerator(AbstractStockGenerator):
                                                                    self.config.stocklist.benchmark,
                                                                    self.config.stocklist.industry,
                                                                    prc=self.config.stocklist.prc,
-                                                                   top = self.config.stocklist.top)
+                                                                   top=self.config.stocklist.top,
+                                                                   indu_weight=self.config.stocklist.indu_weight)
         return stocks
 
     def generate_tempdata(self, start, end, **kwargs):

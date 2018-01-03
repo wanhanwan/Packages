@@ -15,6 +15,7 @@ from .riskmodel_data_source import RiskDataSource
 from itertools import combinations_with_replacement
 from QuantLib.utils import StandardByQT
 
+
 class Optimizer(object):
     """
     股票组合优化器，底层优化依赖于Cplex \n
@@ -37,7 +38,8 @@ class Optimizer(object):
         风险厌恶系数lambda
     """
 
-    def __init__(self, signal, target_ids, date, ds_name, asset=None, active=False, benchmark='000905', risk_mul=0):
+    def __init__(self, signal, target_ids, date, ds_name, asset=None, active=False, benchmark='000905', risk_mul=0,
+                 **kwargs):
         self.target_ids = list(set(signal.index.values).intersection(set(target_ids)))
         self.target_ids.sort()
         self._date = date
@@ -61,8 +63,11 @@ class Optimizer(object):
 
     def _create_signal(self, signal, asset):
         # 基准指数的成分股和权重
-        self._bchmrk_weight = data_source.sector.get_index_weight(
-            ids=self._benchmark, dates=[self._date]).reset_index(level=0, drop=True).iloc[:, 0]
+        if self._benchmark == 'NULL':
+            self._bchmrk_weight = pd.Series(np.zeros(len(self.target_ids)), index=self.target_ids, name='NULL')
+        else:
+            self._bchmrk_weight = data_source.sector.get_index_weight(
+                ids=self._benchmark, dates=[self._date]).reset_index(level=0, drop=True).iloc[:, 0]
         # 找出上期持仓中停牌的股票
         if asset is not None:
             preids = [x.encode('utf8') for x in asset[asset != 0.0].index.tolist()]
@@ -82,7 +87,7 @@ class Optimizer(object):
         allids = list(set(self.target_ids+self._bchmrk_weight.index.tolist()+nontrad_pre))
         allids = [x.encode('utf8') for x in allids]
         allids.sort()
-        self._bchmrk_weight = self._bchmrk_weight.reindex(allids, fill_value=0)
+        self._bchmrk_weight = self._bchmrk_weight.reindex(allids, fill_value=0.0)
         return nontrad_pre, nontrad_target, bchmrk_notin_tar, signal.loc[allids]
 
     def _init_opt_prob(self, nontrad_pre, nontrad_target, bchmrk_notin_tar):
@@ -170,7 +175,7 @@ class Optimizer(object):
 
     def _add_industry_cons(self, industry_dict=None, active=True, sense='E'):
         """
-        添加行业约束，默认所有行业都进行行业中性处理
+        添加行业约束
 
         Paramters:
         ==========
@@ -185,14 +190,13 @@ class Optimizer(object):
             cons = indu_bchmrk
         elif active:
             cons = pd.Series(industry_dict)
-            cons = cons + indu_bchmrk
+            cons = cons + indu_bchmrk.reindex(cons.index)
         else:
             cons = pd.Series(industry_dict)
-            cons = indu_bchmrk.update(cons)
-        portf_indu = self._prepare_portfolio_indu()
+            # cons = indu_bchmrk.update(cons)
+        portf_indu = self._prepare_portfolio_indu().reindex(columns=cons.index)
         if np.any(pd.isnull(portf_indu)) or np.any(pd.isnull(cons)):
             raise ValueError("行业变量存在缺失值！")
-        # todo: 检查组合中某个行业的权重为零，但是基准指数对应行业的权重不为零
         lin_exprs = []
         rhs = []
         senses = [sense] * len(cons)
@@ -224,7 +228,7 @@ class Optimizer(object):
         Returns:
         ========
         data: DataFrame
-            DataFrame(index:[industry_names], columns:[IDs])
+            DataFrame(index:[IDs], columns:[industries])
         """
         portfolio = self._signal.index.tolist()
         data = self._rskds.load_industry(ids=portfolio, dates=[self._date]).reset_index(level='date', drop=True)
@@ -236,7 +240,10 @@ class Optimizer(object):
         """
         weight = self._bchmrk_weight
         indu = self._rskds.load_industry(ids=weight.index.tolist(), dates=[self._date]).reset_index(level='date', drop=True)
-        indu = indu.mul(weight, axis='index').sum() / weight.sum()
+        if weight.sum() > 0:
+            indu = indu.mul(weight, axis='index').sum() / weight.sum()
+        else:
+            indu = indu.mul(weight, axis='index').sum()
         return indu
 
     def _prepare_portfolio_style(self, styles):
@@ -264,7 +271,10 @@ class Optimizer(object):
         weight = self._bchmrk_weight
         members = weight.index.tolist()
         style_data = self._rskds.load_factors(styles, ids=members, dates=[self._date]).reset_index(level='date', drop=True)
-        style_benchmark = style_data.mul(weight, axis='index').sum() / weight.sum()
+        if weight.sum() > 0:
+            style_benchmark = style_data.mul(weight, axis='index').sum() / weight.sum()
+        else:
+            style_benchmark = style_data.mul(weight, axis='index').sum()
         return style_benchmark
 
     def _add_trckerr(self, target_err, **kwargs):
@@ -371,17 +381,16 @@ class Optimizer(object):
             raise ValueError("组合信号存在缺失值！")
         self._c.objective.set_sense(self._c.objective.sense.maximize)
         if self._riskmul != 0:
-            portfolio_risk = self._load_portfolio_risk()
+            bchmrk_weight = self._bchmrk_weight
+            sigma = self._load_portfolio_risk() * self._riskmul * 0.5
+            qlin = 2.0 * np.dot(bchmrk_weight.values, sigma)
             quad_obj = []
-            ind = np.arange(portfolio_risk.shape[0]).tolist()
+            ind = np.arange(sigma.shape[0]).tolist()
             for i in ind:
-                quad_obj.append([ind, (-1.0 * portfolio_risk[i, :]).tolist()])
+                quad_obj.append(cpx.SparsePair(ind, np.around(-1.0 * sigma[i, :], 5).tolist()))
             self._c.objective.set_quadratic(quad_obj)
-            if self._active:
-                bchmrk_weight = self._bchmrk_weight.reindex(self._signal.index, fill_value=0)
-                lin_coeffs = self._signal.values + 2.0 * np.dot(bchmrk_weight.values, portfolio_risk)
-            else:
-                lin_coeffs = self._signal.values
+            lin_coeffs = self._signal.values
+            lin_coeffs += qlin
             self._c.objective.set_linear(list(zip(self._allids, lin_coeffs)))
         else:
             lin_coeffs = self._signal.values
@@ -432,12 +441,13 @@ class PortfolioOptimizer(object):
     """股票组合优化器"""
     ds = RiskDataSource('xy')
 
-    def __init__(self, signal, stock_pool, benchmark, constraints, dates=None):
+    def __init__(self, signal, stock_pool, benchmark, constraints, dates=None, **kwargs):
         self.signal, self.stock_pool = self._create_signal_and_stockpool(signal, stock_pool, dates)
         self.benchmark = benchmark
         self.constraints = constraints
         self.result = None
         self.log = {}
+        self.kwargs = kwargs
 
     @staticmethod
     def _create_signal_and_stockpool(signal, stock_pool, dates):
@@ -473,7 +483,7 @@ class PortfolioOptimizer(object):
                 ids = pd.read_csv(os.path.join(self.ds.h5_db.data_path, 'stockRisk', '%s.csv'%idate.strftime("%Y%m%d")),
                                   header=0, usecols=[0], dtype={0: 'str'})
                 stock_pool = list(set(stock_pool).intersection(set(ids.iloc[:, 0].values)))
-            optimizer = Optimizer(signal, stock_pool, idate, PortfolioOptimizer.ds, benchmark=self.benchmark)
+            optimizer = Optimizer(signal, stock_pool, idate, PortfolioOptimizer.ds, benchmark=self.benchmark, **self.kwargs)
 
             for k, v in self.constraints.items():
                 optimizer.add_constraint(k, **v)
