@@ -302,7 +302,7 @@ class RiskDataSource(object):
         if factor_names == 'ALL':
             style = self.nc_db.load_factor('risk_factor', '/factorData/', dates=dates, ret='xarray', ids=ids)
             indu = self.nc_db.load_as_dummy('industry', '/factorData/', dates=dates, ids=ids).to_xarray()
-            new = style.update(indu).to_dataframe().set_index(['date', 'IDs'])
+            new = style.update(indu).to_dataframe()
         elif factor_names == 'STYLE':
             new = self.nc_db.load_factor('risk_factor', '/factorData/', dates=dates, ids=ids)
         elif 'Estu' not in factor_names:
@@ -454,6 +454,37 @@ class RiskDataSource(object):
             if path.isfile(csv_file):
                 matrix = pd.read_csv(csv_file, index_col=0, header=0).rename(
                     index=lambda x: str(x).zfill(6), columns=lambda x: str(x).zfill(6))
+                matrixes[dates[i]] = matrix
+            else:
+                warn("%s 风险矩阵不存在！" % date)
+        return matrixes
+
+    @DateRange2Dates
+    def load_uqer_riskmatrix(self, start_date=None, end_date=None, dates=None, raw=False):
+        """
+        加载优矿风险模型风险矩阵
+        风险矩阵是short的总风险
+
+        Return:
+        =======
+        riskmatrix: dict
+            dict(key:date, value:DataFrame(index:[IDs], columns:[IDs])
+        """
+        dates_str = [x.strftime("%Y%m%d") for x in dates]
+        matrixes = {}
+        factor_risk_pth = path.join(self._dspath, 'factorRisk')
+        spec_risk_pth = path.join(self._dspath, 'specificRisk')
+
+        for i, date in enumerate(dates_str):
+            factor_risk_file = path.join(factor_risk_pth, '%s.csv' % date)
+            spec_risk_file = path.join(spec_risk_pth, '%s.csv' % date)
+            if path.isfile(factor_risk_file):
+                factor_risk = pd.read_csv(factor_risk_file, index_col=0, header=0) / 10000.0
+                factor_expo = self.load_factors('ALL', dates=[date]).reindex(columns=factor_risk.columns).dropna()
+                spec_risk = (pd.read_csv(spec_risk_file, header=0, converters={'ticker': lambda x: str(x).zfill(6)}).set_index(['ticker']).rename_axis('IDs')
+                             ['SRISK'] / 100.0) ** 2
+                matrix = factor_expo.values.dot(factor_risk.values).dot(factor_expo.values.T) + np.diag(spec_risk.values)
+                matrix = pd.DataFrame(matrix, index=spec_risk.index, columns=spec_risk.index)
                 matrixes[dates[i]] = matrix
             else:
                 warn("%s 风险矩阵不存在！" % date)

@@ -324,15 +324,12 @@ class Optimizer(object):
         userexpo_benchmark = data.loc[members].mul(weight, axis='index').sum() / weight.sum()
         return userexpo_benchmark
 
-    # def _prepare_portfolio_userexpo(self, name):
-    #
-
-
     def _load_portfolio_risk(self):
         """
         加载股票组合风险矩阵
         """
-        sigma = self._rskds.load_xy_riskmatrix(dates=[self._date])[self._date].loc[self._allids, self._allids]
+        func_name = 'load_%s_riskmatrix' % self._rskds._name
+        sigma = getattr(self._rskds, func_name)(dates=[self._date])[self._date].loc[self._allids, self._allids]
         if np.any(pd.isnull(sigma)):
             raise ValueError("股票组合的风险存在缺失值！")
         return sigma.values
@@ -439,9 +436,9 @@ class Optimizer(object):
 
 class PortfolioOptimizer(object):
     """股票组合优化器"""
-    ds = RiskDataSource('xy')
 
-    def __init__(self, signal, stock_pool, benchmark, constraints, dates=None, **kwargs):
+    def __init__(self, signal, stock_pool, benchmark, constraints, dates=None, ds_name='xy', **kwargs):
+        self.ds = RiskDataSource(ds_name)
         self.signal, self.stock_pool = self._create_signal_and_stockpool(signal, stock_pool, dates)
         self.benchmark = benchmark
         self.constraints = constraints
@@ -449,8 +446,7 @@ class PortfolioOptimizer(object):
         self.log = {}
         self.kwargs = kwargs
 
-    @staticmethod
-    def _create_signal_and_stockpool(signal, stock_pool, dates):
+    def _create_signal_and_stockpool(self, signal, stock_pool, dates):
         if isinstance(signal, dict):
             signal = data_source.load_factor(signal['factor_name'], signal['factor_dir'], dates=dates).iloc[:, 0]
         elif dates is not None:
@@ -467,7 +463,7 @@ class PortfolioOptimizer(object):
         else:
             stock_pool_valid = typical(stock_pool)
         stock_pool_valid = _intersection(signal, stock_pool_valid)
-        estu = PortfolioOptimizer.ds.load_factors(['Estu'], dates=dates)
+        estu = self.ds.load_factors(['Estu'], dates=dates)
         stock_pool_valid = _intersection(estu[estu['Estu']==1], stock_pool_valid)
         return signal, stock_pool_valid.reset_index(level=1)['IDs']
 
@@ -479,11 +475,11 @@ class PortfolioOptimizer(object):
             print("当前日期:%s, 总进度:%d/%d" % (idate.strftime("%Y-%m-%d"), i + 1, len(dates)))
             signal = self.signal.loc[idate]
             stock_pool = self.stock_pool.loc[idate].tolist()
-            if 'TrackingError' in self.constraints:
+            if 'TrackingError' in self.constraints and self.ds._name == 'xy':
                 ids = pd.read_csv(os.path.join(self.ds.h5_db.data_path, 'stockRisk', '%s.csv'%idate.strftime("%Y%m%d")),
                                   header=0, usecols=[0], dtype={0: 'str'})
                 stock_pool = list(set(stock_pool).intersection(set(ids.iloc[:, 0].values)))
-            optimizer = Optimizer(signal, stock_pool, idate, PortfolioOptimizer.ds, benchmark=self.benchmark, **self.kwargs)
+            optimizer = Optimizer(signal, stock_pool, idate, self.ds, benchmark=self.benchmark, **self.kwargs)
 
             for k, v in self.constraints.items():
                 optimizer.add_constraint(k, **v)
