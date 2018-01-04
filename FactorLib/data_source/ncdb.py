@@ -162,7 +162,7 @@ class NCDB(object):
                     old_dtype = file[factor].encoding
                     new_dtypes[factor] = {k: v for k, v in old_dtype.items() if k
                                           in ['_FillValue', 'dtype', 'scale_factor', 'units', 'zlib', 'complevel']}
-                new_data = file.update(new_dset)
+                new_data = new_dset.combine_first(file)
             available_name = self.get_available_factor_name(file_name, file_dir)
             new_data.to_netcdf(self.abs_factor_path(file_dir, available_name),
                                "w", engine="netcdf4", encoding=new_dtypes, group="data")
