@@ -9,6 +9,7 @@ import pandas as pd
 import cplex as cpx
 import os
 import sys
+import warnings
 from FactorLib.data_source.base_data_source_h5 import data_source
 from QuantLib.stockFilter import suspendtrading, typical, _intersection
 from .riskmodel_data_source import RiskDataSource
@@ -162,7 +163,20 @@ class Optimizer(object):
             cons = cons + bchmk_style
         portf_style = self._prepare_portfolio_style(list(style_dict))
         if np.any(pd.isnull(portf_style)) or np.any(pd.isnull(cons)):
-            raise ValueError("风格因子数据存在缺失值!")
+            warnings.warn("设置风格敞口时, 风格因子数据存在缺失值!")
+            na_stocks = portf_style[portf_style.isnull().any(axis=1)]
+            limit_values = pd.Series(np.zeros(len(na_stocks)), index=na_stocks.index)
+            lin_exprs = []
+            rhs = []
+            names = []
+            senses = ['E'] * len(na_stocks)
+            for i in na_stocks.index.values:
+                lin_exprs.append([[i.encode('utf8')], [1]])
+                rhs.append(0)
+                names.append('notrading_%s' % i)
+            self._c.linear_constraints.add(lin_expr=lin_exprs, senses=senses, rhs=rhs, names=names)
+            self._internal_limit = self._internal_limit.append(limit_values)
+            portf_style.fillna(0, inplace=True)
         lin_exprs = []
         rhs = []
         senses = [sense] * len(cons)
@@ -331,7 +345,20 @@ class Optimizer(object):
         func_name = 'load_%s_riskmatrix' % self._rskds._name
         sigma = getattr(self._rskds, func_name)(dates=[self._date])[self._date].loc[self._allids, self._allids]
         if np.any(pd.isnull(sigma)):
-            raise ValueError("股票组合的风险存在缺失值！")
+            warnings.warn("股票组合的风险存在缺失值！")
+            na_stocks = sigma[sigma.isnull().any(axis=1)]
+            limit_values = pd.Series(np.zeros(len(na_stocks)), index=na_stocks.index)
+            lin_exprs = []
+            rhs = []
+            names = []
+            senses = ['E'] * len(na_stocks)
+            for i in na_stocks.index.values:
+                lin_exprs.append([[i.encode('utf8')], [1]])
+                rhs.append(0.0)
+                names.append('notrading_%s' % i)
+            self._c.linear_constraints.add(lin_expr=lin_exprs, senses=senses, rhs=rhs, names=names)
+            self._internal_limit = self._internal_limit.append(limit_values)
+            sigma.fillna(sigma.mean(), inplace=True)
         return sigma.values
 
     def add_constraint(self, key, *args, **kwargs):
@@ -464,7 +491,7 @@ class PortfolioOptimizer(object):
             stock_pool_valid = typical(stock_pool)
         stock_pool_valid = _intersection(signal, stock_pool_valid)
         estu = self.ds.load_factors(['Estu'], dates=dates)
-        stock_pool_valid = _intersection(estu[estu['Estu']==1], stock_pool_valid)
+        stock_pool_valid = _intersection(estu[estu['Estu'] == 1], stock_pool_valid)
         return signal, stock_pool_valid.reset_index(level=1)['IDs']
 
     def optimize_weights(self):
@@ -498,7 +525,7 @@ class PortfolioOptimizer(object):
         import os
         from FactorLib.utils.tool_funcs import tradecode_to_windcode
         path = os.getcwd() if path is None else path
-        weight_data = self.result.reset_index()
+        weight_data = self.result.reset_index().rename(columns={'optimal_weight': 'Weight'})
         weight_data['IDs'] = weight_data['IDs'].apply(tradecode_to_windcode)
         weight_data.to_csv(os.path.join(path, name), index=False)
 
