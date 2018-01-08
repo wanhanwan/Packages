@@ -67,8 +67,12 @@ class Optimizer(object):
         if self._benchmark == 'NULL':
             self._bchmrk_weight = pd.Series(np.zeros(len(self.target_ids)), index=self.target_ids, name='NULL')
         else:
-            self._bchmrk_weight = data_source.sector.get_index_weight(
-                ids=self._benchmark, dates=[self._date]).reset_index(level=0, drop=True).iloc[:, 0]
+            bchmrk_weight = data_source.sector.get_index_weight(
+                ids=self._benchmark, dates=[self._date]).reset_index(level='date', drop=True).iloc[:, 0]
+            estu = self._rskds.load_factors(['Estu'], dates=[self._date]).reset_index(level='date', drop=True)
+            bchmrk_weight = bchmrk_weight[bchmrk_weight.index.intersection(estu.index)]
+            bchmrk_weight = bchmrk_weight / bchmrk_weight.sum()
+            self._bchmrk_weight = bchmrk_weight
         # 找出上期持仓中停牌的股票
         if asset is not None:
             preids = [x.encode('utf8') for x in asset[asset != 0.0].index.tolist()]
@@ -300,7 +304,8 @@ class Optimizer(object):
         qlin = [self._signal.index.tolist(), (-2.0 * np.dot(bchmrk_weight.values, sigma)).tolist()]
         qvar_expr = [list(x) for x in zip(*combinations_with_replacement(self._allids, 2))]
         qvar_mul = np.triu(sigma) + np.tril(sigma, -1).T
-        qvar_mul = qvar_mul.ravel()[np.flatnonzero(qvar_mul)]
+        # qvar_mul = qvar_mul.ravel()[np.flatnonzero(qvar_mul)]
+        qvar_mul = qvar_mul[np.triu_indices_from(qvar_mul)]
         quad = qvar_expr + [qvar_mul.tolist()]
 
         self._c.quadratic_constraints.add(lin_expr=qlin, quad_expr=quad, sense='L', rhs=-bchmrk_risk+target_err,
@@ -346,7 +351,7 @@ class Optimizer(object):
         sigma = getattr(self._rskds, func_name)(dates=[self._date])[self._date].loc[self._allids, self._allids]
         if np.any(pd.isnull(sigma)):
             warnings.warn("股票组合的风险存在缺失值！")
-            na_stocks = sigma[sigma.isnull().any(axis=1)]
+            na_stocks = sigma[sigma.isnull().all(axis=1)]
             limit_values = pd.Series(np.zeros(len(na_stocks)), index=na_stocks.index)
             lin_exprs = []
             rhs = []
@@ -358,7 +363,7 @@ class Optimizer(object):
                 names.append('notrading_%s' % i)
             self._c.linear_constraints.add(lin_expr=lin_exprs, senses=senses, rhs=rhs, names=names)
             self._internal_limit = self._internal_limit.append(limit_values)
-            sigma.fillna(sigma.mean(), inplace=True)
+            sigma.fillna(0.0, inplace=True)
         return sigma.values
 
     def add_constraint(self, key, *args, **kwargs):
