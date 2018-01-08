@@ -480,11 +480,13 @@ class RiskDataSource(object):
             spec_risk_file = path.join(spec_risk_pth, '%s.csv' % date)
             if path.isfile(factor_risk_file):
                 factor_risk = pd.read_csv(factor_risk_file, index_col=0, header=0) / 10000.0
-                factor_expo = self.load_factors('ALL', dates=[date]).reindex(columns=factor_risk.columns).dropna()
+                factor_expo = self.load_factors('ALL', dates=[date]).reindex(columns=factor_risk.columns).dropna().reset_index(level='date', drop=True)
                 spec_risk = (pd.read_csv(spec_risk_file, header=0, converters={'ticker': lambda x: str(x).zfill(6)}).set_index(['ticker']).rename_axis('IDs')
                              ['SRISK'] / 100.0) ** 2
-                matrix = factor_expo.values.dot(factor_risk.values).dot(factor_expo.values.T) + np.diag(spec_risk.reindex(factor_expo.index.get_level_values('IDs')).values)
-                matrix = pd.DataFrame(matrix, index=spec_risk.index, columns=spec_risk.index)
+                common_stocks = np.intersect1d(factor_expo.index.values, spec_risk.index.values)
+                matrix = factor_expo.reindex(common_stocks).values.dot(factor_risk.values).dot(factor_expo.reindex(common_stocks).values.T) + \
+                         np.diag(spec_risk.reindex(common_stocks).values)
+                matrix = pd.DataFrame(matrix, index=common_stocks, columns=common_stocks)
                 matrixes[dates[i]] = matrix
             else:
                 warn("%s 风险矩阵不存在！" % date)
