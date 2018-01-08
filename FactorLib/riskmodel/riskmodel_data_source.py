@@ -483,7 +483,7 @@ class RiskDataSource(object):
                 factor_expo = self.load_factors('ALL', dates=[date]).reindex(columns=factor_risk.columns).dropna()
                 spec_risk = (pd.read_csv(spec_risk_file, header=0, converters={'ticker': lambda x: str(x).zfill(6)}).set_index(['ticker']).rename_axis('IDs')
                              ['SRISK'] / 100.0) ** 2
-                matrix = factor_expo.values.dot(factor_risk.values).dot(factor_expo.values.T) + np.diag(spec_risk.values)
+                matrix = factor_expo.values.dot(factor_risk.values).dot(factor_expo.values.T) + np.diag(spec_risk.reindex(factor_expo.index.get_level_values('IDs')).values)
                 matrix = pd.DataFrame(matrix, index=spec_risk.index, columns=spec_risk.index)
                 matrixes[dates[i]] = matrix
             else:
