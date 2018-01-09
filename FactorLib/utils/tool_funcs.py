@@ -10,7 +10,11 @@ from FactorLib.const import (INDUSTRY_NAME_DICT,
                    )
 import pandas as pd
 import os
-from fastcache import clru_cache
+try:
+    from fastcache import clru_cache
+except:
+    from functools import lru_cache
+    clru_cache = lru_cache
 
 def dict_reverse(_dict):
     return {_dict[x]:x for x in _dict}

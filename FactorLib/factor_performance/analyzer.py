@@ -21,6 +21,7 @@ class Analyzer(object):
         self.benchmark_return = self._return_of_benchmark(benchmark_name)
         self.active_return = stats._adjust_returns(self.portfolio_return, self.benchmark_return)
         self.benchmark_name = benchmark_name
+        self.pkl_path = pkl_path
 
     @property
     def _return_of_portfolio(self):
@@ -185,6 +186,17 @@ class Analyzer(object):
                           columns=['portfolio', 'benchmark', 'hedge'],
                           index=['total_return', 'maxdd', 'volatility', 'annual_return', 'sharp', 'win_rate'])
         return df
+
+    def range_performance(self, start, end):
+        portfolio_return = self.portfolio_return.loc[start:end]
+        benchmark_return = self.benchmark_return.loc[start:end]
+        active_return = self.active_return.loc[start:end]
+        a = self.__class__(self.pkl_path, self.benchmark_name)
+        a.portfolio_return = portfolio_return
+        a.benchmark_return = benchmark_return
+        a.active_return = active_return
+        return a.total_performance
+
 
     def range_pct(self, start, end, rel=True):
         try:

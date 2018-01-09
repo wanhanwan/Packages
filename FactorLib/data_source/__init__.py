@@ -6,7 +6,7 @@ import pandas as pd
 # mysql_engine = create_engine('mysql+pymysql://root:123456@localhost/barrafactors')
 
 # oracle引擎
-#oracle_engine = create_engine("oracle://windfile:windfile@172.20.65.11:1521/wind")
+#oracle_engine = create_engine("oracle://Filedb:Filedb@172.20.65.27:1521/cibfund")
 
 
 def save_insert_to_mysql(df, table_name, engine):
