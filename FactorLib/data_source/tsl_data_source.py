@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import TSLPy3 as tsl
 from FactorLib.utils.tool_funcs import tradecode_to_tslcode, tslcode_to_tradecode
+from FactorLib.utils.datetime_func import DateRange2Dates
 from FactorLib.utils.TSDataParser import *
 from functools import reduce, partial
 
@@ -37,6 +38,21 @@ def CsQuery(field_dict, end_date, bk_name=_ashare, stock_list=None, condition="1
     return df.set_index(['date', 'IDs'])
 
 
+@DateRange2Dates
+def PanelQuery(field_dict, start_date=None, end_date=None, dates=None,
+               bk_name=_ashare, stock_list=None, condition="1"):
+    """对天软Query函数的封装
+    Parameters:
+    ===========
+    field_dict:
+    """
+    data = []
+    for date in dates:
+        idata = CsQuery(field_dict, date, bk_name=bk_name, stock_list=stock_list, condition=condition)
+        data.append(idata)
+    return pd.concat(data)
+
+
 def partialCsQueryFunc(*args, **kwargs):
     """CsQuery的偏函数"""
     return partial(CsQuery, *args, **kwargs)
@@ -44,5 +60,5 @@ def partialCsQueryFunc(*args, **kwargs):
 
 if __name__ == '__main__':
     field = {"'IDs'": 'DefaultStockID()', "'list_days'": 'StockGoMarketDays()'}
-    data = CsQuery(field, pd.to_datetime('20171130'))
+    data = PanelQuery(field, start_date='20100101', end_date='20170101')
     print(data)

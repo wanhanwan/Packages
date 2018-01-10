@@ -11,6 +11,7 @@ ep = ('ep', '/stock_value/', 1)
 bp_standard = ('bp_standard', '/stock_value/', 1)
 bp_divide_median = ('bp_divide_median', '/stock_value/', 1)
 ep_divide_median = ('ep_divide_median', '/stock_value/', 1)
+epttm_divide_median = ('epttm_divide_median', '/stock_value/', 1)
 relative_pe = ('relative_pe', '/lg_factor/', -1)
 float_mkt_value = ('float_mkt_value', '/stocks/', -1)
 

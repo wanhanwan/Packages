@@ -88,6 +88,23 @@ def ep_divide_median(start, end, **kwargs):
     data_source.h5DB.save_factor(ep[['ep_divide_median']], '/stock_value/')
 
 
+def epttm_divide_median(start, end, **kwargs):
+    data_source = kwargs['data_source']
+    dates = data_source.trade_calendar.get_trade_days(start, end)
+    ep = 1.0 / data_source.load_factor('pe_ttm', '/stock_value/', dates=dates)
+    ids = ep.index.get_level_values(1).unique().tolist()
+    industry = data_source.sector.get_stock_industry_info(ids, dates=dates)
+
+    ep = pd.concat([ep, industry], axis=1).reset_index(level=1).set_index('cs_level_1', append=True)
+    ep = ep[pd.notnull(ep.index.get_level_values(1))]
+    ep_median = ep.groupby(['date', 'cs_level_1'])['pe_ttm'].median()
+    ep = pd.merge(ep,ep_median.to_frame(),left_index=True,right_index=True,how='left')
+    ep['epttm_divide_median'] = ep['pe_ttm_x'] / ep['pe_ttm_y']
+    ep = ep.reset_index(level=1, drop=True).set_index('IDs', append=True)
+
+    data_source.h5DB.save_factor(ep[['epttm_divide_median']], '/stock_value/')
+
+
 def epfwd(start, end, **kwargs):
     """
     barra中EPFWD因子
@@ -102,11 +119,11 @@ def epfwd(start, end, **kwargs):
     data_source.h5DB.save_factor(new_factor, '/barra/descriptors/')
 
 
-ValueFuncListDaily = [pe_ttm, pe, pb, bp, ep, bp_divide_median, ep_divide_median, epfwd]
+ValueFuncListDaily = [pe_ttm, pe, pb, bp, ep, bp_divide_median, ep_divide_median, epfwd, epttm_divide_median]
 ValueFuncListMonthly = []
 
 
 if __name__ == '__main__':
     from FactorLib.data_source.base_data_source_h5 import data_source
-    bp('20170630', '20170904', data_source=data_source)
-    bp_divide_median('20170630', '20170904', data_source=data_source)
+    # bp('20170630', '20170904', data_source=data_source)
+    epttm_divide_median('20070101', '20180109', data_source=data_source)
