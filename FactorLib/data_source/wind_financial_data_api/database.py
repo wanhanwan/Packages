@@ -115,6 +115,7 @@ class BaseDB(object):
         data = self.exec_query(s)
         return data
 
+
 class WindDB(BaseDB):
     """Wind数据库"""
     data_dict = WindTableInfo()
@@ -124,15 +125,27 @@ class WindDB(BaseDB):
         super(BaseDB, self).__init__(user_name, pass_word, db_name, ip_address, db_type, port)
 
     def load_factors(self, factors, table, _in=None, _between=None, _equal=None):
+        """提取某张表的数据"""
+        wind_table_name = WindDB.data_dict.wind_table_name(table)
+        wind_factor_ids = list(set(WindDB.data_dict.wind_factor_ids(factors) + \
+                          WindDB.data_dict.list_default_factors(table)['WindID'].tolist()))
+        if _in is not None:
+            _in = {WindDB.data_dict.wind_factor_ids([x])[0]: y for x, y in _in.items()}
+        if _between is not None:
+            _between = {WindDB.data_dict.wind_factor_ids([x])[0]: y for x, y in _between.items()}
+        if _equal is not None:
+            _equal = {WindDB.data_dict.wind_factor_ids([x])[0]: y for x, y in _equal.items()}
+        data = self.load_panel_data(wind_table_name, wind_factor_ids, _between, _in, _equal)
+        table_index = WindDB.data_dict.get_table_index(table).set_index('WindID')['DFIndex'].to_dict()
+        data = data.rename(columns=table_index).set_index(table_index.values).sort_index()
+        return data
         
-
 
 class WindEstDB(WindDB):
     """Wind一致预期数据库Wrapper"""
 
     def __init__(self):
         super(WindDB, self).__init__()
-
 
 
 class WindTableInfo(object):
@@ -152,6 +165,14 @@ class WindTableInfo(object):
         all_factors = self.list_factors(table_name)
         return all_factors.loc[factor_names, 'WindID'].tolist()
 
+    def list_default_factors(self, table_name):
+        tmp = WindTableInfo.factor_info.query("TableName==@table_name & DefaultIndex==1")[['Name', 'WindID']].set_index('Name')
+        return tmp
+
+    def get_table_index(self, table_name):
+        tmp = WindTableInfo.factor_info.query("TableName==@table_name & DFIndex!='None'")[['Name', 'WindID', 'DFIndex']].set_index(
+            'Name')
+        return tmp
     
 def _read_est_dict():
     file_pth = os.path.abspath(__file__+"/../../")
