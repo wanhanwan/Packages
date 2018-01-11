@@ -128,7 +128,8 @@ class NCDB(object):
             df = factor_data.to_dataframe().dropna(how='all')
         return df
 
-    def save_factor(self, factor_data, file_name, file_dir, if_exists='append', dtypes=None):
+    def save_factor(self, factor_data, file_name, file_dir, if_exists='append', dtypes=None,
+                    append_type='combine_first'):
         """往数据库中写数据
         数据格式：DataFrame(index=[date,IDs],columns=data)
         """
