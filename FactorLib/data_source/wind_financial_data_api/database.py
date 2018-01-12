@@ -2,13 +2,17 @@
 from sqlalchemy import create_engine
 from fastcache import clru_cache
 from params import *
-from FactorLib.data_source.base_data_source_h5 import ncdb
+from FactorLib.data_source.base_data_source_h5 import ncdb, tc
 from FactorLib.utils.tool_funcs import ensure_dir_exists
 from collections import Iterator
+from data_loader import DataLoader
 import pandas as pd
 import numpy as np
 import sqlalchemy as sa
 import os
+import warnings
+from pandas.errors import PerformanceWarning
+warnings.filterwarnings(action='ignore', category=PerformanceWarning)
 
 
 def _read_est_dict():
@@ -25,21 +29,33 @@ def _drop_invalid_stocks(data):
     return data.query("IDs not in @invalid_ids")
 
 
+def _reconstruct(data):
+    """重新调整数据结构，把整数股票ID转成字符串，日期转成datetime
+    """
+    data = data.reset_index()
+    data['IDs'] = data['IDs'].astype('str').str.zfill(6)
+    data['date'] = pd.to_datetime(data['date'].astype('str'))
+    return data.set_index(['date', 'IDs'])
+
 class WindTableInfo(object):
     """docstring for WindTableInfo"""
     table_info, factor_info = _read_est_dict()
 
-    def wind_table_name(self, table_name):
+    @staticmethod
+    def wind_table_name(table_name):
         """中文表明对应的Wind数据库表名"""
         return WindTableInfo.table_info[WindTableInfo.table_info['TableName']==table_name]['WindTableName'].iloc[0]
 
-    def list_factors(self, table_name):
+    @staticmethod
+    def list_factors(table_name):
         """列出某张表下所有字段对照"""
         return WindTableInfo.factor_info[WindTableInfo.factor_info['TableName']==table_name][['Name', 'WindID']].set_index('Name')
 
     def wind_factor_ids(self, table_name, factor_names):
         """某张表中文字段对应的Wind数据库字段"""
         all_factors = self.list_factors(table_name)
+        if isinstance(factor_names, str):
+            return all_factors.at[factor_names, 'WindID']
         return all_factors.loc[factor_names, 'WindID'].tolist()
 
     @clru_cache()
@@ -67,7 +83,14 @@ class BaseDB(object):
         self.user_name = user_name
         self.db_name = db_name
         self.ip_address = ip_address
-        self.db_engine = create_engine(self.create_conn_string(user_name, pass_word, db_name, ip_address, port, db_type))
+        self.port = port
+        self.password = pass_word
+        self.db_engine = None
+        self.db_inspector = None
+
+    def connectdb(self):
+        self.db_engine = create_engine(self.create_conn_string(
+            self.user_name, self.password, self.db_name, self.ip_address, self.port, self.db_type))
         self.db_inspector = sa.inspect(self.db_engine)
 
     @staticmethod
@@ -184,6 +207,8 @@ class WindDB(BaseDB):
                 return _wrap_data(idata)
 
         def _wrap_data(idata):
+            if idata.empty:
+                return idata
             idata = idata.rename(columns=table_index)
             idata['IDs'] = idata['IDs'].str[:6]
             return _drop_invalid_stocks(idata)
@@ -221,25 +246,30 @@ class WindEstDB(WindDB):
 
     """Wind一致预期数据库Wrapper"""
     def __init__(self):
-        super(WindDB, self).__init__()
+        super(WindEstDB, self).__init__()
 
 
-class FinanceDB(WindDB):
+class WindFinanceDB(WindDB):
     """Wind财务数据库Wrapper"""
     table_name = ""
+    data_loader = DataLoader()
 
     def __init__(self):
-        super(FinanceDB, self).__init__()
+        super(WindFinanceDB, self).__init__()
 
     def gen_dataframe(self, data):
         """按字段逐一生成DataFrame"""
         default_columns = self.data_dict.get_table_index(self.table_name)['DFIndex'].tolist() + ['quarter', 'year']
         if isinstance(data, Iterator):
             for idata in data:
+                if idata.empty:
+                    yield idata
                 columns = [x for x in idata.columns if x not in default_columns]
                 for c in columns:
                     yield c, idata[default_columns+[c]]
         else:
+            if data.empty:
+                yield None, data    
             columns = [x for x in data.columns if x not in default_columns]
             for c in columns:
                 yield c, data[default_columns + [c]]
@@ -248,6 +278,8 @@ class FinanceDB(WindDB):
         tar_pth = os.path.join(LOCAL_FINDB_PATH, table_id)
         ensure_dir_exists(tar_pth)
         for c, d in self.gen_dataframe(data):
+            if d.empty:
+                return
             if if_exists == 'replace':
                 self.save_factor(d, tar_pth, c, if_exists='replace')
                 if_exists = 'append'
@@ -256,6 +288,8 @@ class FinanceDB(WindDB):
 
     @staticmethod
     def add_quarter_year(idata):
+        if idata.empty:
+            return idata
         idata.dropna(subset=['ann_dt'], inplace=True)
         idata['quarter'] = pd.to_datetime(idata['date']).dt.quarter
         idata['year'] = pd.to_datetime(idata['date']).dt.year
@@ -277,8 +311,15 @@ class FinanceDB(WindDB):
             new_data = new_data.sort_values(['IDs', 'date', 'ann_dt', 'stat_type']).reset_index(drop=True)
             new_data.to_hdf(tar_file, "data", mode='w', complib='blosc', complevel=9)
 
+    @clru_cache()
+    def load_h5(self, file_name):
+        wind_id = self.data_dict.wind_factor_ids(self.table_name, file_name)
+        data_pth = os.path.join(LOCAL_FINDB_PATH, self.table_id, wind_id+'.h5')
+        data = pd.read_hdf(data_pth, "data")
+        return data
 
-class WindIncomeSheet(FinanceDB):
+
+class WindIncomeSheet(WindFinanceDB):
     """Wind利润表"""
     table_name = u'中国A股利润表'
     table_id = 'income'
@@ -302,17 +343,29 @@ class WindIncomeSheet(FinanceDB):
     def save_data(self, data, table_id=None, if_exists='append'):
         super(WindIncomeSheet, self).save_data(data, WindIncomeSheet.table_id, if_exists)
 
-
-
-
-
+    def load_ttm(self, factor_name, start=None, end=None, dates=None, ids=None):
+        """ 加载TTM数据
+        """
+        wind_id = self.data_dict.wind_factor_ids(self.table_name, factor_name)
+        if start is not None and end is not None:
+            dates = np.asarray(tc.get_trade_days(start, end, retstr='%Y%m%d')).astype('int')
+        else:
+            dates = np.asarray(dates).astype('int')
+        if ids is not None:
+            ids = np.asarray(ids).astype('int')
+        data = self.load_h5(factor_name)
+        new = self.data_loader.ttm(data, wind_id, dates, ids)
+        return _reconstruct(new)
 
 
 if __name__ == '__main__':
     from datetime import datetime
     wind = WindIncomeSheet()
-    data = wind.download_data([u'净利润(含少数股东损益)'], _between={u'报告期': ('20110101', '20171231')})
-    wind.save_data(data)
+    # wind.connectdb()
+    # data = wind.download_data([u'净利润(不含少数股东损益)'], _between={u'报告期': ('20070101', '20171231')})
+    # wind.save_data(data)
+    ttm = wind.load_ttm('净利润(不含少数股东损益)', ids=['000001'], start='20170101', end='20171231')
+    print(ttm)
     # data =  wind.load_panel_data('ashareincome', ['s_info_windcode', 'ann_dt', 'actual_ann_dt',
     #                                               'report_period', 'TOT_OPER_REV', 'NET_PROFIT_INCL_MIN_INT_INC', 'statement_type'],
     #                              _between={'opdate': (datetime(2017, 5, 11), datetime(2017,5,12))})

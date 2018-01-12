@@ -1,3 +1,4 @@
+# coding: utf-8
 """加载财务数据的工具函数"""
 import pandas as pd
 import numpy as np
