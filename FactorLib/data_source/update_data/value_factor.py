@@ -1,16 +1,16 @@
 """更新价值类因子"""
 import pandas as pd
 import numpy as np
+from FactorLib.data_source.wind_financial_data_api import balancesheet, incomesheet
 
 
 # 市盈率ttm
 def pe_ttm(start, end, **kwargs):
     mkt_value = kwargs['data_source'].load_factor('total_mkt_value', '/stocks/', start_date=start,
                                                   end_date=end)
-    net_profit = kwargs['data_source'].get_latest_report(
-        'netprofit_ttm2', start_date=start, end_date=end)
-    pe_ttm = mkt_value['total_mkt_value'] * 10000 / net_profit['netprofit_ttm2']
-    pe_ttm = pe_ttm.to_frame().rename(columns={0: 'pe_ttm'})
+    net_profit = incomesheet.load_ttm('净利润(不含少数股东损益)', start, end)
+    pe_ttm = mkt_value['total_mkt_value'] * 10000 / net_profit.iloc[:, 0]
+    pe_ttm = pe_ttm.to_frame('pe_ttm')
     kwargs['data_source'].h5DB.save_factor(pe_ttm, '/stock_value/')
 
 
@@ -18,10 +18,9 @@ def pe_ttm(start, end, **kwargs):
 def pe(start, end, **kwargs):
     mkt_value = kwargs['data_source'].load_factor('total_mkt_value', '/stocks/', start_date=start,
                                                   end_date=end)
-    net_profit = kwargs['data_source'].get_latest_report(
-        'np_belongto_parcomsh', start_date=start, end_date=end, report_type='4Q')
-    pe = mkt_value['total_mkt_value'] * 10000 / net_profit['np_belongto_parcomsh']
-    pe = pe.to_frame().rename(columns={0: 'pe'})
+    net_profit = incomesheet.load_latest_period('净利润(不含少数股东损益)', start, end, quarter=4)
+    pe = mkt_value['total_mkt_value'] * 10000 / net_profit.iloc[:, 0]
+    pe = pe.to_frame('pe')
     kwargs['data_source'].h5DB.save_factor(pe, '/stock_value/')
 
 
@@ -29,10 +28,9 @@ def pe(start, end, **kwargs):
 def pb(start, end, **kwargs):
     mkt_value = kwargs['data_source'].load_factor('total_mkt_value', '/stocks/', start_date=start,
                                                   end_date=end)
-    book_value = kwargs['data_source'].get_latest_report(
-        'eqy_belongto_parcomsh', start_date=start, end_date=end)
-    pb = mkt_value['total_mkt_value'] * 10000 / book_value['eqy_belongto_parcomsh']
-    pb = pb.to_frame().rename(columns={0: 'pb'})
+    book_value = balancesheet.load_latest_period('股东权益合计(不含少数股东权益)', start, end)
+    pb = mkt_value['total_mkt_value'] * 10000 / book_value.iloc[:, 0]
+    pb = pb.to_frame('pb')
     kwargs['data_source'].h5DB.save_factor(pb, '/stock_value/')
 
 
@@ -126,4 +124,5 @@ ValueFuncListMonthly = []
 if __name__ == '__main__':
     from FactorLib.data_source.base_data_source_h5 import data_source
     # bp('20170630', '20170904', data_source=data_source)
-    epttm_divide_median('20070101', '20180109', data_source=data_source)
+    # epttm_divide_median('20070101', '20180109', data_source=data_source)
+    pe('20180112', '20180112', data_source=data_source)

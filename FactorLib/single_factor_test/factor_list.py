@@ -145,7 +145,8 @@ factor_list_quality = [StyleQualityFactor_AssetTurnover, StyleQualityFactor_Curr
                StyleQualityFactor_Debt2Equity_LR, StyleQualityFactor_GrossMargin_TTM,
                StyleQualityFactor_OperatingCashFlows2OperatingProfits_TTM,
                StyleQualityFactor_OperatingProfitMargin_TTM, StyleQualityFactor_ROA_TTM,
-               # StyleQualityFactor_ROE_TTM, StyleQualityFactor_ROE_TTM_after_drop_outlier,
+               StyleQualityFactor_ROE_TTM,
+               # StyleQualityFactor_ROE_TTM_after_drop_outlier,
                StyleQualityFactor_ThreeCosts2Sales_TTM]
 
 factor_list_sentiment = [StyleSentimentFactor_EPSChange_FY0_1M, StyleSentimentFactor_EPSChange_FY0_3M,
@@ -169,7 +170,7 @@ factor_list_style = [StyleFactor_GM, StyleFactor_GrowthFactor, StyleFactor_Momen
                StyleFactor_TB_adjM, StyleFactor_TradingBehaviorFactor, StyleFactor_ValueFactor,StyleFactor_VG,
                StyleFactor_VGS, StyleFactor_VGS_TB, StyleFactor_VGS_TBadjM, StyleFactor_VS]
 
-self_defined = [bp_divide_median, bp_divide_median, float_mkt_value, six_month_highest_returns, six_month_highest_returns_plus,
+self_defined = [bp_divide_median, ep_divide_median, float_mkt_value, six_month_highest_returns, six_month_highest_returns_plus,
                 iffr, return_60d, turnover_adjust_total_mkt_value]
 
 factor_list_others = [FamaFrenchFactor_IVR, RVFactor_RV, SpreadBiasFactor_SpreadBias_120D, ValueBiasFactor_EP_DR,

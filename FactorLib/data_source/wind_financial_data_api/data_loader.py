@@ -112,6 +112,7 @@ class DataLoader(object):
 
             idata = self._last_nyear(tmp, latest_periods, quarter=quarter, back_nyear=n)
             idata.index = pd.MultiIndex.from_product([[date], idata.index], names=['date', 'IDs'])
+            r.append(idata)
         return pd.concat(r)
 
     @staticmethod
@@ -135,7 +136,7 @@ class DataLoader(object):
         return raw_data.reindex(new_idx).reset_index(level='date', drop=True)
 
     @staticmethod
-    def lastest_period(raw_data, field_name, dates, ids=None, quarter=None):
+    def latest_period(raw_data, field_name, dates, ids=None, quarter=None):
         """最近报告期
         Parameters:
         ==============
@@ -160,7 +161,7 @@ class DataLoader(object):
         for date in dates:
             tmp = raw_data.query("ann_dt <= @date")
             latest_period = tmp.groupby('IDs')[field_name].last()
-            latest_period.index = pd.MultiIndex.from_arrays([[date], latest_period.index], names=['date', 'IDs'])
+            latest_period.index = pd.MultiIndex.from_product([[date], latest_period.index], names=['date', 'IDs'])
             r.append(latest_period)
         return pd.concat(r)
 

@@ -1,15 +1,15 @@
 # coding: utf-8
 from sqlalchemy import create_engine
 from fastcache import clru_cache
-from params import *
+from FactorLib.data_source.wind_financial_data_api.params import *
+from FactorLib.data_source.wind_financial_data_api.data_loader import DataLoader
 from FactorLib.data_source.base_data_source_h5 import ncdb, tc
 from FactorLib.utils.tool_funcs import ensure_dir_exists
 from collections import Iterator
-from data_loader import DataLoader
 import pandas as pd
 import numpy as np
 import sqlalchemy as sa
-import os
+import os, sys
 import warnings
 from pandas.errors import PerformanceWarning
 warnings.filterwarnings(action='ignore', category=PerformanceWarning)
@@ -37,6 +37,7 @@ def _reconstruct(data):
     data['date'] = pd.to_datetime(data['date'].astype('str'))
     return data.set_index(['date', 'IDs'])
 
+
 class WindTableInfo(object):
     """docstring for WindTableInfo"""
     table_info, factor_info = _read_est_dict()
@@ -54,8 +55,12 @@ class WindTableInfo(object):
     def wind_factor_ids(self, table_name, factor_names):
         """某张表中文字段对应的Wind数据库字段"""
         all_factors = self.list_factors(table_name)
-        if isinstance(factor_names, str):
-            return all_factors.at[factor_names, 'WindID']
+        if sys.version_info.major ==3:
+            if isinstance(factor_names, str):
+                return all_factors.at[factor_names, 'WindID']
+        else:
+            if isinstance(factor_names, unicode):
+                return all_factors.at[factor_names, 'WindID']
         return all_factors.loc[factor_names, 'WindID'].tolist()
 
     @clru_cache()
@@ -400,15 +405,40 @@ class WindIncomeSheet(WindFinanceDB):
         new = self.data_loader.last_nyear_ttm(data, wind_id, dates, n, ids)
         return _reconstruct(new)
 
+
+class WindBalanceSheet(WindFinanceDB):
+    """Wind资产负债表"""
+    table_name = u'中国A股资产负债表'
+    table_id = 'balance'
+    statement_type_map = {'408004000': 4, '408050000': 3, '408001000': 2, '408005000': 1}
+
+    def __init__(self):
+        super(WindBalanceSheet, self).__init__()
+
+    def download_data(self, factors, _in=None, _between=None, _equal=None, **kwargs):
+        """取数据
+        报表类型采用合并报表、合并报表调整、合并报表更正前、合并调整更正前
+        """
+        statement_type = {u'报表类型': ['408001000', '408004000', '408005000', '408050000']}
+        if _in is None:
+            _in = statement_type
+        else:
+            _in.update(statement_type)
+        data = self.load_factors(factors, self.table_name, _in, _between, _equal, **kwargs)
+        return self.add_quarter_year(data)
+
+    def save_data(self, data, table_id=None, if_exists='append'):
+        super(WindBalanceSheet, self).save_data(data, self.table_id, if_exists)
+
+
 if __name__ == '__main__':
     from datetime import datetime
-    wind = WindIncomeSheet()
-    # wind.connectdb()
-    # data = wind.download_data([u'净利润(不含少数股东损益)'], _between={u'报告期': ('20070101', '20171231')})
-    # wind.save_data(data)
-    ttm = wind.load_ttm('净利润(不含少数股东损益)', ids=['000001'], start='20170101', end='20171231')
-    print(ttm)
-    # data =  wind.load_panel_data('ashareincome', ['s_info_windcode', 'ann_dt', 'actual_ann_dt',
-    #                                               'report_period', 'TOT_OPER_REV', 'NET_PROFIT_INCL_MIN_INT_INC', 'statement_type'],
-    #                              _between={'opdate': (datetime(2017, 5, 11), datetime(2017,5,12))})
+    wind = WindBalanceSheet()
+    wind.connectdb()
+    data = wind.download_data([u'股东权益合计(不含少数股东权益)', u'股东权益合计(含少数股东权益)'],
+                              _between={u'报告期': ('20070101', '20171231')})
+    wind.save_data(data)
+    # ttm = wind.load_latest_period('净利润(不含少数股东损益)', 1, ids=['000001'], start='20170101', end='20171231')
+    # print(ttm)
+
 
