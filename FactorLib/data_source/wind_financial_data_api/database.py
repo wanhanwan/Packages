@@ -151,8 +151,8 @@ class BaseDB(object):
                         start=value[0],
                         end=value[1])))
                 elif isinstance(self.get_column_type(table_name, field), DATE):
-                    start = "to_date('%s','yyyy/mm/dd')" % value[0].strftime("%Y/%m/%d")
-                    end = "to_date('%s','yyyy/mm/dd')" % value[1].strftime("%Y/%m/%d")
+                    start = "to_date('%s','yyyy/mm/dd hh24:mi:ss')" % value[0].strftime("%Y/%m/%d %H:%M:%S")
+                    end = "to_date('%s','yyyy/mm/dd hh24:mi:ss')" % value[1].strftime("%Y/%m/%d %H:%M:%S")
                     text_list.append(text("{table}.{field} BETWEEN {start} AND {end}".format(
                         table=table_name,
                         field=field,
@@ -252,6 +252,7 @@ class WindEstDB(WindDB):
 class WindFinanceDB(WindDB):
     """Wind财务数据库Wrapper"""
     table_name = ""
+    table_id = ""
     data_loader = DataLoader()
 
     def __init__(self):
@@ -318,6 +319,34 @@ class WindFinanceDB(WindDB):
         data = pd.read_hdf(data_pth, "data")
         return data
 
+    def load_latest_period(self, factor_name, start=None, end=None, dates=None, ids=None,
+                         quarter=None):
+        """最新报告期数据"""
+        wind_id = self.data_dict.wind_factor_ids(self.table_name, factor_name)
+        if start is not None and end is not None:
+            dates = np.asarray(tc.get_trade_days(start, end, retstr='%Y%m%d')).astype('int')
+        else:
+            dates = np.asarray(dates).astype('int')
+        if ids is not None:
+            ids = np.asarray(ids).astype('int')
+        data = self.load_h5(factor_name)
+        new = self.data_loader.latest_period(data, wind_id, dates, ids, quarter)
+        return _reconstruct(new)
+
+    def load_last_nyear(self, factor_name, n, start=None, end=None, dates=None, ids=None,
+                        quarter=None):
+        """回溯N年之前的财务数据"""
+        wind_id = self.data_dict.wind_factor_ids(self.table_name, factor_name)
+        if start is not None and end is not None:
+            dates = np.asarray(tc.get_trade_days(start, end, retstr='%Y%m%d')).astype('int')
+        else:
+            dates = np.asarray(dates).astype('int')
+        if ids is not None:
+            ids = np.asarray(ids).astype('int')
+        data = self.load_h5(factor_name)
+        new = self.data_loader.last_nyear(data, wind_id, dates, n, ids, quarter)
+        return _reconstruct(new)
+
 
 class WindIncomeSheet(WindFinanceDB):
     """Wind利润表"""
@@ -357,6 +386,19 @@ class WindIncomeSheet(WindFinanceDB):
         new = self.data_loader.ttm(data, wind_id, dates, ids)
         return _reconstruct(new)
 
+    def load_last_nyear_ttm(self, factor_name, n, start=None, end=None, dates=None, ids=None):
+        """加载N年之前的TTM数据
+        """
+        wind_id = self.data_dict.wind_factor_ids(self.table_name, factor_name)
+        if start is not None and end is not None:
+            dates = np.asarray(tc.get_trade_days(start, end, retstr='%Y%m%d')).astype('int')
+        else:
+            dates = np.asarray(dates).astype('int')
+        if ids is not None:
+            ids = np.asarray(ids).astype('int')
+        data = self.load_h5(factor_name)
+        new = self.data_loader.last_nyear_ttm(data, wind_id, dates, n, ids)
+        return _reconstruct(new)
 
 if __name__ == '__main__':
     from datetime import datetime
