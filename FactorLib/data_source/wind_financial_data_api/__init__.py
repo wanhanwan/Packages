@@ -1,11 +1,15 @@
 from .database import (WindIncomeSheet,
                        WindEstDB,
-                       WindBalanceSheet
+                       WindBalanceSheet,
+                       WindSQIncomeSheet,
+                       WindProfitExpress
                        )
 
 incomesheet = WindIncomeSheet()
+sqincomesheet = WindSQIncomeSheet()
 balancesheet = WindBalanceSheet()
 estsheet = WindEstDB()
+profitexpress = WindProfitExpress()
 
 
-__all__ = ['incomesheet', 'estsheet', 'balancesheet']
+__all__ = ['incomesheet', 'sqincomesheet', 'estsheet', 'balancesheet', 'profitexpress']

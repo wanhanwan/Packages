@@ -2,10 +2,14 @@
 import pandas as pd
 import numpy as np
 import calendar
+from pandas.tseries.offsets import QuarterEnd
 
 
-def period_backward(dates, quarter=None, back_nyear=1):
+def period_backward(dates, quarter=None, back_nyear=1, back_nquarter=None):
     """计算上年报告期, 默认返回上年同期"""
+    if back_nquarter is not None:
+        dates = pd.to_datetime(dates.astype('str')) - QuarterEnd(back_nquarter)
+        return np.asarray(dates.strftime("%Y%m%d")).astype('int')
     year = dates // 10000
     month = dates % 10000 // 100
     c = calendar
@@ -136,8 +140,27 @@ class DataLoader(object):
         return raw_data.reindex(new_idx).reset_index(level='date', drop=True)
 
     @staticmethod
+    def _last_nperiod(raw_data, curr_period, back_quarter=1):
+        """以给定的报告期为基准， 回溯n个报告期之前某个季度的财报数据
+        Parameters:
+        ===============
+        raw_data: pd.Series
+            索引：
+            IDs: 股票代码, 格式必须与参数ids一致
+            date：财报会计报告期, yyyymmdd的int格式
+            值：财务数据
+        curr_period: pd.Serise
+            基准报告期, 以股票代码为索引, 会计报告期为数值
+        back_quarter: int
+            回溯n个季度
+        """
+        new_period = period_backward(curr_period.values, back_nquarter=back_quarter)
+        new_idx = pd.MultiIndex.from_arrays([curr_period.index, new_period], names=['IDs', 'date'])
+        return raw_data.reindex(new_idx).reset_index(level='date', drop=True)
+
+    @staticmethod
     def latest_period(raw_data, field_name, dates, ids=None, quarter=None):
-        """最近报告期
+        """最近报告期财务数据
         Parameters:
         ==============
         raw_data: pd.DataFrame
@@ -165,9 +188,31 @@ class DataLoader(object):
             r.append(latest_period)
         return pd.concat(r)
 
+    def inc_rate_tb(self, raw_data, field_name, dates, n=1, ids=None):
+        """同比增长率"""
+        new = self.latest_period(raw_data, field_name, dates, ids)
+        old = self.last_nyear(raw_data, field_name, dates, n, ids)
+        inc_r = incr_rate(old, new)
+        return inc_r.to_frame("inc_rate")
+
+    def inc_rate_hb(self, raw_data, field_name, dates, ids=None):
+        """环比增长率"""
+        if ids is not None:
+            raw_data = raw_data.query("IDs in @ids")
+        r = []
+        for date in dates:
+            data = raw_data.query("ann_dt <= @date")
+            new = raw_data.groupby('IDs')['date', field_name].last()
+            tmp = data.groupby(['IDs', 'date'])[field_name].last()
+            old = self._last_nperiod(tmp, new['date'], back_quarter=1)
+            inc_r = incr_rate(old, new[field_name])
+            inc_r.index = pd.MultiIndex.from_product([[date], inc_r.index], names=['date', 'IDs'])
+            r.append(inc_r)
+        return pd.concat(r)
+
 
 if __name__ == '__main__':
     loader = DataLoader()
-    np = pd.read_hdf(r"D:\data\finance\income\net_profit_excl_min_int_inc.h5", "data")
-    ttm = loader.ttm(np, 'net_profit_excl_min_int_inc', [20180110], ids=[1, 2])
+    nprof = pd.read_hdf(r"D:\data\finance\sq_income\net_profit_excl_min_int_inc.h5", "data")
+    ttm = loader.inc_rate_hb(nprof, 'net_profit_excl_min_int_inc', [20180110], ids=[1, 2])
     print(ttm)

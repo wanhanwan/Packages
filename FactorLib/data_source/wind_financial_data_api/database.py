@@ -248,7 +248,6 @@ class WindDB(BaseDB):
 
 
 class WindEstDB(WindDB):
-
     """Wind一致预期数据库Wrapper"""
     def __init__(self):
         super(WindEstDB, self).__init__()
@@ -259,6 +258,7 @@ class WindFinanceDB(WindDB):
     table_name = ""
     table_id = ""
     data_loader = DataLoader()
+    statement_type_map = {}
 
     def __init__(self):
         super(WindFinanceDB, self).__init__()
@@ -292,8 +292,7 @@ class WindFinanceDB(WindDB):
             else:
                 self.save_factor(d, tar_pth, c, if_exists='append')
 
-    @staticmethod
-    def add_quarter_year(idata):
+    def add_quarter_year(self, idata):
         if idata.empty:
             return idata
         idata.dropna(subset=['ann_dt'], inplace=True)
@@ -301,7 +300,7 @@ class WindFinanceDB(WindDB):
         idata['year'] = pd.to_datetime(idata['date']).dt.year
         idata['date'] = idata['date'].astype('int')
         idata['ann_dt'] = idata['ann_dt'].astype('int')
-        idata['stat_type'] = idata['stat_type'].map(WindIncomeSheet.statement_type_map)
+        idata['stat_type'] = idata['stat_type'].map(self.statement_type_map)
         idata['IDs'] = idata['IDs'].astype('int')
         idata = idata.sort_values(['IDs', 'date', 'ann_dt', 'stat_type']).reset_index(drop=True)
         return idata
@@ -352,6 +351,32 @@ class WindFinanceDB(WindDB):
         new = self.data_loader.last_nyear(data, wind_id, dates, n, ids, quarter)
         return _reconstruct(new)
 
+    def load_incr_tb(self, factor_name, n, start=None, end=None, dates=None, ids=None):
+        """同比序列"""
+        wind_id = self.data_dict.wind_factor_ids(self.table_name, factor_name)
+        if start is not None and end is not None:
+            dates = np.asarray(tc.get_trade_days(start, end, retstr='%Y%m%d')).astype('int')
+        else:
+            dates = np.asarray(dates).astype('int')
+        if ids is not None:
+            ids = np.asarray(ids).astype('int')
+        data = self.load_h5(factor_name)
+        new = self.data_loader.inc_rate_tb(data, wind_id, dates, n, ids)
+        return new
+
+    def load_incr_hb(self, factor_name, start=None, end=None, dates=None, ids=None):
+        """环比序列"""
+        wind_id = self.data_dict.wind_factor_ids(self.table_name, factor_name)
+        if start is not None and end is not None:
+            dates = np.asarray(tc.get_trade_days(start, end, retstr='%Y%m%d')).astype('int')
+        else:
+            dates = np.asarray(dates).astype('int')
+        if ids is not None:
+            ids = np.asarray(ids).astype('int')
+        data = self.load_h5(factor_name)
+        new = self.data_loader.inc_rate_hb(data, wind_id, dates, ids)
+        return new
+
 
 class WindIncomeSheet(WindFinanceDB):
     """Wind利润表"""
@@ -371,11 +396,11 @@ class WindIncomeSheet(WindFinanceDB):
             _in = statement_type
         else:
             _in.update(statement_type)
-        data = self.load_factors(factors, WindIncomeSheet.table_name, _in, _between, _equal, **kwargs)
+        data = self.load_factors(factors, self.table_name, _in, _between, _equal, **kwargs)
         return self.add_quarter_year(data)
 
     def save_data(self, data, table_id=None, if_exists='append'):
-        super(WindIncomeSheet, self).save_data(data, WindIncomeSheet.table_id, if_exists)
+        super(WindIncomeSheet, self).save_data(data, self.table_id, if_exists)
 
     def load_ttm(self, factor_name, start=None, end=None, dates=None, ids=None):
         """ 加载TTM数据
@@ -406,6 +431,23 @@ class WindIncomeSheet(WindFinanceDB):
         return _reconstruct(new)
 
 
+class WindSQIncomeSheet(WindIncomeSheet):
+    table_id = 'sq_income'
+    statement_type_map = {'408002000': 1, '408003000': 2}
+
+    def download_data(self, factors, _in=None, _between=None, _equal=None, **kwargs):
+        """取数据
+        报表类型采用合并报表(单季度)、合并报表(单季度调整)
+        """
+        statement_type = {u'报表类型': ['408002000', '408003000']}
+        if _in is None:
+            _in = statement_type
+        else:
+            _in.update(statement_type)
+        data = self.load_factors(factors, self.table_name, _in, _between, _equal, **kwargs)
+        return self.add_quarter_year(data)
+
+
 class WindBalanceSheet(WindFinanceDB):
     """Wind资产负债表"""
     table_name = u'中国A股资产负债表'
@@ -431,11 +473,27 @@ class WindBalanceSheet(WindFinanceDB):
         super(WindBalanceSheet, self).save_data(data, self.table_id, if_exists)
 
 
+class WindProfitExpress(WindFinanceDB):
+    table_name = u'中国A股业绩快报'
+    table_id = 'profit_express'
+    statement_type_map = {'0001': 0}
+
+    def download_data(self, factors, _in=None, _between=None, _equal=None, **kwargs):
+        """取数据
+        """
+        data = self.load_factors(factors, self.table_name, _in, _between, _equal, **kwargs)
+        data['stat_type'] = '0001'
+        return self.add_quarter_year(data)
+
+    def save_data(self, data, table_id=None, if_exists='append'):
+        super(WindProfitExpress, self).save_data(data, self.table_id, if_exists)
+
+
 if __name__ == '__main__':
     from datetime import datetime
-    wind = WindBalanceSheet()
+    wind = WindProfitExpress()
     wind.connectdb()
-    data = wind.download_data([u'股东权益合计(不含少数股东权益)', u'股东权益合计(含少数股东权益)'],
+    data = wind.download_data([u'净利润', u'股东权益合计(不含少数股东权益)'],
                               _between={u'报告期': ('20070101', '20171231')})
     wind.save_data(data)
     # ttm = wind.load_latest_period('净利润(不含少数股东损益)', 1, ids=['000001'], start='20170101', end='20171231')
