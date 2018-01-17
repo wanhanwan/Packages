@@ -1,8 +1,8 @@
 """Python调用天软的封装"""
 
 import pandas as pd
-import numpy as np
 import TSLPy3 as tsl
+import os
 from FactorLib.utils.tool_funcs import tradecode_to_tslcode, tslcode_to_tradecode
 from FactorLib.utils.datetime_func import DateRange2Dates
 from FactorLib.utils.TSDataParser import *
@@ -46,11 +46,12 @@ def PanelQuery(field_dict, start_date=None, end_date=None, dates=None,
     ===========
     field_dict:
     """
+    field_dict.update({"'IDs'": 'DefaultStockID()'})
     data = []
     for date in dates:
         idata = CsQuery(field_dict, date, bk_name=bk_name, stock_list=stock_list, condition=condition)
         data.append(idata)
-    return pd.concat(data)
+    return pd.concat(data).sort_index()
 
 
 def partialCsQueryFunc(*args, **kwargs):
@@ -58,7 +59,99 @@ def partialCsQueryFunc(*args, **kwargs):
     return partial(CsQuery, *args, **kwargs)
 
 
+def _read_factors():
+    file_pth = os.path.abspath(os.path.dirname(__file__)+'/..')
+    file_pth = os.path.join(file_pth, 'resource', 'tsl_tableinfo.xlsx')
+    factorIDs = pd.read_excel(file_pth, index_col=0, header=0)
+    return factorIDs
+
+
+class TableInfo(object):
+    factorIDs = _read_factors()
+
+    def factor_id(self, factor_name):
+        return self.factorIDs[factor_name]['ID']
+
+    def factor_engname(self, factor_name):
+        return self.factorIDs[factor_name]['Eng_Name']
+
+
+class TSLDBOnline(object):
+    table_info = TableInfo()
+
+    def _wrap_loaddata(self, field_name, func_name, start=None, end=None, dates=None, ids=None):
+        factor_name = self.table_info.factor_engname(field_name)
+        field_dict = {"'%s'" % factor_name: func_name}
+        return PanelQuery(field_dict, start_date=start, end_date=end, dates=dates, stock_list=ids)
+
+    def load_ttm(self, field_name, start=None, end=None, dates=None, ids=None):
+        """ttm数据"""
+        factor_id = self.table_info.factor_id(field_name)
+        func_name = 'load_ttm(%s)' % factor_id
+        return self._wrap_loaddata(field_name, func_name, start, end, dates, ids)
+
+    def load_sq(self, field_name, start=None, end=None, dates=None, ids=None):
+        """最新单季度"""
+        factor_id = self.table_info.factor_id(field_name)
+        func_name = 'load_sq(%s)' % factor_id
+        return self._wrap_loaddata(field_name, func_name, start, end, dates, ids)
+
+    def load_last_nyear(self, field_name, n, start=None, end=None, dates=None, ids=None):
+        """N年之前的财务数据"""
+        factor_id = self.table_info.factor_id(field_name)
+        func_name = 'load_last_nyear(%s, %s)' % (factor_id, n)
+        return self._wrap_loaddata(field_name, func_name, start, end, dates, ids)
+
+    def load_last_nyear_ttm(self, field_name, n, start=None, end=None, dates=None, ids=None):
+        """N年之前TTM数据"""
+        factor_id = self.table_info.factor_id(field_name)
+        func_name = 'load_last_nyear_ttm(%s, %s)' % (factor_id, n)
+        return self._wrap_loaddata(field_name, func_name, start, end, dates, ids)
+
+    def load_last_nyear_sq(self, field_name, n, start=None, end=None, dates=None, ids=None):
+        """N年之前单季度数据"""
+        factor_id = self.table_info.factor_id(field_name)
+        func_name = 'load_last_nyear_sq(%s, %s)' % (factor_id, n)
+        return self._wrap_loaddata(field_name, func_name, start, end, dates, ids)
+
+    def inc_rate_hb(self, field_name, stat_type=0, start=None, end=None, dates=None, ids=None):
+        """环比增长率
+        stat_type:
+            0: 最新报表(累计)
+            1：最新单季度
+            2: ttm
+        """
+        factor_id = self.table_info.factor_id(field_name)
+        func_name = 'inc_rate_hb(%s, %s)' % (factor_id, stat_type)
+        return self._wrap_loaddata(field_name, func_name, start, end, dates, ids)
+
+    def inc_rate_tb(self, field_name, stat_type=0, start=None, end=None, dates=None, ids=None):
+        """同比增长率
+        stat_type:
+            0: 最新报表(累计)
+            1：最新单季度
+            2: ttm
+        """
+        factor_id = self.table_info.factor_id(field_name)
+        func_name = 'inc_rate_tb(%s, %s)' % (factor_id, stat_type)
+        return self._wrap_loaddata(field_name, func_name, start, end, dates, ids)
+
+    def load_netprofit_ttm_incl_express(self, start=None, end=None, dates=None, ids=None):
+        """包含业绩快报的TTM净利润"""
+        func_name = 'load_netprofit_ttm_incl_express()'
+        field_dict = {"'net_profit_excl_min_int_inc'": func_name}
+        return PanelQuery(field_dict, start_date=start, end_date=end, dates=dates, stock_list=ids)
+
+    def load_netasset_incl_express(self, start=None, end=None, dates=None, ids=None):
+        """包含业绩快报的股东权益"""
+        func_name = 'load_netprofit_ttm_incl_express()'
+        field_dict = {"'tot_shrhldr_eqy_excl_min_int'": func_name}
+        return PanelQuery(field_dict, start_date=start, end_date=end, dates=dates, stock_list=ids)
+
+
 if __name__ == '__main__':
-    field = {"'IDs'": 'DefaultStockID()', "'list_days'": 'StockGoMarketDays()'}
-    data = PanelQuery(field, start_date='20100101', end_date='20170101')
+    # field = {"'list_days'": 'load_ttm(46008)'}
+    # data = PanelQuery(field, start_date='20180101', end_date='20180110')
+    a = TSLDBOnline()
+    data = a.load_netasset_incl_express(dates=['20180116'])
     print(data)

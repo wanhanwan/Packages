@@ -55,7 +55,7 @@ class WindTableInfo(object):
     def wind_factor_ids(self, table_name, factor_names):
         """某张表中文字段对应的Wind数据库字段"""
         all_factors = self.list_factors(table_name)
-        if sys.version_info.major ==3:
+        if sys.version_info.major == 3:
             if isinstance(factor_names, str):
                 return all_factors.at[factor_names, 'WindID']
         else:
@@ -77,7 +77,7 @@ class WindTableInfo(object):
     @clru_cache()
     def get_table_index(self, table_name):
         tmp = WindTableInfo.factor_info.query("TableName==@table_name & DFIndex!='None'")[['Name', 'WindID', 'DFIndex']].set_index(
-            'Name')
+            'Name').astype({'WindID': 'str'})
         return tmp
 
 
@@ -132,7 +132,7 @@ class BaseDB(object):
         """
         select, and_, text = sa.select, sa.and_, sa.text
         literal_column, table = sa.sql.literal_column, sa.sql.table
-        s = select([literal_column("%s.%s" % (table_name, x)).label(x) for x in columns])
+        s = select([literal_column("%s" % x) for x in columns])
         text_list = []
         if self.db_type == 'oracle':
             from sqlalchemy.dialects import oracle
@@ -144,22 +144,22 @@ class BaseDB(object):
         if _between is not None:
             for field, value in _between.items():
                 if isinstance(self.get_column_type(table_name, field), VARCHAR):
-                    text_list.append(text("{table}.{field} BETWEEN '{start}' AND '{end}'".format(
-                        table=table_name,
+                    text_list.append(text("{field} BETWEEN '{start}' AND '{end}'".format(
+                        # table=table_name,
                         field=field,
                         start=value[0],
                         end=value[1])))
                 elif isinstance(self.get_column_type(table_name, field), NUMBER):
-                    text_list.append(text("{table}.{field} BETWEEN {start} AND {end}".format(
-                        table=table_name,
+                    text_list.append(text("{field} BETWEEN {start} AND {end}".format(
+                        # table=table_name,
                         field=field,
                         start=value[0],
                         end=value[1])))
                 elif isinstance(self.get_column_type(table_name, field), DATE):
                     start = "to_date('%s','yyyy/mm/dd hh24:mi:ss')" % value[0].strftime("%Y/%m/%d %H:%M:%S")
                     end = "to_date('%s','yyyy/mm/dd hh24:mi:ss')" % value[1].strftime("%Y/%m/%d %H:%M:%S")
-                    text_list.append(text("{table}.{field} BETWEEN {start} AND {end}".format(
-                        table=table_name,
+                    text_list.append(text("{field} BETWEEN {start} AND {end}".format(
+                        # table=table_name,
                         field=field,
                         start=start,
                         end=end)))
@@ -482,6 +482,8 @@ class WindProfitExpress(WindFinanceDB):
         """取数据
         """
         data = self.load_factors(factors, self.table_name, _in, _between, _equal, **kwargs)
+        if data.empty:
+            return data
         data['stat_type'] = '0001'
         return self.add_quarter_year(data)
 
