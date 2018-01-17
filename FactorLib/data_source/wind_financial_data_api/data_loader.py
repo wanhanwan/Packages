@@ -39,6 +39,14 @@ def incr_rate(old, new):
     return new / old.abs() - 1
 
 
+def avg(old, new):
+    """计算期初期末平均值
+    """
+    old, new = old.align(new, axis=0, join='outer')
+    old.fillna(new, inplace=True)
+    return (old + new) / 2.0
+
+
 class DataLoader(object):
     """财务数据库的数据加载器"""
 
@@ -115,6 +123,21 @@ class DataLoader(object):
             tmp = data.groupby(['IDs', 'date'])[field_name].last()
 
             idata = self._last_nyear(tmp, latest_periods, quarter=quarter, back_nyear=n)
+            idata.index = pd.MultiIndex.from_product([[date], idata.index], names=['date', 'IDs'])
+            r.append(idata)
+        return pd.concat(r)
+
+    def last_nperiod(self, raw_data, field_name, dates, n=1, ids=None):
+        """回溯N个报告期之前的财务数据"""
+        if ids is not None:
+            raw_data = raw_data.query("IDs in @ids")
+        r = []
+        for date in dates:
+            data = raw_data.query("ann_dt <= @date")
+            latest_periods = data.groupby('IDs')['date'].last()
+            tmp = data.groupby(['IDs', 'date'])[field_name].last()
+
+            idata = self._last_nperiod(tmp, latest_periods, back_quarter=n)
             idata.index = pd.MultiIndex.from_product([[date], idata.index], names=['date', 'IDs'])
             r.append(idata)
         return pd.concat(r)
@@ -210,9 +233,23 @@ class DataLoader(object):
             r.append(inc_r)
         return pd.concat(r)
 
+    def ttm_avg(self, raw_data, field_name, dates, ids=None):
+        """最近12个月的平均值(期初+期末)/2， 一般用于资产负债表项目
+        """
+        new = self.latest_period(raw_data, field_name, dates=dates, ids=ids)
+        old = self.last_nyear(raw_data, field_name, dates, 1, ids)
+        return avg(old, new)
+
+    def sq_avg(self, raw_data, field_name, dates, ids=None):
+        """单季度平均值(期初+期末)/2, 一般用于资产负债表
+        """
+        new = self.latest_period(raw_data, field_name, dates=dates, ids=ids)
+        old = self.last_nperiod(raw_data, field_name, dates=dates, ids=ids)
+        return avg(old, new)
+
 
 if __name__ == '__main__':
     loader = DataLoader()
     nprof = pd.read_hdf(r"D:\data\finance\sq_income\net_profit_excl_min_int_inc.h5", "data")
-    ttm = loader.inc_rate_hb(nprof, 'net_profit_excl_min_int_inc', [20180110], ids=[1, 2])
+    ttm = loader.sq_avg(nprof, 'net_profit_excl_min_int_inc', [20180110], ids=[1, 2])
     print(ttm)

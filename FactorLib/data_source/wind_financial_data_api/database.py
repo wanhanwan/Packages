@@ -469,6 +469,34 @@ class WindBalanceSheet(WindFinanceDB):
         data = self.load_factors(factors, self.table_name, _in, _between, _equal, **kwargs)
         return self.add_quarter_year(data)
 
+    def load_ttm_avg(self, factor_name, start=None, end=None, dates=None, ids=None):
+        """最近12个月的平均值(期初+期末)/2， 一般用于资产负债表项目
+        """
+        wind_id = self.data_dict.wind_factor_ids(self.table_name, factor_name)
+        if start is not None and end is not None:
+            dates = np.asarray(tc.get_trade_days(start, end, retstr='%Y%m%d')).astype('int')
+        else:
+            dates = np.asarray(dates).astype('int')
+        if ids is not None:
+            ids = np.asarray(ids).astype('int')
+        data = self.load_h5(factor_name)
+        new = self.data_loader.ttm_avg(data, wind_id, dates, ids)
+        return _reconstruct(new)
+
+    def load_sq_avg(self, factor_name, start=None, end=None, dates=None, ids=None):
+        """单季度平均值(期初+期末)/2, 一般用于资产负债表
+        """
+        wind_id = self.data_dict.wind_factor_ids(self.table_name, factor_name)
+        if start is not None and end is not None:
+            dates = np.asarray(tc.get_trade_days(start, end, retstr='%Y%m%d')).astype('int')
+        else:
+            dates = np.asarray(dates).astype('int')
+        if ids is not None:
+            ids = np.asarray(ids).astype('int')
+        data = self.load_h5(factor_name)
+        new = self.data_loader.sq_avg(data, wind_id, dates, ids)
+        return _reconstruct(new)
+
     def save_data(self, data, table_id=None, if_exists='append'):
         super(WindBalanceSheet, self).save_data(data, self.table_id, if_exists)
 
