@@ -414,6 +414,7 @@ class sector(object):
             return all_stocks
         if ids in MARKET_INDEX_DICT:
             index_members = self.h5DB.load_factor('_%s' % ids, '/indexes/', dates=dates)
+            index_members = index_members[index_members['_%s' % ids]==1.0]
             return index_members[index_members.index.isin(all_stocks.index)]
         else:
             for industry_name, rule in IndustryConverter._rules.items():

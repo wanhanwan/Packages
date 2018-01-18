@@ -8,6 +8,7 @@ from ..update_data.time_series_factor import TimeSeriesFuncListDaily
 from ..update_data.alternative_factor import AlternativeFuncListDaily
 from ..update_data.growth_factor import GrowthFuncListDaily
 from ..update_data.profit_factor import ProfitFuncListDaily
+from ..update_data.universe import UniverseFuncListDaily
 
 
 def dailyfactors(start, end):
@@ -41,4 +42,8 @@ def dailyfactors(start, end):
 
     # 更新盈利类因子
     for func in ProfitFuncListDaily:
+        func(start, end, data_source=data_source)
+
+    # 更新股票池
+    for func in UniverseFuncListDaily:
         func(start, end, data_source=data_source)

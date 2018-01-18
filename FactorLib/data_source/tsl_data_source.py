@@ -70,10 +70,10 @@ class TableInfo(object):
     factorIDs = _read_factors()
 
     def factor_id(self, factor_name):
-        return self.factorIDs[factor_name]['ID']
+        return self.factorIDs.at[factor_name, 'ID']
 
     def factor_engname(self, factor_name):
-        return self.factorIDs[factor_name]['Eng_Name']
+        return self.factorIDs.at[factor_name, 'Eng_Name']
 
 
 class TSLDBOnline(object):
@@ -94,6 +94,12 @@ class TSLDBOnline(object):
         """最新单季度"""
         factor_id = self.table_info.factor_id(field_name)
         func_name = 'load_sq(%s)' % factor_id
+        return self._wrap_loaddata(field_name, func_name, start, end, dates, ids)
+
+    def load_latest_year(self, field_name, n=0, start=None, end=None, dates=None, ids=None):
+        """最新年报"""
+        factor_id = self.table_info.factor_id(field_name)
+        func_name = 'load_latest_year(%s, %s)' % (factor_id, n)
         return self._wrap_loaddata(field_name, func_name, start, end, dates, ids)
 
     def load_last_nyear(self, field_name, n, start=None, end=None, dates=None, ids=None):
@@ -153,5 +159,5 @@ if __name__ == '__main__':
     # field = {"'list_days'": 'load_ttm(46008)'}
     # data = PanelQuery(field, start_date='20180101', end_date='20180110')
     a = TSLDBOnline()
-    data = a.load_netasset_incl_express(dates=['20180116'])
+    data = a.load_latest_year('扣除非经常性损益后的净利润', n=1, dates=['20180116'])
     print(data)

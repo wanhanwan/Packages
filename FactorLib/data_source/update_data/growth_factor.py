@@ -40,7 +40,7 @@ def egrsf(start, end, **kwargs):
     data_source.h5DB.save_factor(new_factor.reindex(merge_data.index), '/barra/descriptors/')
 
 
-GrowthFuncListDaily = [egrlf, egrsf]
+GrowthFuncListDaily = []
 
 
 

@@ -521,9 +521,9 @@ class WindProfitExpress(WindFinanceDB):
 
 if __name__ == '__main__':
     from datetime import datetime
-    wind = WindProfitExpress()
+    wind = WindBalanceSheet()
     wind.connectdb()
-    data = wind.download_data([u'净利润', u'股东权益合计(不含少数股东权益)'],
+    data = wind.download_data([u'资产总计'],
                               _between={u'报告期': ('20070101', '20171231')})
     wind.save_data(data)
     # ttm = wind.load_latest_period('净利润(不含少数股东损益)', 1, ids=['000001'], start='20170101', end='20171231')
