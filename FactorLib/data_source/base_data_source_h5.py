@@ -439,12 +439,17 @@ class sector(object):
                            drop_first=True):
         """股票行业哑变量"""
         dates = self.trade_calendar.get_trade_days(start_date, end_date) if dates is None else dates
-        industry_id = parse_industry(industry)
+
+        try:
+            industry_id = parse_industry(industry)
+        except KeyError:
+            industry_id = industry
+
         all_industries = self.ncDB.list_file_factors('industry_dummy', '/dummy/')
         factor_names = [x for x in all_industries if x.startswith(industry_id)]
         dummy = (self.ncDB
-                     .load_factor('industry_dummy', '/dummy/', factor_names=factor_names, ids=ids, dates=dates)
-                     .dropna(how='all').sort_index(axis=1))
+            .load_factor('industry_dummy', '/dummy/', factor_names=factor_names, ids=ids, dates=dates)
+            .dropna(how='all').sort_index(axis=1))
         industry_names = self.ncDB.load_file_attr('industry_dummy', '/dummy/', industry_id).split(",")
         dummy_value = np.unpackbits(dummy.values.astype('uint8'), axis=1)[:, :len(industry_names)]
         new_dummy = pd.DataFrame(dummy_value, index=dummy.index, columns=industry_names)

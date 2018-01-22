@@ -61,13 +61,14 @@ class BarraFactorReturn(object):
         self.estu_fw1d = move_dtindex(self.estu, 1, '1d')
 
         if self.args['行业因子'] == 'DEFAULT':
-            all_industries = [x.replace('.h5', '') for x in self.riskdb.list_files('factorData') if x.startswith('Indu_')]
+            all_industries = self.riskdb.list_file_meta('industry', '/factorData/', 'indu_names').split(",")
+            all_industries = [x.replace('Indu_', '') for x in all_industries]
             self.args['行业因子'] = ('DEFAULT', list(set(all_industries).difference(set(self.args['忽略行业']))))
         else:
             all_industries = IndustryConverter.all_values(self.args['行业因子'])
-            self.args['行业因子'] = (self.args['行业因子'], [list(set(all_industries).difference(set(self.args['忽略行业'])))])
+            self.args['行业因子'] = (self.args['行业因子'], list(set(all_industries).difference(set(self.args['忽略行业']))))
         if self.args['风格因子'] == 'DEFAULT':
-            all_factors = [x.replace('.h5', '') for x in self.riskdb.list_files('factorData', ['Estu.h5']) if not x.startswith('Indu_')]
+            all_factors = self.riskdb.list_factor_names('risk_factor', '/factorData/')
             self.args['风格因子'] = ['Market'] + [x for x in all_factors if x not in self.args['忽略风格']]
 
     def prepareFactorReturnResults(self):
@@ -95,11 +96,11 @@ class BarraFactorReturn(object):
         if idx is not None:
             start_date = None
             end_date = None
-            data = self.riskdb.load_factors(factor_names=style_factors, start_date=start_date,
+            data = self.riskdb.load_style_factor(factor_names=style_factors, start_date=start_date,
                                             end_date=end_date, dates=dates, ids=ids)
             data = data.reindex(idx.index)
         else:
-            data = self.riskdb.load_factors(factor_names=style_factors, start_date=start_date,
+            data = self.riskdb.load_style_factor(factor_names=style_factors, start_date=start_date,
                                             end_date=end_date, ids=ids, dates=dates)
         if np.any(pd.isnull(data)):
             warn("风格因子数据存在缺失值，请检查！")

@@ -274,6 +274,14 @@ class RiskDataSource(object):
     def list_files(self, dir_name, ignores=[]):
         return [drop_patch(x) for x in os.listdir(self._dspath+'/%s'%dir_name) if x not in ignores]
 
+    def list_factor_names(self, file_name, file_dir):
+        """列出文件所包含的因子名称"""
+        return self.nc_db.list_file_factors(file_name, file_dir)
+
+    def list_file_meta(self, file_name, file_dir, attr_name):
+        """列出文件的meta data"""
+        return self.nc_db.load_file_attr(file_name, file_dir, attr_name)
+
     @property
     def max_date_of_factor(self):
         factor_names = [x.replace(".h5", "") for x in os.listdir(self._dspath+'/factorData')]
@@ -306,14 +314,19 @@ class RiskDataSource(object):
         elif factor_names == 'STYLE':
             new = self.nc_db.load_factor('risk_factor', '/factorData/', dates=dates, ids=ids)
         elif 'Estu' not in factor_names:
-            style = self.nc_db.load_factor('risk_factor', '/factorData/', dates=dates, ret='xarray', ids=ids)
-            indu = self.nc_db.load_as_dummy('industry', '/factorData/', dates=dates, ids=ids).to_xarray()
-            t = style.update(indu).to_dataframe()
-            new = t.loc[:, factor_names].copy()
+            style = self.nc_db.load_factor('risk_factor', '/factorData/', dates=dates, ids=ids)
+            indu = self.nc_db.load_as_dummy('industry', '/factorData/', dates=dates, ids=ids)
+            new = style.join(indu, how='left')
+            new = new[factor_names]
         else:
             new = self.h5_db.load_factor('Estu', '/factorData/', ids=ids, dates=dates)
         new.rename(columns=lambda x: x[5:] if x.startswith("Indu_") else x, inplace=True)
         return new
+
+    def load_style_factor(self, factor_names, ids=None, start_date=None, end_date=None, dates=None):
+        """加载风格因子数据"""
+        style = self.nc_db.load_factor('risk_factor', '/factorData/', factor_names=factor_names, dates=dates, ids=ids)
+        return style
 
     @DateRange2Dates
     def load_industry(self, ids=None, start_date=None, end_date=None, dates=None):
