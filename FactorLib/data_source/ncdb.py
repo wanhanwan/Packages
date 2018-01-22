@@ -126,8 +126,9 @@ class NCDB(object):
             return factor_data.to_dataframe().dropna(how='all').reset_index()
         else:
             df = factor_data.to_dataframe().dropna(how='all')
-            df.index = df.index.swaplevel('IDs', 'date')
-            df.sort_index(inplace=True)
+            if df.index.names[0] == 'IDs':
+                df.index = df.index.swaplevel('IDs', 'date')
+                df.sort_index(inplace=True)
         return df
 
     def save_factor(self, factor_data, file_name, file_dir, if_exists='append', dtypes=None,

@@ -23,7 +23,6 @@ strategy_data_provider = SingleStrategyResultProvider(r"D:\data\factor_investmen
 
 
 # Tab One
-
 table_source = ColumnDataSource(data=data_provider.load_data(data_provider.max_date))
 columns = []
 for k, v in data_provider.load_data(data_provider.max_date).items():
