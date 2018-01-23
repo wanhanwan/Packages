@@ -50,7 +50,7 @@ oper_rev_ttm_csindustry_quantile_diff = ('oper_rev_ttm_csindustry_quantile_diff'
 # 兴业金工因子库
 # Growth
 StyleGrowthFactor_Earnings_LTG = ('StyleGrowthFactor_Earnings_LTG', '/XYData/Growth/', 1)
-StyleGrowthFactor_Earnings_SFG = ('StyleGrowthFactor_Earnings_LTG', '/XYData/Growth/', 1)
+StyleGrowthFactor_Earnings_SFG = ('StyleGrowthFactor_Earnings_SFG', '/XYData/Growth/', 1)
 StyleGrowthFactor_Earnings_SQ_YoY = ('StyleGrowthFactor_Earnings_SQ_YoY', '/XYData/Growth/', 1)
 StyleGrowthFactor_SaleEarnings_SQ_YoY = ('StyleGrowthFactor_SaleEarnings_SQ_YoY', '/XYData/Growth/', 1)
 StyleGrowthFactor_Sales_LTG = ('StyleGrowthFactor_Sales_LTG', '/XYData/Growth/', 1)

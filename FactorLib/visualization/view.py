@@ -4,7 +4,6 @@ from bokeh.io import output_file, curdoc
 from bokeh.layouts import widgetbox, row, column
 from bokeh.models import ColumnDataSource
 from bokeh.plotting import figure
-from bokeh.models.ranges import FactorRange
 from bokeh.models.widgets import DataTable, PreText, TableColumn, Select, NumberFormatter, Panel, Tabs, DatePicker, Button
 from bokeh.transform import dodge
 from bokeh.core.properties import value

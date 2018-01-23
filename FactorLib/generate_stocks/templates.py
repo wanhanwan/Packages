@@ -57,7 +57,7 @@ class AbstractStockGenerator(object):
         temp = self.generate_tempdata(start, end, **kwargs)
         for k, v in temp.items():
             name = "%s_%s"%(k, datetime.now().strftime("%Y%m%d%H%M"))
-            self.persist_provider.dump(v, name)
+            self.persist_provider.dump(v, name, protocol=2)
 
     def update(self, start, end, **kwargs):
         self._prepare_config(**kwargs)

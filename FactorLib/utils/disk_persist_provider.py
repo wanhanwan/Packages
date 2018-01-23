@@ -10,9 +10,9 @@ class DiskPersistProvider(object):
     def set_path(self, path):
         self.path = path
 
-    def dump(self, object, name):
+    def dump(self, object, name, protocol=3):
         with open(os.path.join(self.path, name+'.pkl'), 'wb') as f:
-            pickle.dump(object, f)
+            pickle.dump(object, f, protocol=protocol)
 
     def load(self, name):
         df = pd.read_pickle(os.path.join(self.path, name+'.pkl'))

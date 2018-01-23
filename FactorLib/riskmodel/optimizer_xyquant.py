@@ -407,7 +407,22 @@ class Optimizer(object):
         生成目标函数
         """
         if np.any(pd.isnull(self._signal)):
-            raise ValueError("组合信号存在缺失值！")
+            warnings.warn("组合信号存在缺失值！")
+            # 把信号缺失的股票的权重设为零
+            na_stocks = self._signal[self._signal.isnull()]
+            limit_values = pd.Series(np.zeros(len(na_stocks)), index=na_stocks.index)
+            lin_exprs = []
+            rhs = []
+            names = []
+            senses = ['E'] * len(na_stocks)
+            for i in na_stocks.index.values:
+                lin_exprs.append([[i.encode('utf8')], [1]])
+                rhs.append(0.0)
+                names.append('notrading_%s' % i)
+            self._c.linear_constraints.add(lin_expr=lin_exprs, senses=senses, rhs=rhs, names=names)
+            self._internal_limit = self._internal_limit.append(limit_values)
+            self._signal.fillna(0, inplace=True)
+
         self._c.objective.set_sense(self._c.objective.sense.maximize)
         if self._riskmul != 0:
             bchmrk_weight = self._bchmrk_weight
