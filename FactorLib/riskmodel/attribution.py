@@ -6,6 +6,8 @@ import numpy as np
 from fastcache import clru_cache
 from .riskmodel_data_source import RiskDataSource
 from ..data_source.base_data_source_h5 import data_source
+from ..factor_performance.analyzer import Analyzer
+from ..utils.tool_funcs import uqercode_to_windcode
 
 
 class RiskExposureAnalyzer(object):
@@ -263,3 +265,47 @@ class RiskModelAttribution(object):
         attribution['benchmark_ret'] = bchmrk_ret_final
         attribution['total_active_ret'] = ptf_ret_active_final
         return attribution
+
+
+def create_trade_to_attr(trades, dividends, start_date, end_date):
+    trades['截止日'] = pd.DatetimeIndex(pd.DatetimeIndex(trades['trading_datetime']).date)
+    trades['成交金额'] = trades.eval("last_price * last_quantity - transaction_cost")
+    trades['动作'] = trades['side'].map({'BUY': 0, 'SELL': 1})
+    trades['代码'] = trades['order_book_ids'].apply(uqercode_to_windcode)
+
+    dividends['截止日'] = pd.DatetimeIndex(pd.DatetimeIndex(dividends['trading_date']).date)
+    dividends['成交金额'] = dividends['dividends']
+    dividends['动作'] = 2
+    dividends['代码'] = dividends['order_book_id'].apply(uqercode_to_windcode)
+
+    new = trades[['截止日', '成交金额', '动作', '代码']].append(dividends[['截止日', '成交金额', '动作', '代码']])
+    new.reset_index(drop=True, inplace=True)
+    new = new[new['截止日'] >= start_date & new['截止日'] <= end_date]
+    new['方向'] = 1
+    return new
+
+class TSLBrinsonAttribution(object):
+    """
+    基于TSL客户端的Brinson风险归因
+
+    Brinson归因需要的源数据包括交易记录、持仓明细和资产配置明细。
+    交易记录的数据格式：pd.DataFrame
+        ---------------------------------------------
+           截止日   |  代码  |  方向  | 动作 | 成交金额
+        ---------------------------------------------
+        2017-12-01 | 000001 |  1    |    1  |  10000
+        ---------------------------------------------
+    持仓明细的数据格式 : pd.DataFrame
+        ---------------------------------------------
+           截止日  |
+    """
+    @classmethod
+    def from_analyzer(cls, analyzer_pth, benchmark, start_date, end_date):
+        """
+        从某个跟踪组合中提取归因所需的数据
+        """
+        ana = Analyzer(analyzer_pth, benchmark)
+        trades = ana.table['trades']
+        dividends = ana.get_dividends()
+
+        trades_to_attr = create_trade_to_attr(trades, dividends, start_date, end_date)

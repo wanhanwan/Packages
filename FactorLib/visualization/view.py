@@ -198,6 +198,8 @@ def update_data_tb5():
         load_range_attribution(strategy, start, end, benchmark)
     barra_attr.data = style_attr.to_dict(orient='list')
     indu_attr.data = indu_attr_.to_dict(orient='list')
+    style_attr['ratio'] = style_attr['attr'] / style_attr['attr'].sum()
+    barra_desp.data = style_attr.to_dict(orient='list')
     text_summary.text = "Date Range: %s To %s \n Benchmark Return: %f \n Total Active Return: %f \n Total Return: %f"%(
         start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d"), bchmrk_ret, tot_ac_ret, bchmrk_ret+tot_ac_ret)
 
@@ -215,6 +217,11 @@ calculate_button = Button(label="Calculate")
 calculate_button.on_click(update_data_tb5)
 barra_attr = ColumnDataSource(data=dict(barra_style=[], attr=[]))
 indu_attr = ColumnDataSource(data=dict(indu=[], attr=[]))
+barra_desp = ColumnDataSource(data=dict(barra_style=[], attr=[], ratio=[]))
+barra_columns = [TableColumn(field='barra_style', title='barra_style'),
+                 TableColumn(field='attr', title='attr', formatter=NumberFormatter(format='0.00%')),
+                 TableColumn(field='ratio', title='ratio', formatter=NumberFormatter(format='0.00%'))]
+barra_table = DataTable(source=barra_desp, columns=barra_columns, width=800, height=600)
 update_data_tb5()
 all_barra_names_tb5 = list(barra_attr.data['barra_style'])
 barra_fig_tb5 = figure(y_range=all_barra_names_tb5, plot_height=500, plot_width=900, title="Style Attr",  # x_range=(-0.1, 0.1),
@@ -226,7 +233,7 @@ indu_fig_tb5 = figure(y_range=indu_names_tb5, plot_height=1900, plot_width=900, 
 indu_fig_tb5.hbar(y=dodge('indu', 0, indu_fig_tb5.y_range), right='attr', height=0.2, color="#718dbf", source=indu_attr,
                   legend=value('attr'))
 widgets_tb5 = row(column(startdate_tb5, enddate_tb5), column(strategy_select_tb5, benchmark_select_tb5), calculate_button)
-tab5 = Panel(child=column(widgets_tb5, row(column(barra_fig_tb5, indu_fig_tb5), text_summary)), title="RETURN ATTR")
+tab5 = Panel(child=column(widgets_tb5, row(column(barra_fig_tb5, barra_table), text_summary)), title="RETURN ATTR")
 
 
 # Tab six
@@ -271,7 +278,7 @@ tab6 = Panel(child=column(widgets_tb6, row(column(cum_attr_fig))), title="CUM AT
 
 # set layout
 tabs = Tabs(tabs=[tab1, tab2, tab3, tab4, tab5, tab6])
-# tabs = Tabs(tabs=[tab6])
+# tabs = Tabs(tabs=[tab4])
 curdoc().add_root(tabs)
 
 

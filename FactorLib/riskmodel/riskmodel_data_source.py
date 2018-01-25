@@ -284,8 +284,8 @@ class RiskDataSource(object):
 
     @property
     def max_date_of_factor(self):
-        factor_names = [x.replace(".h5", "") for x in os.listdir(self._dspath+'/factorData')]
-        return self.h5_db.get_date_range(factor_names[0], '/factorData/')[1]
+        min_date, max_date = self.nc_db.get_date_range('risk_factor', '/factorData/')
+        return max_date
 
     @property
     def max_date_of_factor_return(self):

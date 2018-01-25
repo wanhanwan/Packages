@@ -282,6 +282,17 @@ class Analyzer(object):
         trades.columns = ['证券代码', '操作类型', '交易数量', '交易价格', '交易日期']
         return trades
 
+    def get_dividends(self):
+        """导出分红记录"""
+        if os.path.isfile(os.path.join(self.rootdir, 'dividends.pkl')):
+            d = pd.read_pickle(os.path.join(self.rootdir, 'dividends.pkl'))
+            if not d.empty:
+                d['order_book_id'] = d['order_book_id'].apply(uqercode_to_windcode)
+                d['trading_date'] = pd.DatetimeIndex(d['trading_date'])
+            return d
+        else:
+            return pd.DataFrame(columns=['trading_date', 'order_book_id', 'dividends'])
+
     def returns_sheet(self, cur_day=None):
         if cur_day is None:
             cur_day = pd.to_datetime(data_source.trade_calendar.get_latest_trade_days(

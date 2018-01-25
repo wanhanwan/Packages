@@ -403,7 +403,10 @@ class StrategyManager(object):
                 attr = analyzer.range_attribute(start_date, end_date, data_source, bchmrk_name)
             attr = attr.to_frame(end_date).T
             rebalance_attr.append(attr)
-        rebalance_attr = pd.concat(rebalance_attr).stack().to_frame("attr_%s"%bchmrk_name).rename_axis(['date','IDs'])
+        if rebalance_attr:
+            rebalance_attr = pd.concat(rebalance_attr).stack().to_frame("attr_%s"%bchmrk_name).rename_axis(['date','IDs'])
+        else:
+            return
         # 保存数据
         ensure_dir_exists(os.path.join(self._strategy_risk_path, str(strategy_id), data_source, 'rebalance_attr'))
         temp_h5 = H5DB(os.path.join(self._strategy_risk_path, "%d" % strategy_id, data_source))
