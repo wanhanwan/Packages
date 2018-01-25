@@ -77,6 +77,10 @@ def tradecode_to_tslcode(code):
     return 'SH'+code if code[0] == '6' else 'SZ'+code
 
 @clru_cache()
+def windcode_to_tslcode(windcode):
+    return windcode[-2:] + windcode[:6]
+
+@clru_cache()
 def tslcode_to_tradecode(code):
     return code[2:]
 

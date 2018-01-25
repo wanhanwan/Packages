@@ -3,11 +3,14 @@
 
 import pandas as pd
 import numpy as np
+import TSLPy3 as tsl
 from fastcache import clru_cache
 from .riskmodel_data_source import RiskDataSource
 from ..data_source.base_data_source_h5 import data_source
 from ..factor_performance.analyzer import Analyzer
-from ..utils.tool_funcs import uqercode_to_windcode
+from ..utils.tool_funcs import uqercode_to_windcode, windcode_to_tslcode
+from ..data_source.base_data_source_h5 import tc
+from fastcache import clru_cache
 
 
 class RiskExposureAnalyzer(object):
@@ -284,6 +287,65 @@ def create_trade_to_attr(trades, dividends, start_date, end_date):
     new['方向'] = 1
     return new
 
+
+def create_portfolio_to_attr(stock_positions, start_date, end_date):
+    new = stock_positions[['market_value', 'order_book_id']].reset_index()
+    new.rename(columns={'date': '截止日', 'order_book_id': '代码', 'market_value': '市值'}, inplace=True)
+    new['代码'] = new['代码'].apply(uqercode_to_windcode)
+    new['方向'] = 1
+    return new[(new['截止日'] >= start_date) & (new['截止日'] <= end_date)]
+
+
+def create_asset_allocation(positions, start_date, end_date):
+    new = positions[['market_value', 'total_value']].reset_index()
+    new['total_value'] = np.where(new['market_value'] > new['total_value'], new['market_value'], new['total_value'])
+    new['现金市值'] = new['total_value'] - new['market_value']
+    new.rename(columns={'date': '截止日', 'total_value': '资产净值'}, inplace=True)
+    return new[(new['截止日'] >= start_date) & (new['截止日'] <= end_date)][['截止日', '现金市值', '资产净值']]
+
+
+@clru_cache()
+def encode_date(year, month, day):
+    return tsl.EncodeDate(year, month, day)
+
+# def tostry(data):
+#     ret =""
+#     if isinstance(data,(int,float)):
+#         ret = "{0}".format(data)
+#     elif isinstance(data, str):
+#         ret = "\"{0}\"".format(data)
+#     elif isinstance(data, list):
+#         lendata = len(data)
+#         ret += "["
+#         for i in range(lendata):
+#             ret += tostry(data[i])
+#             if i<(lendata-1):
+#                 ret += ","
+#         ret +=']'
+#     elif isinstance(data, tuple):
+#         lendata = len(data)
+#         ret += "("
+#         for i in range(lendata):
+#             ret += tostry(data[i])
+#         if i < (lendata - 1):
+#             ret += ","
+#         ret += ')'
+#         elif isinstance(data, (dict)):
+#         it = 0
+#         lendata = len(data)
+#         ret += "{"
+#         for i in data:
+#             ret += tostry(i) + ":" + tostry(data[i])
+#         it += 1
+#         if it < lendata:
+#             ret += ","
+#         ret += "}"
+#         elif isinstance(data, (bytes)):
+#         ret += data.decode('gbk')
+#         else:
+#         ret = "{0}".format(data)
+
+
 class TSLBrinsonAttribution(object):
     """
     基于TSL客户端的Brinson风险归因
@@ -299,6 +361,15 @@ class TSLBrinsonAttribution(object):
         ---------------------------------------------
            截止日  |
     """
+
+    def __init__(self, trades, portfolio, asset, benchmark):
+        self.trades = trades
+        self.portfolio = portfolio
+        self.asset = asset
+        self.benchmark = benchmark
+        self.start_date = portfolio['截止日'].unique()[1]
+        self.end_date = portfolio['截止日'].unique()[-1]
+
     @classmethod
     def from_analyzer(cls, analyzer_pth, benchmark, start_date, end_date):
         """
@@ -306,6 +377,33 @@ class TSLBrinsonAttribution(object):
         """
         ana = Analyzer(analyzer_pth, benchmark)
         trades = ana.table['trades']
+        positions = ana.table['stock_positions']
+        portfolio = ana.table['portfolio']
         dividends = ana.get_dividends()
 
+        start_date = tc.tradeDayOffset(start_date, -1)
         trades_to_attr = create_trade_to_attr(trades, dividends, start_date, end_date)
+        trades_to_attr['代码'] = trades_to_attr['代码'].apply(windcode_to_tslcode)
+        trades_to_attr['截止日'] = trades_to_attr['截止日'].apply(lambda x: encode_date(x.year, x.month, x.day))
+        portfolio_to_attr = create_portfolio_to_attr(positions, start_date, end_date)
+        portfolio_to_attr['代码'] = portfolio_to_attr['代码'].apply(windcode_to_tslcode)
+        portfolio_to_attr['截止日'] = portfolio_to_attr['截止日'].apply(lambda x: encode_date(x.year, x.month, x.day))
+        asset_to_attr = create_asset_allocation(portfolio, start_date, end_date)
+        asset_to_attr['代码'] = asset_to_attr['代码'].apply(windcode_to_tslcode)
+        asset_to_attr['截止日'] = asset_to_attr['截止日'].apply(lambda x: encode_date(x.year, x.month, x.day))
+
+        return cls.__init__(trades_to_attr, portfolio_to_attr, asset_to_attr, benchmark)
+
+    def start(self):
+        """开始归因"""
+        trades = self.trades.rename(columns=lambda x: x.encode("GBK")).to_dict('record')
+        portfolio = self.portfolio.rename(columns=lambda x: x.encode("GBK")).to_dict('record')
+        asset = self.asset.rename(columns=lambda x: x.encode("GBK")).to_dict('record')
+
+        start = int(self.start_date.strftime("%Y%m%d"))
+        end = int(self.end_date.strftime("%Y%m%d"))
+
+        print("正在归因...")
+        res = tsl.RemoteCallFunc("BrinsonAttr", [start, end, self.benchmark, trades, portfolio, asset], {})
+        print("归因结束...")
+
