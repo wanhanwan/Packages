@@ -197,7 +197,6 @@ class Analyzer(object):
         a.active_return = active_return
         return a.total_performance
 
-
     def range_pct(self, start, end, rel=True):
         try:
             if rel:

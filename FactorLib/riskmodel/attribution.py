@@ -4,12 +4,11 @@
 import pandas as pd
 import numpy as np
 import TSLPy3 as tsl
-from fastcache import clru_cache
 from .riskmodel_data_source import RiskDataSource
 from ..data_source.base_data_source_h5 import data_source
-from ..factor_performance.analyzer import Analyzer
 from ..utils.tool_funcs import uqercode_to_windcode, windcode_to_tslcode
 from ..data_source.base_data_source_h5 import tc
+from ..data_source.trade_calendar import as_timestamp
 from fastcache import clru_cache
 
 
@@ -274,7 +273,7 @@ def create_trade_to_attr(trades, dividends, start_date, end_date):
     trades['截止日'] = pd.DatetimeIndex(pd.DatetimeIndex(trades['trading_datetime']).date)
     trades['成交金额'] = trades.eval("last_price * last_quantity - transaction_cost")
     trades['动作'] = trades['side'].map({'BUY': 0, 'SELL': 1})
-    trades['代码'] = trades['order_book_ids'].apply(uqercode_to_windcode)
+    trades['代码'] = trades['order_book_id'].apply(uqercode_to_windcode)
 
     dividends['截止日'] = pd.DatetimeIndex(pd.DatetimeIndex(dividends['trading_date']).date)
     dividends['成交金额'] = dividends['dividends']
@@ -283,7 +282,7 @@ def create_trade_to_attr(trades, dividends, start_date, end_date):
 
     new = trades[['截止日', '成交金额', '动作', '代码']].append(dividends[['截止日', '成交金额', '动作', '代码']])
     new.reset_index(drop=True, inplace=True)
-    new = new[new['截止日'] >= start_date & new['截止日'] <= end_date]
+    new = new[(new['截止日'] >= start_date) & (new['截止日'] <= end_date)]
     new['方向'] = 1
     return new
 
@@ -296,10 +295,13 @@ def create_portfolio_to_attr(stock_positions, start_date, end_date):
     return new[(new['截止日'] >= start_date) & (new['截止日'] <= end_date)]
 
 
-def create_asset_allocation(positions, start_date, end_date):
-    new = positions[['market_value', 'total_value']].reset_index()
+def create_asset_allocation(positions, portfolio, start_date, end_date):
+    stock_value = portfolio.groupby('date')['market_value'].sum()
+    new = positions[['market_value', 'total_value']]
     new['total_value'] = np.where(new['market_value'] > new['total_value'], new['market_value'], new['total_value'])
-    new['现金市值'] = new['total_value'] - new['market_value']
+    new['现金市值'] = (new['total_value'] - stock_value).fillna(0)
+    new['现金市值'] = np.where(new['现金市值'] < 0, 0, new['现金市值'])
+    new.reset_index(inplace=True)
     new.rename(columns={'date': '截止日', 'total_value': '资产净值'}, inplace=True)
     return new[(new['截止日'] >= start_date) & (new['截止日'] <= end_date)][['截止日', '现金市值', '资产净值']]
 
@@ -362,48 +364,66 @@ class TSLBrinsonAttribution(object):
            截止日  |
     """
 
-    def __init__(self, trades, portfolio, asset, benchmark):
+    def __init__(self, trades, portfolio, asset, benchmark, start_date, end_date):
         self.trades = trades
         self.portfolio = portfolio
         self.asset = asset
         self.benchmark = benchmark
-        self.start_date = portfolio['截止日'].unique()[1]
-        self.end_date = portfolio['截止日'].unique()[-1]
+        self.start_date = start_date
+        self.end_date = end_date
 
     @classmethod
     def from_analyzer(cls, analyzer_pth, benchmark, start_date, end_date):
         """
         从某个跟踪组合中提取归因所需的数据
         """
-        ana = Analyzer(analyzer_pth, benchmark)
-        trades = ana.table['trades']
-        positions = ana.table['stock_positions']
-        portfolio = ana.table['portfolio']
-        dividends = ana.get_dividends()
+        import os
 
-        start_date = tc.tradeDayOffset(start_date, -1)
-        trades_to_attr = create_trade_to_attr(trades, dividends, start_date, end_date)
+        def get_dividends():
+            if os.path.isfile(os.path.join(os.path.dirname(analyzer_pth), 'dividends.pkl')):
+                d = pd.read_pickle(os.path.join(os.path.dirname(analyzer_pth), 'dividends.pkl'))
+                if not d.empty:
+                    d['order_book_id'] = d['order_book_id'].apply(uqercode_to_windcode)
+                    d['trading_date'] = pd.DatetimeIndex(d['trading_date'])
+                return d
+            else:
+                return pd.DataFrame(columns=['trading_date', 'order_book_id', 'dividends'])
+
+        table = pd.read_pickle(analyzer_pth)
+        trades = table['trades']
+        positions = table['stock_positions']
+        portfolio = table['portfolio']
+        dividends = get_dividends()
+
+        start_oneday_before = tc.tradeDayOffset(as_timestamp(start_date), -1, retstr=None)
+        end_date = as_timestamp(end_date)
+        trades_to_attr = create_trade_to_attr(trades, dividends, start_oneday_before, end_date)
         trades_to_attr['代码'] = trades_to_attr['代码'].apply(windcode_to_tslcode)
         trades_to_attr['截止日'] = trades_to_attr['截止日'].apply(lambda x: encode_date(x.year, x.month, x.day))
-        portfolio_to_attr = create_portfolio_to_attr(positions, start_date, end_date)
+        portfolio_to_attr = create_portfolio_to_attr(positions, start_oneday_before, end_date)
         portfolio_to_attr['代码'] = portfolio_to_attr['代码'].apply(windcode_to_tslcode)
         portfolio_to_attr['截止日'] = portfolio_to_attr['截止日'].apply(lambda x: encode_date(x.year, x.month, x.day))
-        asset_to_attr = create_asset_allocation(portfolio, start_date, end_date)
-        asset_to_attr['代码'] = asset_to_attr['代码'].apply(windcode_to_tslcode)
+        asset_to_attr = create_asset_allocation(portfolio, positions, start_oneday_before, end_date)
         asset_to_attr['截止日'] = asset_to_attr['截止日'].apply(lambda x: encode_date(x.year, x.month, x.day))
 
-        return cls.__init__(trades_to_attr, portfolio_to_attr, asset_to_attr, benchmark)
+        return cls(trades_to_attr, portfolio_to_attr, asset_to_attr, benchmark, as_timestamp(start_date), end_date)
 
     def start(self):
         """开始归因"""
-        trades = self.trades.rename(columns=lambda x: x.encode("GBK")).to_dict('record')
-        portfolio = self.portfolio.rename(columns=lambda x: x.encode("GBK")).to_dict('record')
-        asset = self.asset.rename(columns=lambda x: x.encode("GBK")).to_dict('record')
+        # trades = self.trades.rename(columns=lambda x: x.encode("GBK")).to_dict('record')
+        # portfolio = self.portfolio.rename(columns=lambda x: x.encode("GBK")).to_dict('record')
+        # asset = self.asset.rename(columns=lambda x: x.encode("GBK")).to_dict('record')
+
+        trades = self.trades.to_dict('record')
+        portfolio = self.portfolio.to_dict('record')
+        asset = self.asset[['截止日', '资产净值', '现金市值']].to_dict('record')
 
         start = int(self.start_date.strftime("%Y%m%d"))
         end = int(self.end_date.strftime("%Y%m%d"))
 
         print("正在归因...")
         res = tsl.RemoteCallFunc("BrinsonAttr", [start, end, self.benchmark, trades, portfolio, asset], {})
+        # res = tsl.RemoteCallFunc("BrinsonAttr", [], {})
         print("归因结束...")
+        return res
 

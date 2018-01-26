@@ -156,8 +156,8 @@ class TSLDBOnline(object):
 
 
 if __name__ == '__main__':
-    # field = {"'list_days'": 'load_ttm(46008)'}
-    # data = PanelQuery(field, start_date='20180101', end_date='20180110')
-    a = TSLDBOnline()
-    data = a.load_latest_year('扣除非经常性损益后的净利润', n=1, dates=['20180116'])
-    print(data)
+    field = {"'list_days'": 'load_ttm(46008)'}
+    data = PanelQuery(field, start_date='20180101', end_date='20180110')
+    # a = TSLDBOnline()
+    # data = a.load_latest_year('扣除非经常性损益后的净利润', n=1, dates=['20180116'])
+    # print(data)

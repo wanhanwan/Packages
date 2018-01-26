@@ -69,6 +69,7 @@ def intcode_to_tradecode(intcode):
 def tradecode_to_intcode(tradecode):
     return int(tradecode)
 
+@clru_cache()
 def uqercode_to_windcode(uqercode):
     return uqercode[:6]+'.SH' if uqercode[-4:]=='XSHG' else uqercode[:6]+'.SZ'
 
