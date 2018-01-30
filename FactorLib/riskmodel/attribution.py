@@ -271,7 +271,7 @@ class RiskModelAttribution(object):
 
 def create_trade_to_attr(trades, dividends, start_date, end_date):
     trades['截止日'] = pd.DatetimeIndex(pd.DatetimeIndex(trades['trading_datetime']).date)
-    trades['成交金额'] = trades.eval("last_price * last_quantity - transaction_cost")
+    trades['成交金额'] = trades.eval("last_price * last_quantity")
     trades['动作'] = trades['side'].map({'BUY': 0, 'SELL': 1})
     trades['代码'] = trades['order_book_id'].apply(uqercode_to_windcode)
 
@@ -295,16 +295,23 @@ def create_portfolio_to_attr(stock_positions, start_date, end_date):
     return new[(new['截止日'] >= start_date) & (new['截止日'] <= end_date)]
 
 
-def create_asset_allocation(positions, portfolio, start_date, end_date):
-    stock_value = portfolio.groupby('date')['market_value'].sum()
-    new = positions[['market_value', 'total_value']]
-    new['total_value'] = np.where(new['market_value'] > new['total_value'], new['market_value'], new['total_value'])
-    new['现金市值'] = (new['total_value'] - stock_value).fillna(0)
-    new['现金市值'] = np.where(new['现金市值'] < 0, 0, new['现金市值'])
-    new.reset_index(inplace=True)
-    new.rename(columns={'date': '截止日', 'total_value': '资产净值'}, inplace=True)
-    return new[(new['截止日'] >= start_date) & (new['截止日'] <= end_date)][['截止日', '现金市值', '资产净值']]
-
+def create_asset_allocation(trades, portfolio):
+    stock_value = portfolio.groupby('截止日')['市值'].sum()
+    trades = trades.set_index('截止日')
+    cash_flow = (trades['动作'].map({1: 1, 0: -1, 2: 1}) * trades['成交金额']).groupby(level=0).sum().cumsum()
+    init_cash = 0 if cash_flow.min() > 0 else abs(cash_flow.min()) + 1000000
+    cash_flow += init_cash
+    cash_flow = cash_flow.reindex(stock_value.index, method='ffill')
+    new = stock_value.to_frame('股票市值').join(cash_flow.to_frame('现金市值')).reset_index()
+    new['资产净值'] = new['股票市值'] + new['现金市值']
+    # new = positions[['market_value', 'total_value']]
+    # new['total_value'] = np.where(new['market_value'] > new['total_value'], new['market_value'], new['total_value'])
+    # new['现金市值'] = (new['total_value'] - stock_value).fillna(0)
+    # new['现金市值'] = np.where(new['现金市值'] < 0, 0, new['现金市值'])
+    # new.reset_index(inplace=True)
+    # new.rename(columns={'date': '截止日', 'total_value': '资产净值'}, inplace=True)
+    # return new[(new['截止日'] >= start_date) & (new['截止日'] <= end_date)][['截止日', '现金市值', '资产净值']]
+    return new[['截止日', '资产净值', '现金市值']]
 
 @clru_cache()
 def encode_date(year, month, day):
@@ -403,8 +410,9 @@ class TSLBrinsonAttribution(object):
         portfolio_to_attr = create_portfolio_to_attr(positions, start_oneday_before, end_date)
         portfolio_to_attr['代码'] = portfolio_to_attr['代码'].apply(windcode_to_tslcode)
         portfolio_to_attr['截止日'] = portfolio_to_attr['截止日'].apply(lambda x: encode_date(x.year, x.month, x.day))
-        asset_to_attr = create_asset_allocation(portfolio, positions, start_oneday_before, end_date)
-        asset_to_attr['截止日'] = asset_to_attr['截止日'].apply(lambda x: encode_date(x.year, x.month, x.day))
+        # asset_to_attr = create_asset_allocation(portfolio, positions, start_oneday_before, end_date)
+        asset_to_attr = create_asset_allocation(trades_to_attr, portfolio_to_attr)
+        # asset_to_attr['截止日'] = asset_to_attr['截止日'].apply(lambda x: encode_date(x.year, x.month, x.day))
 
         return cls(trades_to_attr, portfolio_to_attr, asset_to_attr, benchmark, as_timestamp(start_date), end_date)
 

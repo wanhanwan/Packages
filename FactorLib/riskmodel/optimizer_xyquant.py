@@ -446,9 +446,9 @@ class Optimizer(object):
 
         self.optimal = self._c.solution.get_status() == self._c.solution.status.optimal
         self.solution_status = self._c.solution.status[self._c.solution.get_status()]
-        self.solution_value = self._c.solution.get_objective_value()
 
         if self.optimal:
+            self.solution_value = self._c.solution.get_objective_value()
             self.asset['optimal_weight'] = self._c.solution.get_values()
 
     def check_ktt(self):
