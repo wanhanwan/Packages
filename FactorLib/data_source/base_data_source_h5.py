@@ -435,9 +435,17 @@ class sector(object):
         industry_info = self.h5DB.load_factor(symbol, '/indexes/', ids=ids, dates=dates)
         return IndustryConverter.convert(symbol, industry_info[symbol]).to_frame()
 
-    def get_industry_dummy(self, ids, industry='中信一级', start_date=None, end_date=None, dates=None,
+    def get_industry_dummy(self, ids=None, industry='中信一级', start_date=None, end_date=None, dates=None,
                            drop_first=True):
-        """股票行业哑变量"""
+        """股票行业哑变量
+        Parameters
+        ------------------
+        ids : None or list of strings
+            股票代码列表, 默认为None, 代表所有股票。只返回上述股票的行业哑变量
+        industry : str
+            中文行业名称， 详情查看const.py文件中的INDUSTRY_NAME_DICT
+        
+        """
         dates = self.trade_calendar.get_trade_days(start_date, end_date) if dates is None else dates
 
         try:

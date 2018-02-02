@@ -1,4 +1,4 @@
-# -*- coding=utf-8 -*-
+# -*- coding=gbk -*-
 
 from bokeh.io import output_file, curdoc
 from bokeh.layouts import widgetbox, row, column
@@ -14,6 +14,8 @@ from FactorLib.data_source.trade_calendar import as_timestamp
 from FactorLib.riskmodel.riskmodel_data_source import RiskDataSource
 from FactorLib.data_source.update_data import index_weights
 from FactorLib.const import MARKET_INDEX_WINDCODE_REVERSE
+from FactorLib.riskmodel.attribution import TSLBrinsonAttribution
+import os
 
 output_file("viwer.html")
 
@@ -161,7 +163,7 @@ barra_fig.vbar(x=dodge('barra_style', -0.1, barra_fig.x_range), top='portfolio',
                color="#e84d60", legend=value("portfolio"))
 barra_fig.vbar(x=dodge('barra_style', 0.1, barra_fig.x_range), top='benchmark', width=0.2, source=barra_expo,
                color="#718dbf", legend=value("benchmark"))
-# 琛屼笟鍥犲瓙灞曠ず
+# 行业因子展示
 indu_fig = figure(x_range=indu_names, y_range=(-0.5, 0.5), plot_height=600, title="Industry Expo", plot_width=1900,
                   toolbar_location=None, tools="")
 indu_fig.vbar(x=dodge('industry', -0.1, indu_fig.x_range), top='portfolio', width=0.1, source=indu_expo, color="#e84d60",
@@ -276,9 +278,46 @@ widgets_tb6 = row(column(startdate_tb6, enddate_tb6), column(strategy_select_tb6
 tab6 = Panel(child=column(widgets_tb6, row(column(cum_attr_fig))), title="CUM ATTR")
 
 
+# Tab 7 Brinson Attribute
+def update_data_tb7():
+    strategy = strategy_select_tb7.value
+    benchmark = benchmark_select_tb7.value
+    start_date = as_timestamp(startdate_tb7.value)
+    end_date = as_timestamp(enddate_tb7.value)
+    pth = os.path.join(strategy_data_provider.root_path, strategy, 'backtest', 'BTresult.pkl')
+    attr = TSLBrinsonAttribution.from_analyzer(
+        pth, benchmark, start_date.strftime("%Y%m%d"), end_date.strftime("%Y%m%d"))
+    res = attr.start()
+    brinson_attr.data = cum_attr.from_df(res)
+
+
+strategy_select_tb7 = Select(title='strategy', value=strategy_data_provider.all_strategies[0],
+                             options=strategy_data_provider.all_strategies)
+benchmark_select_tb7 = Select(title='benchmark', value="SH000905",
+                              options=["SH000905", "SH000300"])
+startdate_tb7 = DatePicker(title='Start', min_date=datetime(2010, 1, 1), max_date=datetime.now(),
+                           value=datetime(2010, 1, 1))
+enddate_tb7 = DatePicker(title='End', min_date=datetime(2010, 1, 1), max_date=datetime.now(),
+                         value=datetime(2010, 1, 1))
+calculate_button_tb7 = Button(label="Calculate")
+calculate_button_tb7.on_click(update_data_tb7)
+brinson_attr = ColumnDataSource()
+data_columns = ['类别', '收益额', '贡献度(%)@组合', '贡献度(%)@基准', '权重(%)@组合', '权重(%)@基准',
+                 '权重(%)@超配', '涨幅(%)@组合', '涨幅(%)@基准',
+                 '涨幅(%)@超额', '配置收益(%)', '选择收益(%)', '交互收益(%)', '超额收益(%)']
+brinson_columns = []
+for i, c in enumerate(data_columns):
+    if i <= 1:
+        brinson_columns.append(TableColumn(field=c, title=c))
+    else:
+        brinson_columns.append(TableColumn(field=c, title=c, formatter=NumberFormatter(format='0.00')))
+brinson_table = DataTable(source=brinson_attr, columns=brinson_columns, width=1800, height=600)
+widgets_tb7 = row(column(startdate_tb7, enddate_tb7), column(strategy_select_tb7, benchmark_select_tb7), calculate_button_tb7)
+tab7 = Panel(child=column(widgets_tb7, brinson_table), title="Brinson")
+
 # set layout
-tabs = Tabs(tabs=[tab1, tab2, tab3, tab4, tab5, tab6])
-# tabs = Tabs(tabs=[tab4])
+tabs = Tabs(tabs=[tab1, tab2, tab3, tab4, tab5, tab6, tab7])
+# tabs = Tabs(tabs=[tab7])
 curdoc().add_root(tabs)
 
 

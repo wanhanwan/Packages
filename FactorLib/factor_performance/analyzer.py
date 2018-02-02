@@ -142,15 +142,14 @@ class Analyzer(object):
     @property
     def abs_yearly_performance(self):
         func_dict = {
-                'cum_return': (lambda x: stats.cum_returns_final(self.portfolio_return.reindex(x.index)) -
-                                         stats.cum_returns_final(self.benchmark_return.reindex(x.index))),
+                'cum_return': lambda x: stats.cum_returns_final(self.portfolio_return.reindex(x.index)),
                 'volatility': lambda x: np.std(x, ddof=1) * 250 ** 0.5,
                 'sharp_ratio': lambda x: stats.sharpe_ratio(x, simple_interest=True),
                 'maxdd': stats.max_drawdown,
                 'IR': lambda x: stats.information_ratio(x, self.benchmark_return),
-                'monthly_win_rate': lambda x: stats.win_rate(x, self.benchmark_return, 'monthly'),
-                'weekly_win_rate': lambda x: stats.win_rate(x, self.benchmark_return, 'weekly'),
-                'daily_win_rate': lambda x: stats.win_rate(x, self.benchmark_return, 'daily')
+                'monthly_win_rate': lambda x: stats.win_rate(x, 0.0, 'monthly'),
+                'weekly_win_rate': lambda x: stats.win_rate(x, 0.0, 'weekly'),
+                'daily_win_rate': lambda x: stats.win_rate(x, 0.0, 'daily')
                 }
         df = resample_func(self.portfolio_return, convert_to='1y', func=func_dict)
         return df

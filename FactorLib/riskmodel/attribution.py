@@ -271,7 +271,7 @@ class RiskModelAttribution(object):
 
 def create_trade_to_attr(trades, dividends, start_date, end_date):
     trades['截止日'] = pd.DatetimeIndex(pd.DatetimeIndex(trades['trading_datetime']).date)
-    trades['成交金额'] = trades.eval("last_price * last_quantity")
+    trades['成交金额'] = trades.eval("last_price * last_quantity - transaction_cost")
     trades['动作'] = trades['side'].map({'BUY': 0, 'SELL': 1})
     trades['代码'] = trades['order_book_id'].apply(uqercode_to_windcode)
 
@@ -299,60 +299,28 @@ def create_asset_allocation(trades, portfolio):
     stock_value = portfolio.groupby('截止日')['市值'].sum()
     trades = trades.set_index('截止日')
     cash_flow = (trades['动作'].map({1: 1, 0: -1, 2: 1}) * trades['成交金额']).groupby(level=0).sum().cumsum()
-    init_cash = 0 if cash_flow.min() > 0 else abs(cash_flow.min()) + 1000000
+    init_cash = 0 if cash_flow.min() > 0 else abs(cash_flow.min()) + 100000
     cash_flow += init_cash
     cash_flow = cash_flow.reindex(stock_value.index, method='ffill')
     new = stock_value.to_frame('股票市值').join(cash_flow.to_frame('现金市值')).reset_index()
     new['资产净值'] = new['股票市值'] + new['现金市值']
-    # new = positions[['market_value', 'total_value']]
-    # new['total_value'] = np.where(new['market_value'] > new['total_value'], new['market_value'], new['total_value'])
-    # new['现金市值'] = (new['total_value'] - stock_value).fillna(0)
-    # new['现金市值'] = np.where(new['现金市值'] < 0, 0, new['现金市值'])
-    # new.reset_index(inplace=True)
-    # new.rename(columns={'date': '截止日', 'total_value': '资产净值'}, inplace=True)
-    # return new[(new['截止日'] >= start_date) & (new['截止日'] <= end_date)][['截止日', '现金市值', '资产净值']]
     return new[['截止日', '资产净值', '现金市值']]
+
+
+def convert_df(res):
+    if res[0] != 0:
+        raise ValueError("天软归因结果失败")
+    data = pd.DataFrame(res[1])
+    data.rename(columns=lambda x: x.decode("GBK"), inplace=True)
+    data['类别'] = data['类别'].str.decode("GBK")
+    return data[['类别', '收益额', '贡献度(%)@组合', '贡献度(%)@基准', '权重(%)@组合', '权重(%)@基准',
+                 '权重(%)@超配', '比例(%)@组合', '比例(%)@基准', '比例(%)@超配', '涨幅(%)@组合', '涨幅(%)@基准',
+                 '涨幅(%)@超额', '配置收益(%)', '选择收益(%)', '交互收益(%)', '超额收益(%)']]
+
 
 @clru_cache()
 def encode_date(year, month, day):
     return tsl.EncodeDate(year, month, day)
-
-# def tostry(data):
-#     ret =""
-#     if isinstance(data,(int,float)):
-#         ret = "{0}".format(data)
-#     elif isinstance(data, str):
-#         ret = "\"{0}\"".format(data)
-#     elif isinstance(data, list):
-#         lendata = len(data)
-#         ret += "["
-#         for i in range(lendata):
-#             ret += tostry(data[i])
-#             if i<(lendata-1):
-#                 ret += ","
-#         ret +=']'
-#     elif isinstance(data, tuple):
-#         lendata = len(data)
-#         ret += "("
-#         for i in range(lendata):
-#             ret += tostry(data[i])
-#         if i < (lendata - 1):
-#             ret += ","
-#         ret += ')'
-#         elif isinstance(data, (dict)):
-#         it = 0
-#         lendata = len(data)
-#         ret += "{"
-#         for i in data:
-#             ret += tostry(i) + ":" + tostry(data[i])
-#         it += 1
-#         if it < lendata:
-#             ret += ","
-#         ret += "}"
-#         elif isinstance(data, (bytes)):
-#         ret += data.decode('gbk')
-#         else:
-#         ret = "{0}".format(data)
 
 
 class TSLBrinsonAttribution(object):
@@ -399,7 +367,6 @@ class TSLBrinsonAttribution(object):
         table = pd.read_pickle(analyzer_pth)
         trades = table['trades']
         positions = table['stock_positions']
-        portfolio = table['portfolio']
         dividends = get_dividends()
 
         start_oneday_before = tc.tradeDayOffset(as_timestamp(start_date), -1, retstr=None)
@@ -418,10 +385,6 @@ class TSLBrinsonAttribution(object):
 
     def start(self):
         """开始归因"""
-        # trades = self.trades.rename(columns=lambda x: x.encode("GBK")).to_dict('record')
-        # portfolio = self.portfolio.rename(columns=lambda x: x.encode("GBK")).to_dict('record')
-        # asset = self.asset.rename(columns=lambda x: x.encode("GBK")).to_dict('record')
-
         trades = self.trades.to_dict('record')
         portfolio = self.portfolio.to_dict('record')
         asset = self.asset[['截止日', '资产净值', '现金市值']].to_dict('record')
@@ -431,7 +394,7 @@ class TSLBrinsonAttribution(object):
 
         print("正在归因...")
         res = tsl.RemoteCallFunc("BrinsonAttr", [start, end, self.benchmark, trades, portfolio, asset], {})
-        # res = tsl.RemoteCallFunc("BrinsonAttr", [], {})
+        res_df = convert_df(res)
         print("归因结束...")
-        return res
+        return res_df
 

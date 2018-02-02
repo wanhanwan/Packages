@@ -313,28 +313,78 @@ class Optimizer(object):
         self._signalrisk = sigma
 
     def _add_userlimit(self, user_conf, **kwargs):
-        """添加用户自定义的因子限制"""
-        factor_name = user_conf.get('factor_name')
-        factor_dir = user_conf.get('factor_dir')
+        """添加用户自定义的因子限制
+        user_conf: dict
+        自定义限制条件 :
+            factor_data : pd.DataFrame
+            自定义风险因子的数据, 每一列是一个因子，[date, IDs]为索引
+
+            factor_name : str
+            若factor_data为None, factor_name和factor_dir必须非空, h5db
+            会从中提取数据
+
+            factor_dir : str
+            若factor_data为None, factor_name和factor_dir必须非空, h5db
+            会从中提取数据
+
+            limit : float or list of floats
+            每个风险因子的限制值, 若limit是列表，其长度必须与因子个数相同
+
+            standard : bool
+            在加入到优化器之前是否对输入的因子进行QT标准化
+
+        kwargs: dict
+            active : bool
+            限制条件是否是相对行业的限制，默认为True
+
+            sense : str
+            限制类型： 'E': equal / 'G': greater than / 'L': lower than
+        """
+        if user_conf.get('factor_data', pd.DataFrame()).empty:
+            factor_name = user_conf.get('factor_name')
+            factor_dir = user_conf.get('factor_dir')
+            factor_data = data_source.load_factor(factor_name, factor_dir, dates=[self._date])
+        else:
+            factor_data = user_conf.get('factor_data')
+            factor_name = factor_data.columns
         limit = user_conf.get('limit')
         is_standard = user_conf.get('standard', False)
         is_active = kwargs.get('active', False)
-        factor_data = data_source.load_factor(factor_name, factor_dir, dates=[self._date])
-        if is_standard:
-            factor_data = StandardByQT(factor_data, factor_name).loc[self._date].reindex(self._allids, fill_value=0)
+        sense = kwargs.get('sense', 'E')
+
+        if isinstance(factor_data, pd.Series):
+            factor_data = factor_data.to_frame(factor_name)
+            factor_name = [factor_name]
+            limit = [limit]
+
+        if isinstance(limit, (int, float)):
+            limit = [limit] * len(factor_name)
+        elif isinstance(limit, list):
+            if len(limit) != len(factor_name):
+                raise ValueError("limit dimension dose not match factor dimension")
+
+        if isinstance(sense, str):
+            sense = [sense] * len(factor_name)
         else:
-            factor_data = factor_data.loc[self._date, factor_name].reindex(self._allids, fill_value=0)
-        if is_active:
-            limit += self._prepare_benchmark_userexpo(factor_data)
-        portfolio_factor = factor_data.loc[self._allids]
-        if np.any(np.isnan(portfolio_factor.values)):
-            raise ValueError("风格因子数据存在缺失值")
-        lin_expr = []
-        sense = ['E']
-        rhs = [limit]
-        name = ['user_%s'%factor_name]
-        lin_expr.append([portfolio_factor.index.tolist(), portfolio_factor.values.tolist()])
-        self._c.linear_constraints.add(lin_expr=lin_expr, senses=sense, rhs=rhs, names=name)
+            if len(sense) != len(factor_name):
+                raise ValueError("sense dimension dose not match factor dimension")
+
+        for f, l, s in zip(factor_name, limit, sense):
+            if is_standard:
+                factor_data2 = StandardByQT(factor_data, f).loc[self._date].reindex(self._allids, fill_value=0)
+            else:
+                factor_data2 = factor_data.loc[self._date, f].reindex(self._allids, fill_value=0)
+            if is_active:
+                l += self._prepare_benchmark_userexpo(factor_data2)
+            portfolio_factor = factor_data2.loc[self._allids]
+            if np.any(np.isnan(portfolio_factor.values)):
+                raise ValueError("风格因子数据存在缺失值")
+            lin_expr = []
+            sense = [s]
+            rhs = [l]
+            name = ['user_%s'%f]
+            lin_expr.append([portfolio_factor.index.tolist(), portfolio_factor.values.tolist()])
+            self._c.linear_constraints.add(lin_expr=lin_expr, senses=sense, rhs=rhs, names=name)
 
     def _prepare_benchmark_userexpo(self, data):
         """计算基准指数的用户因子暴露"""
