@@ -299,7 +299,7 @@ class RiskDataSource(object):
         """
         加载风险因子数据
 
-        风险因子文件格式：h5
+        风险因子文件格式：nc
         文件内部数据格式：DataFrame(index:[date IDs], columns:[factor_name])
 
         Return
@@ -307,25 +307,64 @@ class RiskDataSource(object):
         factor_data: DataFrame
             DataFrame(index:[date IDs], columns:[factor_names])
         """
+        raw_dates = pd.DatetimeIndex(dates)
+        dates = raw_dates.copy()
+        ret = 'df'
+        max_date_of_factor = self.max_date_of_factor
+        if max(dates) > max_date_of_factor:
+            warn("不是所有日期都存在风险数据, 风险数据的最近日期为%s"%max_date_of_factor.strftime("%Y-%m-%d"))
+            ret = 'xarray'
+            if len(dates) == 1:
+                dates = pd.DatetimeIndex([max_date_of_factor])
+            else:
+                dates = dates[dates <= max_date_of_factor]
         if factor_names == 'ALL':
             style = self.nc_db.load_factor('risk_factor', '/factorData/', dates=dates, ret='xarray', ids=ids)
             indu = self.nc_db.load_as_dummy('industry', '/factorData/', dates=dates, ids=ids).to_xarray()
-            new = style.update(indu).to_dataframe()
+            new = style.update(indu)
+            if ret == 'df':
+                new = new.to_dataframe()
         elif factor_names == 'STYLE':
-            new = self.nc_db.load_factor('risk_factor', '/factorData/', dates=dates, ids=ids)
+            new = self.nc_db.load_factor('risk_factor', '/factorData/', dates=dates, ids=ids, ret=ret)
         elif 'Estu' not in factor_names:
             style = self.nc_db.load_factor('risk_factor', '/factorData/', dates=dates, ids=ids)
             indu = self.nc_db.load_as_dummy('industry', '/factorData/', dates=dates, ids=ids)
             new = style.join(indu, how='left')
             new = new[factor_names]
+            if ret == 'xarray':
+                new = new.to_xarray()
         else:
             new = self.h5_db.load_factor('Estu', '/factorData/', ids=ids, dates=dates)
+            if ret == 'xarray':
+                new = new.to_xarray()
+        if ret == 'xarray':
+            new = new.reindex({'date': raw_dates}, method='ffill').to_dataframe().dropna(how='all')
+            new.index = new.index.swaplevel('IDs', 'date')
+            new.sort_index(inplace=True)
         new.rename(columns=lambda x: x[5:] if x.startswith("Indu_") else x, inplace=True)
         return new
 
     def load_style_factor(self, factor_names, ids=None, start_date=None, end_date=None, dates=None):
         """加载风格因子数据"""
-        style = self.nc_db.load_factor('risk_factor', '/factorData/', factor_names=factor_names, dates=dates, ids=ids)
+        raw_dates = pd.DatetimeIndex(dates)
+        dates = raw_dates.copy()
+        ret = 'df'
+        max_date_of_factor = self.max_date_of_factor
+
+        if max(dates) > max_date_of_factor:
+            warn("不是所有日期都存在风险数据, 风险数据的最近日期为%s"%max_date_of_factor.strftime("%Y-%m-%d"))
+            ret = 'xarray'
+            if len(dates) == 1:
+                dates = pd.DatetimeIndex([max_date_of_factor])
+            else:
+                dates = dates[dates <= max_date_of_factor]
+
+        style = self.nc_db.load_factor('risk_factor', '/factorData/', factor_names=factor_names, dates=dates, ids=ids,
+                                       ret=ret)
+        if ret == 'xarray':
+            style = style.reindex({'date': raw_dates}, method='ffill').to_dataframe().dropna(how='all')
+            style.index = style.index.swaplevel('IDs', 'date')
+            style.sort_index(inplace=True)
         return style
 
     @DateRange2Dates
@@ -339,7 +378,23 @@ class RiskDataSource(object):
         industry: DataFrame
             DataFrame(index:[date IDs], columns:[industry_names])
         """
+        raw_dates = pd.DatetimeIndex(dates)
+        dates = raw_dates.copy()
+        ret = 'df'
+        max_date_of_factor = self.max_date_of_factor
+
+        if max(dates) > max_date_of_factor:
+            warn("不是所有日期都存在风险数据, 风险数据的最近日期为%s" % max_date_of_factor.strftime("%Y-%m-%d"))
+            ret = 'xarray'
+            if len(dates) == 1:
+                dates = pd.DatetimeIndex([max_date_of_factor])
+            else:
+                dates = dates[dates <= max_date_of_factor]
         indu = self.nc_db.load_as_dummy('industry', '/factorData/', dates=dates, ids=ids)
+        if ret == 'xarray':
+            indu = indu.to_xarray().reindex({'date': raw_dates}, method='ffill').to_dataframe().dropna(how='all')
+            indu.index = indu.index.swaplevel('IDs', 'date')
+            indu.sort_index(inplace=True)
         indu.rename(columns=lambda x: x[5:] if x.startswith("Indu_") else x, inplace=True)
         return indu
 
@@ -452,6 +507,7 @@ class RiskDataSource(object):
         """
         加载兴业金工风险模型风险矩阵
         风险矩阵是月频的总风险
+        当指定日期的风险矩阵不存在时，用最近的代替
 
         Return:
         =======
@@ -469,7 +525,11 @@ class RiskDataSource(object):
                     index=lambda x: str(x).zfill(6), columns=lambda x: str(x).zfill(6))
                 matrixes[dates[i]] = matrix
             else:
-                warn("%s 风险矩阵不存在！" % date)
+                warn("%s 风险矩阵不存在！用最近的风险矩阵代替!" % date)
+                csv_file = max(os.listdir(dirpth))
+                matrix = pd.read_csv(csv_file, index_col=0, header=0).rename(
+                    index=lambda x: str(x).zfill(6), columns=lambda x: str(x).zfill(6))
+                matrixes[dates[i]] = matrix
         return matrixes
 
     @DateRange2Dates
