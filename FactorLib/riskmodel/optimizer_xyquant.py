@@ -544,9 +544,12 @@ class PortfolioOptimizer(object):
         self.kwargs = kwargs
 
     def _create_signal_and_stockpool(self, signal, stock_pool, dates):
+        from collections import Iterable
         if isinstance(signal, dict):
             signal = data_source.load_factor(signal['factor_name'], signal['factor_dir'], dates=dates).iloc[:, 0]
         elif dates is not None:
+            if isinstance(dates, Iterable):
+                dates = list(dates)
             signal = signal.loc[dates]
         else:
             raise KeyError("Incorrect Parameters!")
@@ -584,7 +587,7 @@ class PortfolioOptimizer(object):
 
             if optimizer.optimal:
                 print("%s权重优化成功" % idate.strftime("%Y-%m-%d"))
-                optimal_assets.append(optimizer.asset.loc[optimizer.asset['optimal_weight'] > 0.000001, 'optimal_weight'])
+                optimal_assets.append(optimizer.asset.loc[optimizer.asset['optimal_weight'] > 0.001, 'optimal_weight'])
             else:
                 print("%s权重优化失败:%s" % (idate.strftime("%Y-%m-%d"), optimizer.solution_status))
                 self.log[idate.strftime("%Y-%m-%d")] = optimizer.solution_status

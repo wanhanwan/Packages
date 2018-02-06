@@ -2,6 +2,7 @@ from ..data_source.base_data_source_h5 import data_source
 from ..riskmodel import stockpool
 from QuantLib.utils import DropOutlier, Standard, ScoringFactors
 from ..utils.tool_funcs import parse_industry, tradecode_to_windcode
+from ..data_source.stock_universe import from_formula
 import numpy as np
 import pandas as pd
 
@@ -22,8 +23,9 @@ def _load_latest_factors(factor_dict, stocklist):
     data = pd.concat(l, axis=1).dropna()
     return data
 
+
 def _rawstockpool(sectorid, dates):
-    stockpool = data_source.sector.get_index_members(sectorid, dates=dates)
+    stockpool = from_formula(sectorid).get(dates=dates)
     return stockpool
 
 

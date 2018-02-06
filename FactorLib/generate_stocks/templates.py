@@ -1,6 +1,7 @@
 from ..utils import AttrDict
 from ..single_factor_test.config import parse_config
 from ..data_source.base_data_source_h5 import data_source
+from ..data_source.converter import IndustryConverter
 from ..data_source.wind_plugin import realtime_quote
 from ..single_factor_test.factor_list import *
 from ..single_factor_test.selfDefinedFactors import *
@@ -107,6 +108,7 @@ class FactorInvestmentStocksGenerator(AbstractStockGenerator):
 
 
 class FactorTradesListGenerator(AbstractStockGenerator):
+    """实盘模拟的因子组合生成器"""
     def __init__(self):
         super(FactorTradesListGenerator, self).__init__()
         self.factors = None
@@ -166,3 +168,56 @@ class FactorTradesListGenerator(AbstractStockGenerator):
         format1 = workbook.add_format({'num_format': '0.0000'})
         worksheet.set_column('C:C', None, format1)
         writer.save()
+
+
+class OptimizedPortfolioGenerator(AbstractStockGenerator):
+    """使用风险优化模型生成股票组合模板
+    """
+    def generate_stocks(self, start, end):
+        risk_datasource = self.config.stocklist.data_source
+        benchmark = 'NULL' if self.config.benchmark is None else self.config.benchmark
+
+
+    def _set_factors(self):
+        self.factors, self.direction = funcs._to_factordict(self.config.factors)
+
+    def _parse_optimize_config(self):
+        constraints = self.config.stocklist.constraints
+
+
+    def _prepare_data(self, start, end):
+        dates = data_source.trade_calendar.get_trade_days(start, end, self.config.rebalance_frequence)
+        stockpool = funcs._stockpool(self.config.stockpool, dates, self.config.stocks_unable_trade)
+        factor_data = funcs._load_factors(self.factors, stockpool)
+        score = getattr(funcs, self.config.scoring_mode.function)(factor_data, industry_name=self.config.stocklist.industry,
+                                                                  method=self.config.scoring_mode.drop_outlier_method)
+        total_score = funcs._total_score(score, self.direction, self.config.weight)
+        factor_data = factor_data.merge(total_score, left_index=True, right_index=True, how='left')
+        self.direction['total_score'] = 1
+        self.factor_data = factor_data
+
+
+class _OptimizeConfig(object):
+    def __init__(self, attr_config, dates):
+        self._config = attr_config
+        self._dates = dates
+
+    @property
+    def constraints(self):
+        from FactorLib.utils.tool_funcs import parse_industry
+        d = {}
+        if 'Style' in self._config:
+            d['Style'] = self._config.Style.__dict__
+        if 'Indu' in self._config:
+            i = self._config.Indu.__dict__.copy()
+            if self._config.Indu.industry_dict is not None:
+                if self._config.Indu.industry is None:
+                    i.pop('industry')
+                    d['Indu'] = i
+                else:
+                    indu_name = i['industry']
+                    dummy = data_source.sector.get_industry_dummy(industry=indu_name, dates=self._dates)
+                    c = [x.encode('utf8') for x in dummy.columns]
+                    dummy.columns = [str(x) for x in IndustryConverter.name2id(parse_industry(indu_name), c)]
+                    d['UserLimit'] = {}
+        return
