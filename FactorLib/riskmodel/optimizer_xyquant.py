@@ -11,6 +11,7 @@ import os
 import sys
 import warnings
 from FactorLib.data_source.base_data_source_h5 import data_source
+from FactorLib.utils.tool_funcs import get_available_names
 from QuantLib.stockFilter import suspendtrading, typical, _intersection
 from .riskmodel_data_source import RiskDataSource
 from itertools import combinations_with_replacement
@@ -61,6 +62,7 @@ class Optimizer(object):
         self._allids = self._signal.index.tolist()
         self._init_opt_result(asset)
         self._init_opt_prob(nontrad_pre, nontrad_target, bchmrk_notin_tar)
+        self.names_used = []
 
     def _create_signal(self, signal, asset):
         # 基准指数的成分股和权重
@@ -158,38 +160,85 @@ class Optimizer(object):
         ==========
         style_dict: dict
             以字典形式进行风格约束，{key: style_name, value: constraint}
+            constraint允许两种形式, 单值传入和列表传入。列表传入代表的是上下限,
+            单值传入与sense一致
         active: bool
             相对于基准的主动暴露，默认为True。
         """
-        cons = pd.Series(style_dict)
-        if active:
-            bchmk_style = self._prepare_benchmark_style(list(style_dict))
-            cons = cons + bchmk_style
-        portf_style = self._prepare_portfolio_style(list(style_dict))
-        if np.any(pd.isnull(portf_style)) or np.any(pd.isnull(cons)):
-            warnings.warn("设置风格敞口时, 风格因子数据存在缺失值!")
-            na_stocks = portf_style[portf_style.isnull().any(axis=1)]
-            limit_values = pd.Series(np.zeros(len(na_stocks)), index=na_stocks.index)
+        style_dict2 = {}
+        for k, v in style_dict.items():
+            if isinstance(v, list):
+                style_dict2[k] = style_dict.pop(k)
+        if style_dict2:
+            cons2 = pd.DataFrame(style_dict2).T.rename(columns={0: 'min', 1: 'max'})
+            if active:
+                bchmk_style = self._prepare_benchmark_style(list(style_dict2))
+                cons2 = cons2.add(bchmk_style, axis=0)
+            portf_style = self._prepare_portfolio_style(list(style_dict2))
+            if np.any(pd.isnull(portf_style)) or np.any(pd.isnull(cons2)):
+                warnings.warn("设置风格敞口时, 风格因子数据存在缺失值!")
+                na_stocks = portf_style[portf_style.isnull().any(axis=1)]
+                limit_values = pd.Series(np.zeros(len(na_stocks)), index=na_stocks.index)
+                lin_exprs = []
+                rhs = []
+                names = []
+                senses = ['E'] * len(na_stocks)
+                for i in na_stocks.index.values:
+                    lin_exprs.append([[i.encode('utf8')], [1]])
+                    rhs.append(0.0)
+                    available_name = get_available_names('notrading_%s' % i, self.names_used)
+                    names.append(available_name)
+                    self.names_used += [available_name]
+                self._c.linear_constraints.add(lin_expr=lin_exprs, senses=senses, rhs=rhs, names=names)
+                self._internal_limit = self._internal_limit.append(limit_values)
+                portf_style.fillna(0.0, inplace=True)
+            lin_exprs = []
+            rhs_min = []
+            rhs_max = []
+            names = []
+            for style, value in portf_style.iteritems():
+                lin_exprs.append([[x.encode('utf8') for x in value.index.tolist()], value.values.tolist()])
+                rhs_min.append(cons2.loc[style, 'min'])
+                rhs_max.append(cons2.loc[style, 'max'])
+                available_name = get_available_names(style, self.names_used)
+                names.append(available_name)
+                self.names_used += [available_name]
+            self._c.linear_constraints.add(lin_expr=lin_exprs, senses=['G']*len(cons2), rhs=rhs_min, names=[x+'1' for x in names])
+            self._c.linear_constraints.add(lin_expr=lin_exprs, senses=['L']*len(cons2), rhs=rhs_max, names=[x+'2' for x in names])
+        if style_dict:
+            cons = pd.Series(style_dict)
+            if active:
+                bchmk_style = self._prepare_benchmark_style(list(style_dict))
+                cons = cons + bchmk_style
+            portf_style = self._prepare_portfolio_style(list(style_dict))
+            if np.any(pd.isnull(portf_style)) or np.any(pd.isnull(cons)):
+                warnings.warn("设置风格敞口时, 风格因子数据存在缺失值!")
+                na_stocks = portf_style[portf_style.isnull().any(axis=1)]
+                limit_values = pd.Series(np.zeros(len(na_stocks)), index=na_stocks.index)
+                lin_exprs = []
+                rhs = []
+                names = []
+                senses = ['E'] * len(na_stocks)
+                for i in na_stocks.index.values:
+                    lin_exprs.append([[i.encode('utf8')], [1]])
+                    rhs.append(0.0)
+                    available_name = get_available_names('notrading_%s' % i, self.names_used)
+                    names.append(available_name)
+                    self.names_used += [available_name]
+                self._c.linear_constraints.add(lin_expr=lin_exprs, senses=senses, rhs=rhs, names=names)
+                self._internal_limit = self._internal_limit.append(limit_values)
+                portf_style.fillna(0.0, inplace=True)
             lin_exprs = []
             rhs = []
+            senses = [sense] * len(cons)
             names = []
-            senses = ['E'] * len(na_stocks)
-            for i in na_stocks.index.values:
-                lin_exprs.append([[i.encode('utf8')], [1]])
-                rhs.append(0)
-                names.append('notrading_%s' % i)
+            for style, value in portf_style.iteritems():
+                lin_exprs.append([[x.encode('utf8') for x in value.index.tolist()], value.values.tolist()])
+                rhs.append(cons[style])
+                available_name = get_available_names(style, self.names_used)
+                names.append(available_name)
+                self.names_used += [available_name]
             self._c.linear_constraints.add(lin_expr=lin_exprs, senses=senses, rhs=rhs, names=names)
-            self._internal_limit = self._internal_limit.append(limit_values)
-            portf_style.fillna(0, inplace=True)
-        lin_exprs = []
-        rhs = []
-        senses = [sense] * len(cons)
-        names = []
-        for style, value in portf_style.iteritems():
-            lin_exprs.append([[x.encode('utf8') for x in value.index.tolist()], value.values.tolist()])
-            rhs.append(cons[style])
-            names.append(style)
-        self._c.linear_constraints.add(lin_expr=lin_exprs, senses=senses, rhs=rhs, names=names)
 
     def _add_industry_cons(self, industry_dict=None, active=True, sense='E'):
         """
@@ -199,31 +248,72 @@ class Optimizer(object):
         ==========
         industry_dict: dict
             以字典形式进行行业约束，{key: industry_name, value: constraint} \n
-            注意： 不在字典中进行显式约束的行业自动与基准进行匹配
         active: bool
             相对于基准的主动暴露，默认为True。
         """
+        industry_dict2 = {}
         indu_bchmrk = self._prepare_benchmark_indu()
         if industry_dict is None:
             cons = indu_bchmrk
-        elif active:
-            cons = pd.Series(industry_dict)
-            cons = cons + indu_bchmrk.reindex(cons.index)
+            portf_indu = self._prepare_portfolio_indu().reindex(columns=cons.index)
+            if np.any(pd.isnull(portf_indu)) or np.any(pd.isnull(cons)):
+                raise ValueError("行业变量存在缺失值！")
+            lin_exprs = []
+            rhs = []
+            senses = ['E'] * len(cons)
+            names = []
+            for indu, value in portf_indu.iteritems():
+                lin_exprs.append([[x.encode('utf8') for x in value.index.tolist()], value.values.tolist()])
+                rhs.append(cons[indu])
+                available_name = get_available_names(indu, self.names_used)
+                names.append(available_name)
+                self.names_used += [available_name]
+            self._c.linear_constraints.add(lin_expr=lin_exprs, rhs=rhs, senses=senses, names=names)
         else:
-            cons = pd.Series(industry_dict)
-            # cons = indu_bchmrk.update(cons)
-        portf_indu = self._prepare_portfolio_indu().reindex(columns=cons.index)
-        if np.any(pd.isnull(portf_indu)) or np.any(pd.isnull(cons)):
-            raise ValueError("行业变量存在缺失值！")
-        lin_exprs = []
-        rhs = []
-        senses = [sense] * len(cons)
-        names = []
-        for indu, value in portf_indu.iteritems():
-            lin_exprs.append([[x.encode('utf8') for x in value.index.tolist()], value.values.tolist()])
-            rhs.append(cons[indu])
-            names.append(indu)
-        self._c.linear_constraints.add(lin_expr=lin_exprs, rhs=rhs, senses=senses, names=names)
+            for k, v in industry_dict.items():
+                if isinstance(v, list):
+                    industry_dict2[k] = industry_dict.pop(k)
+            if industry_dict:
+                cons = pd.Series(industry_dict)
+                if active:
+                    cons = cons + indu_bchmrk.reindex(cons.index)
+                # cons = indu_bchmrk.update(cons)
+                portf_indu = self._prepare_portfolio_indu().reindex(columns=cons.index)
+                if np.any(pd.isnull(portf_indu)) or np.any(pd.isnull(cons)):
+                    raise ValueError("行业变量存在缺失值！")
+                lin_exprs = []
+                rhs = []
+                senses = [sense] * len(cons)
+                names = []
+                for indu, value in portf_indu.iteritems():
+                    lin_exprs.append([[x.encode('utf8') for x in value.index.tolist()], value.values.tolist()])
+                    rhs.append(cons[indu])
+                    available_name = get_available_names(indu, self.names_used)
+                    names.append(available_name)
+                    self.names_used += [available_name]
+                self._c.linear_constraints.add(lin_expr=lin_exprs, rhs=rhs, senses=senses, names=names)
+            if industry_dict2:
+                cons2 = pd.DataFrame(industry_dict2).T.rename(columns={0: 'min', 1: 'max'})
+                if active:
+                    cons2 = cons2.add(indu_bchmrk.reindex(cons2.index), axis=0)
+                portf_indu = self._prepare_portfolio_indu().reindex(columns=cons2.index)
+                if np.any(pd.isnull(portf_indu)) or np.any(pd.isnull(cons2)):
+                    raise ValueError("行业变量存在缺失值！")
+                lin_exprs = []
+                rhs_min = []
+                rhs_max = []
+                names = []
+                for indu, value in portf_indu.iteritems():
+                    lin_exprs.append([[x.encode('utf8') for x in value.index.tolist()], value.values.tolist()])
+                    rhs_min.append(cons2.loc[indu, 'min'])
+                    rhs_max.append(cons2.loc[indu, 'max'])
+                    available_name = get_available_names(indu, self.names_used)
+                    names.append(available_name)
+                    self.names_used += [available_name]
+                self._c.linear_constraints.add(lin_expr=lin_exprs, rhs=rhs_min, senses=['G']*len(cons2),
+                                               names=[x+'1' for x in names])
+                self._c.linear_constraints.add(lin_expr=lin_exprs, rhs=rhs_max, senses=['L']*len(cons2),
+                                               names=[x+'2' for x in names])
 
     def _add_stock_limit(self, default_min=0.0, default_max=1.0):
         """
@@ -309,7 +399,8 @@ class Optimizer(object):
         quad = qvar_expr + [qvar_mul.tolist()]
 
         self._c.quadratic_constraints.add(lin_expr=qlin, quad_expr=quad, sense='L', rhs=-bchmrk_risk+target_err,
-                                          name='tracking_error')
+                                          name=get_available_names('tracking_error', self.names_used))
+        self.names_used += [get_available_names('tracking_error', self.names_used)]
         self._signalrisk = sigma
 
     def _add_userlimit(self, user_conf, **kwargs):
@@ -382,9 +473,10 @@ class Optimizer(object):
             lin_expr = []
             sense = [s]
             rhs = [l]
-            name = ['user_%s'%f]
+            name = [get_available_names(x, self.names_used) for x in ['user_%s'%f]]
             lin_expr.append([portfolio_factor.index.tolist(), portfolio_factor.values.tolist()])
             self._c.linear_constraints.add(lin_expr=lin_expr, senses=sense, rhs=rhs, names=name)
+            self.names_used += name
 
     def _prepare_benchmark_userexpo(self, data):
         """计算基准指数的用户因子暴露"""
@@ -491,6 +583,7 @@ class Optimizer(object):
             self._c.objective.set_linear(list(zip(self._allids, lin_coeffs)))
 
     def solve(self):
+        """求解"""
         self._create_obj()
         self._c.solve()
 

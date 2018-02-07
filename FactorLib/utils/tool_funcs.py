@@ -256,3 +256,11 @@ def generate_mulindex(method='product', **kwargs):
     elif method == 'array':
         return pd.MultiIndex.from_arrays(kwargs.values(), names=list(kwargs))
     raise KeyError
+
+
+# 返回一个可用名称
+def get_available_names(name, used_names):
+    i = 2
+    while (name + str(i)) in used_names:
+        i += 1
+    return name + str(i)

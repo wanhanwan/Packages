@@ -1,3 +1,4 @@
+# coding: utf-8
 from FactorLib.data_source.base_data_source_h5 import sec
 from fastcache import clru_cache
 from QuantLib.stockFilter import _intersection, _difference, _union
