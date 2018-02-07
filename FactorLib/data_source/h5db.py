@@ -7,6 +7,7 @@ import shutil
 from ..utils.datetime_func import Datetime2DateStr, DateStr2Datetime
 from ..utils.tool_funcs import ensure_dir_exists
 from filemanager import zip_dir, unzip_file
+from .helpers import handle_ids
 
 
 class H5DB(object):
@@ -73,13 +74,13 @@ class H5DB(object):
         max_date = Datetime2DateStr(panel.major_axis.max())
         return min_date, max_date
 
-    #--------------------------数据管理-------------------------------------------
-
+    # --------------------------数据管理-------------------------------------------
+    @handle_ids
     def load_factor(self, factor_name, factor_dir=None, dates=None, ids=None, idx=None):
         factor_path = self.abs_factor_path(factor_dir, factor_name)
         panel = pd.read_hdf(factor_path, factor_name)
         if idx is not None:
-            return panel.to_frame().rename_axis(['date','IDs']).loc[idx,:]
+            return panel.to_frame().rename_axis(['date','IDs']).reindex(idx.index)
         if (ids is not None) and (not isinstance(ids, list)):
             ids = [ids]
         if dates is None and ids is None:
@@ -105,7 +106,6 @@ class H5DB(object):
         max_date = self.get_date_range(factor_name, factor_dir)[1]
         return self.load_factor(factor_name, factor_dir, dates=[max_date], ids=ids, idx=idx).reset_index(level=0, drop=True)
 
-    
     def load_factors(self, factor_names_dict, dates=None, ids=None):
         _l = []
         for factor_path, factor_names in factor_names_dict.items():

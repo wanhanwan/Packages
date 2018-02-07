@@ -11,6 +11,7 @@ import xarray as xr
 import os
 from os import path
 from .converter import parse_nc_encoding
+from .helpers import handle_ids
 
 
 class NCDB(object):
@@ -81,6 +82,7 @@ class NCDB(object):
         return min(dates), max(dates)
 
     # --------------------------数据管理-------------------------------------------
+    @ handle_ids
     def load_factor(self, file_name, file_dir=None, factor_names=None, dates=None, ids=None,
                     idx=None, ret='df', reset_index=False):
         """ 读取单因子数据

@@ -404,6 +404,8 @@ class sector(object):
              万得全A(880011)、上证50(000016)、中证500(000905)、中证800(000906)、创业板综(399102)和
         沪深300(000300)。
         行业指数包括:中信一级行业和申万一级行业
+
+        ids是指数成分代码而非指数名称
         """
         dates = self.trade_calendar.get_trade_days(start_date, end_date) if dates is None else dates
         all_stocks = self.get_history_ashare(dates)
@@ -414,7 +416,7 @@ class sector(object):
             return all_stocks
         if ids in MARKET_INDEX_DICT:
             index_members = self.h5DB.load_factor('_%s' % ids, '/indexes/', dates=dates)
-            index_members = index_members[index_members['_%s' % ids]==1.0]
+            index_members = index_members[index_members['_%s' % ids] == 1.0]
             return index_members[index_members.index.isin(all_stocks.index)]
         else:
             for industry_name, rule in IndustryConverter._rules.items():

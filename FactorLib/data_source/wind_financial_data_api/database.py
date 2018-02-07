@@ -5,6 +5,7 @@ from FactorLib.data_source.wind_financial_data_api.params import *
 from FactorLib.data_source.wind_financial_data_api.data_loader import DataLoader
 from FactorLib.data_source.base_data_source_h5 import ncdb, tc
 from FactorLib.utils.tool_funcs import ensure_dir_exists
+from FactorLib.data_source.helpers import handle_ids
 from collections import Iterator
 import pandas as pd
 import numpy as np
@@ -323,8 +324,9 @@ class WindFinanceDB(WindDB):
         data = pd.read_hdf(data_pth, "data")
         return data
 
+    @handle_ids
     def load_latest_period(self, factor_name, start=None, end=None, dates=None, ids=None,
-                         quarter=None):
+                           quarter=None):
         """最新报告期数据"""
         wind_id = self.data_dict.wind_factor_ids(self.table_name, factor_name)
         if start is not None and end is not None:
@@ -337,6 +339,7 @@ class WindFinanceDB(WindDB):
         new = self.data_loader.latest_period(data, wind_id, dates, ids, quarter)
         return _reconstruct(new)
 
+    @handle_ids
     def load_last_nyear(self, factor_name, n, start=None, end=None, dates=None, ids=None,
                         quarter=None):
         """回溯N年之前的财务数据"""
@@ -351,6 +354,7 @@ class WindFinanceDB(WindDB):
         new = self.data_loader.last_nyear(data, wind_id, dates, n, ids, quarter)
         return _reconstruct(new)
 
+    @handle_ids
     def load_incr_tb(self, factor_name, n, start=None, end=None, dates=None, ids=None):
         """同比序列"""
         wind_id = self.data_dict.wind_factor_ids(self.table_name, factor_name)
@@ -364,6 +368,7 @@ class WindFinanceDB(WindDB):
         new = self.data_loader.inc_rate_tb(data, wind_id, dates, n, ids)
         return new
 
+    @handle_ids
     def load_incr_hb(self, factor_name, start=None, end=None, dates=None, ids=None):
         """环比序列"""
         wind_id = self.data_dict.wind_factor_ids(self.table_name, factor_name)
@@ -402,6 +407,7 @@ class WindIncomeSheet(WindFinanceDB):
     def save_data(self, data, table_id=None, if_exists='append'):
         super(WindIncomeSheet, self).save_data(data, self.table_id, if_exists)
 
+    @handle_ids
     def load_ttm(self, factor_name, start=None, end=None, dates=None, ids=None):
         """ 加载TTM数据
         """
@@ -416,6 +422,7 @@ class WindIncomeSheet(WindFinanceDB):
         new = self.data_loader.ttm(data, wind_id, dates, ids)
         return _reconstruct(new)
 
+    @handle_ids
     def load_last_nyear_ttm(self, factor_name, n, start=None, end=None, dates=None, ids=None):
         """加载N年之前的TTM数据
         """
@@ -469,6 +476,7 @@ class WindBalanceSheet(WindFinanceDB):
         data = self.load_factors(factors, self.table_name, _in, _between, _equal, **kwargs)
         return self.add_quarter_year(data)
 
+    @handle_ids
     def load_ttm_avg(self, factor_name, start=None, end=None, dates=None, ids=None):
         """最近12个月的平均值(期初+期末)/2， 一般用于资产负债表项目
         """
@@ -483,6 +491,7 @@ class WindBalanceSheet(WindFinanceDB):
         new = self.data_loader.ttm_avg(data, wind_id, dates, ids)
         return _reconstruct(new)
 
+    @handle_ids
     def load_sq_avg(self, factor_name, start=None, end=None, dates=None, ids=None):
         """单季度平均值(期初+期末)/2, 一般用于资产负债表
         """
@@ -520,13 +529,15 @@ class WindProfitExpress(WindFinanceDB):
 
 
 if __name__ == '__main__':
+    from FactorLib.data_source.stock_universe import StockUniverse
     from datetime import datetime
-    wind = WindBalanceSheet()
-    wind.connectdb()
-    data = wind.download_data([u'资产总计'],
-                              _between={u'报告期': ('20070101', '20171231')})
-    wind.save_data(data)
-    # ttm = wind.load_latest_period('净利润(不含少数股东损益)', 1, ids=['000001'], start='20170101', end='20171231')
-    # print(ttm)
+    wind = WindIncomeSheet()
+    # wind.connectdb()
+    # data = wind.download_data([u'资产总计'],
+    #                           _between={u'报告期': ('20070101', '20171231')})
+    # wind.save_data(data)
+    u = StockUniverse('000905')
+    ttm = wind.load_latest_period('净利润(不含少数股东损益)', ids=u, start='20170101', end='20171231')
+    print(ttm)
 
 
