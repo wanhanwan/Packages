@@ -529,15 +529,15 @@ class WindProfitExpress(WindFinanceDB):
 
 
 if __name__ == '__main__':
-    from FactorLib.data_source.stock_universe import StockUniverse
+    # from FactorLib.data_source.stock_universe import StockUniverse
     from datetime import datetime
-    wind = WindIncomeSheet()
-    # wind.connectdb()
-    # data = wind.download_data([u'资产总计'],
-    #                           _between={u'报告期': ('20070101', '20171231')})
-    # wind.save_data(data)
-    u = StockUniverse('000905')
-    ttm = wind.load_latest_period('净利润(不含少数股东损益)', ids=u, start='20170101', end='20171231')
-    print(ttm)
+    wind = WindBalanceSheet()
+    wind.connectdb()
+    data = wind.download_data([u'资产总计'],
+                              _between={u'报告期': ('20070101', '20171231')})
+    wind.save_data(data)
+    # u = StockUniverse('000905')
+    # ttm = wind.load_latest_period('净利润(不含少数股东损益)', ids=u, start='20170101', end='20171231')
+    # print(ttm)
 
 

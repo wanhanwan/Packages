@@ -1,3 +1,4 @@
+# coding: utf-8
 # from FactorLib.data_source.stock_universe import StockUniverse
 
 
