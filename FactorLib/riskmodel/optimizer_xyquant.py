@@ -418,8 +418,10 @@ class Optimizer(object):
             若factor_data为None, factor_name和factor_dir必须非空, h5db
             会从中提取数据
 
-            limit : float or list of floats
+            limit : float or list of floats or dict
             每个风险因子的限制值, 若limit是列表，其长度必须与因子个数相同
+            若limit是字典型, key值为factor_data中的列名, value是列表或者
+            scalar
 
             standard : bool
             在加入到优化器之前是否对输入的因子进行QT标准化
@@ -446,34 +448,83 @@ class Optimizer(object):
         if isinstance(factor_data, pd.Series):
             factor_data = factor_data.to_frame(factor_name)
             factor_name = [factor_name]
-            limit = [limit]
 
+        limit_min = {}
+        limit_max = {}
+        limit_sense = {}
+        if isinstance(limit, dict):
+            for k, v in limit.items():
+                if isinstance(v, list):
+                    limit_min[k] = v[0]
+                    limit_max[k] = v[1]
+                elif isinstance(v, (int, float)):
+                    limit_sense[k] = float(v)
+                else:
+                    raise ValueError("自定义因子敞口限定值不合法!")
         if isinstance(limit, (int, float)):
-            limit = [limit] * len(factor_name)
-        elif isinstance(limit, list):
+            limit_sense = {x: limit for x in factor_name}
+        if isinstance(limit, list):
             if len(limit) != len(factor_name):
                 raise ValueError("limit dimension dose not match factor dimension")
+            limit_sense = {x: y for x, y in zip(factor_name, limit)}
 
         if isinstance(sense, str):
-            sense = [sense] * len(factor_name)
+            sense = [sense] * len(limit_sense)
         else:
-            if len(sense) != len(factor_name):
+            if len(sense) != len(limit_sense):
                 raise ValueError("sense dimension dose not match factor dimension")
 
-        for f, l, s in zip(factor_name, limit, sense):
+        for f, l in limit_min.items():
             if is_standard:
-                factor_data2 = StandardByQT(factor_data, f).loc[self._date].reindex(self._allids, fill_value=0)
+                factor_data2 = StandardByQT(factor_data, f).loc[self._date].reindex(self._allids, fill_value=0.0)
             else:
-                factor_data2 = factor_data.loc[self._date, f].reindex(self._allids, fill_value=0)
+                factor_data2 = factor_data.loc[self._date, f].reindex(self._allids, fill_value=0.0)
             if is_active:
                 l += self._prepare_benchmark_userexpo(factor_data2)
             portfolio_factor = factor_data2.loc[self._allids]
             if np.any(np.isnan(portfolio_factor.values)):
-                raise ValueError("风格因子数据存在缺失值")
+                raise ValueError("自定义因子因子数据存在缺失值!")
+            lin_expr = []
+            sense = ['G']
+            rhs = [l]
+            name = [get_available_names(x, self.names_used) for x in ['user_%s' % f]]
+            lin_expr.append([portfolio_factor.index.tolist(), portfolio_factor.values.tolist()])
+            self._c.linear_constraints.add(lin_expr=lin_expr, senses=sense, rhs=rhs, names=name)
+            self.names_used += name
+
+        for f, l in limit_max.items():
+            if is_standard:
+                factor_data2 = StandardByQT(factor_data, f).loc[self._date].reindex(self._allids, fill_value=0.0)
+            else:
+                factor_data2 = factor_data.loc[self._date, f].reindex(self._allids, fill_value=0.0)
+            if is_active:
+                l += self._prepare_benchmark_userexpo(factor_data2)
+            portfolio_factor = factor_data2.loc[self._allids]
+            if np.any(np.isnan(portfolio_factor.values)):
+                raise ValueError("自定义因子因子数据存在缺失值!")
+            lin_expr = []
+            sense = ['L']
+            rhs = [l]
+            name = [get_available_names(x, self.names_used) for x in ['user_%s' % f]]
+            lin_expr.append([portfolio_factor.index.tolist(), portfolio_factor.values.tolist()])
+            self._c.linear_constraints.add(lin_expr=lin_expr, senses=sense, rhs=rhs, names=name)
+            self.names_used += name
+
+        for f, s in zip(limit_sense, sense):
+            l = limit_sense[f]
+            if is_standard:
+                factor_data2 = StandardByQT(factor_data, f).loc[self._date].reindex(self._allids, fill_value=0.0)
+            else:
+                factor_data2 = factor_data.loc[self._date, f].reindex(self._allids, fill_value=0.0)
+            if is_active:
+                l += self._prepare_benchmark_userexpo(factor_data2)
+            portfolio_factor = factor_data2.loc[self._allids]
+            if np.any(np.isnan(portfolio_factor.values)):
+                raise ValueError("自定义因子因子数据存在缺失值!")
             lin_expr = []
             sense = [s]
             rhs = [l]
-            name = [get_available_names(x, self.names_used) for x in ['user_%s'%f]]
+            name = [get_available_names(x, self.names_used) for x in ['user_%s' % f]]
             lin_expr.append([portfolio_factor.index.tolist(), portfolio_factor.values.tolist()])
             self._c.linear_constraints.add(lin_expr=lin_expr, senses=sense, rhs=rhs, names=name)
             self.names_used += name

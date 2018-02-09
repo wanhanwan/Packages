@@ -197,7 +197,7 @@ class OptimizedPortfolioGenerator(AbstractStockGenerator):
         self.factor_data = factor_data
 
 
-class _OptimizeConfig(object):
+class OptimizeConfig(object):
     def __init__(self, attr_config, dates):
         self._config = attr_config
         self._dates = dates
@@ -219,5 +219,5 @@ class _OptimizeConfig(object):
                     dummy = data_source.sector.get_industry_dummy(industry=indu_name, dates=self._dates)
                     c = [x.encode('utf8') for x in dummy.columns]
                     dummy.columns = [str(x) for x in IndustryConverter.name2id(parse_industry(indu_name), c)]
-                    d['UserLimit'] = {}
-        return
+                    d['UserLimit'] = {'user_conf': {'factor_data': dummy, 'standard': False}}
+        return d
