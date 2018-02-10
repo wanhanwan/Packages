@@ -248,12 +248,6 @@ class WindDB(BaseDB):
             ncdb.save_factor(data, name, path, if_exists, append_type='concat')
 
 
-class WindEstDB(WindDB):
-    """Wind一致预期数据库Wrapper"""
-    def __init__(self):
-        super(WindEstDB, self).__init__()
-
-
 class WindFinanceDB(WindDB):
     """Wind财务数据库Wrapper"""
     table_name = ""
@@ -381,6 +375,47 @@ class WindFinanceDB(WindDB):
         data = self.load_h5(factor_name)
         new = self.data_loader.inc_rate_hb(data, wind_id, dates, ids)
         return new
+
+
+class WindConsensusDB(WindFinanceDB):
+    """Wind中国A股一致预期汇总数据库
+
+    statement_type 是Wind底层表中的综合值周期类型字段, 明细:
+        263001000 : 30天
+        263002000 : 90天
+        263003000 : 180天
+        263004000 : 大事后180天
+
+    """
+    table_name = u"中国A股盈利预测汇总"
+    table_id = "ashareconsensusdata"
+    statement_type_map = {"263001000": 30, "263002000": 90, "263003000": 180, "263004000": 2180}
+    year_type = {'FY1': 1, 'FY2': 2, 'FY3': 3}
+
+    def __init__(self):
+        super(WindConsensusDB, self).__init__()
+
+    def add_quarter_year(self, idata):
+        if idata.empty:
+            return idata
+        idata.dropna(subset=['ann_dt'], inplace=True)
+        idata['quarter'] = pd.to_datetime(idata['date']).dt.quarter
+        idata['year'] = pd.to_datetime(idata['date']).dt.year
+        idata['date'] = idata['date'].astype('int')
+        idata['ann_dt'] = idata['ann_dt'].astype('int')
+        idata['stat_type'] = idata['stat_type'].map(self.statement_type_map)
+        idata['IDs'] = idata['IDs'].astype('int')
+        idata['year_type'] = idata['year_type'].map(self.year_type).fillna(-1)
+        idata = idata.sort_values(['IDs', 'date', 'ann_dt', 'stat_type', 'year_type']).reset_index(drop=True)
+        return idata
+
+    def download_data(self, factors, _in=None, _between=None, _equal=None, **kwargs):
+        """下载数据"""
+        data = self.load_factors(factors, self.table_name, _in, _between, _equal, **kwargs)
+        return self.add_quarter_year(data)
+
+    def save_data(self, data, table_id=None, if_exists='append'):
+        super(WindConsensusDB, self).save_data(data, self.table_id, if_exists)
 
 
 class WindIncomeSheet(WindFinanceDB):
@@ -531,10 +566,12 @@ class WindProfitExpress(WindFinanceDB):
 if __name__ == '__main__':
     # from FactorLib.data_source.stock_universe import StockUniverse
     from datetime import datetime
-    wind = WindBalanceSheet()
+    wind = WindConsensusDB()
     wind.connectdb()
-    data = wind.download_data([u'资产总计'],
-                              _between={u'报告期': ('20070101', '20171231')})
+    data = wind.download_data([u'净资产收益率最小值(%)', u'净资产收益率平均值(%)', u'总资产收益率预测家数',
+                               u'净资产收益率预测家数', u'净利润预测家数', u'总资产收益率标准差(%)', u'净利润标准差(万元)',
+                               u'净资产收益率标准差(%)'],
+                              _between={u'预测日期': ('20180101', '20180210')})
     wind.save_data(data)
     # u = StockUniverse('000905')
     # ttm = wind.load_latest_period('净利润(不含少数股东损益)', ids=u, start='20170101', end='20171231')
