@@ -388,7 +388,7 @@ class WindConsensusDB(WindFinanceDB):
 
     """
     table_name = u"中国A股盈利预测汇总"
-    table_id = "AShareConsensusData"
+    table_id = "ashareconsensusdata"
     statement_type_map = {"263001000": 30, "263002000": 90, "263003000": 180, "263004000": 2180}
     year_type = {'FY1': 1, 'FY2': 2, 'FY3': 3}
 
@@ -414,7 +414,7 @@ class WindConsensusDB(WindFinanceDB):
         data = self.load_factors(factors, self.table_name, _in, _between, _equal, **kwargs)
         return self.add_quarter_year(data)
 
-    def save_data(self, data, table_id, if_exists='append'):
+    def save_data(self, data, table_id=None, if_exists='append'):
         super(WindConsensusDB, self).save_data(data, self.table_id, if_exists)
 
 
@@ -566,10 +566,12 @@ class WindProfitExpress(WindFinanceDB):
 if __name__ == '__main__':
     # from FactorLib.data_source.stock_universe import StockUniverse
     from datetime import datetime
-    wind = WindBalanceSheet()
+    wind = WindConsensusDB()
     wind.connectdb()
-    data = wind.download_data([u'资产总计'],
-                              _between={u'报告期': ('20070101', '20171231')})
+    data = wind.download_data([u'净资产收益率最小值(%)', u'净资产收益率平均值(%)', u'总资产收益率预测家数',
+                               u'净资产收益率预测家数', u'净利润预测家数', u'总资产收益率标准差(%)', u'净利润标准差(万元)',
+                               u'净资产收益率标准差(%)'],
+                              _between={u'预测日期': ('20180101', '20180210')})
     wind.save_data(data)
     # u = StockUniverse('000905')
     # ttm = wind.load_latest_period('净利润(不含少数股东损益)', ids=u, start='20170101', end='20171231')
