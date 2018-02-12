@@ -414,7 +414,7 @@ class WindConsensusDB(WindFinanceDB):
         data = self.load_factors(factors, self.table_name, _in, _between, _equal, **kwargs)
         return self.add_quarter_year(data)
 
-    def save_data(self, data, table_id=None, if_exists='append'):
+    def save_data(self, data, table_id, if_exists='append'):
         super(WindConsensusDB, self).save_data(data, self.table_id, if_exists)
 
 
@@ -563,15 +563,49 @@ class WindProfitExpress(WindFinanceDB):
         super(WindProfitExpress, self).save_data(data, self.table_id, if_exists)
 
 
+class WindProfitNotice(WindFinanceDB):
+    """中国A股业绩预告
+
+    业绩预告类型明细:
+        略减 454002000
+        略增 454003000
+        扭亏 454004000
+        其他 454005000
+        首亏 454006000
+        续亏 454007000
+        续盈 454008000
+        预减 454009000
+        预增 454010000
+        不确定 454001000
+    """
+    table_id = 'profit_notice'
+    table_name = u'中国A股业绩预告'
+    statement_type_map = {'454001000': 0, '454002000': 1, '454003000': 2,
+                          '454004000': 3, '454005000': 4, '454006000': 5,
+                          '454007000': 6, '454008000': 7, '454009000': 8,
+                          '454010000': 9}
+
+    def download_data(self, factors, _in=None, _between=None, _equal=None, **kwargs):
+        """
+        取数据
+        """
+        data = self.load_factors(factors, self.table_name, _in, _between, _equal, **kwargs)
+        if data.empty:
+            return data
+        return self.add_quarter_year(data)
+
+    def save_data(self, data, table_id=None, if_exists='append'):
+        super(WindProfitNotice, self).save_data(data, self.table_id, if_exists)
+
+
 if __name__ == '__main__':
     # from FactorLib.data_source.stock_universe import StockUniverse
     from datetime import datetime
-    wind = WindConsensusDB()
+    wind = WindProfitNotice()
     wind.connectdb()
-    data = wind.download_data([u'净资产收益率最小值(%)', u'净资产收益率平均值(%)', u'总资产收益率预测家数',
-                               u'净资产收益率预测家数', u'净利润预测家数', u'总资产收益率标准差(%)', u'净利润标准差(万元)',
-                               u'净资产收益率标准差(%)'],
-                              _between={u'预测日期': ('20180101', '20180210')})
+    data = wind.download_data([u'预告净利润变动幅度下限(%)', u'预告净利润变动幅度上限(%)', u'预告净利润下限(万元)',
+                               u'预告净利润上限(万元)'],
+                              _between={u'报告期': ('20061231', '20180331')})
     wind.save_data(data)
     # u = StockUniverse('000905')
     # ttm = wind.load_latest_period('净利润(不含少数股东损益)', ids=u, start='20170101', end='20171231')
