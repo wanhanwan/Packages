@@ -414,7 +414,7 @@ class WindConsensusDB(WindFinanceDB):
         data = self.load_factors(factors, self.table_name, _in, _between, _equal, **kwargs)
         return self.add_quarter_year(data)
 
-    def save_data(self, data, table_id, if_exists='append'):
+    def save_data(self, data, table_id=None, if_exists='append'):
         super(WindConsensusDB, self).save_data(data, self.table_id, if_exists)
 
 
