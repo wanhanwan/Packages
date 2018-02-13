@@ -210,7 +210,7 @@ class WindDB(BaseDB):
 
         def _query_iterator(data):
             for idata in data:
-                return _wrap_data(idata)
+                yield _wrap_data(idata)
 
         def _wrap_data(idata):
             if idata.empty:
@@ -567,6 +567,7 @@ class WindProfitNotice(WindFinanceDB):
     """中国A股业绩预告
 
     业绩预告类型明细:
+        不确定 454001000
         略减 454002000
         略增 454003000
         扭亏 454004000
@@ -576,14 +577,13 @@ class WindProfitNotice(WindFinanceDB):
         续盈 454008000
         预减 454009000
         预增 454010000
-        不确定 454001000
     """
     table_id = 'profit_notice'
     table_name = u'中国A股业绩预告'
-    statement_type_map = {'454001000': 0, '454002000': 1, '454003000': 2,
-                          '454004000': 3, '454005000': 4, '454006000': 5,
-                          '454007000': 6, '454008000': 7, '454009000': 8,
-                          '454010000': 9}
+    statement_type_map = {454001000: 0, 454002000: 1, 454003000: 2,
+                          454004000: 3, 454005000: 4, 454006000: 5,
+                          454007000: 6, 454008000: 7, 454009000: 8,
+                          454010000: 9}
 
     def download_data(self, factors, _in=None, _between=None, _equal=None, **kwargs):
         """
