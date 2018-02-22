@@ -230,7 +230,7 @@ class WindDB(BaseDB):
             _equal = {WindDB.data_dict.wind_factor_ids(table, [x])[0]: y for x, y in _equal.items()}
         table_index = WindDB.data_dict.get_table_index(table).set_index('WindID')['DFIndex'].to_dict()
         data = self.load_panel_data(wind_table_name, wind_factor_ids, _between, _in, _equal, **kwargs)
-        if kwargs.get('chuncksize', None):
+        if kwargs.get('chunksize', None):
             return _query_iterator(data)
         else:
             return _wrap_data(data)
@@ -411,8 +411,16 @@ class WindConsensusDB(WindFinanceDB):
 
     def download_data(self, factors, _in=None, _between=None, _equal=None, **kwargs):
         """下载数据"""
+
+        def _wrap_add_quarter_year(data):
+            for idata in data:
+                yield self.add_quarter_year(idata)
+
         data = self.load_factors(factors, self.table_name, _in, _between, _equal, **kwargs)
-        return self.add_quarter_year(data)
+        if not isinstance(data, Iterator):
+            return self.add_quarter_year(data)
+        else:
+            return _wrap_add_quarter_year(data)
 
     def save_data(self, data, table_id=None, if_exists='append'):
         super(WindConsensusDB, self).save_data(data, self.table_id, if_exists)
@@ -601,11 +609,11 @@ class WindProfitNotice(WindFinanceDB):
 if __name__ == '__main__':
     # from FactorLib.data_source.stock_universe import StockUniverse
     from datetime import datetime
-    wind = WindProfitNotice()
+    wind = WindConsensusDB()
     wind.connectdb()
     data = wind.download_data([u'预告净利润变动幅度下限(%)', u'预告净利润变动幅度上限(%)', u'预告净利润下限(万元)',
                                u'预告净利润上限(万元)'],
-                              _between={u'报告期': ('20061231', '20180331')})
+                              _between={u'报告期': ('20061231', '20180331')}, chunksize=10000)
     wind.save_data(data)
     # u = StockUniverse('000905')
     # ttm = wind.load_latest_period('净利润(不含少数股东损益)', ids=u, start='20170101', end='20171231')
