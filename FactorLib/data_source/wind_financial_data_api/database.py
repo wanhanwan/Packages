@@ -39,6 +39,14 @@ def _reconstruct(data):
     return data.set_index(['date', 'IDs'])
 
 
+def _search_columns(data_c, column_list):
+    r = []
+    for c in column_list:
+        if c in data_c:
+            r.append(c)
+    return r
+
+
 class WindTableInfo(object):
     """docstring for WindTableInfo"""
     table_info, factor_info = _read_est_dict()
@@ -266,14 +274,16 @@ class WindFinanceDB(WindDB):
                 if idata.empty:
                     yield idata
                 columns = [x for x in idata.columns if x not in default_columns]
+                columns2 = list(set(idata.columns).intersection(set(default_columns)))
                 for c in columns:
-                    yield c, idata[default_columns+[c]]
+                    yield c, idata[columns2+[c]]
         else:
             if data.empty:
                 yield None, data    
             columns = [x for x in data.columns if x not in default_columns]
+            columns2 = list(set(data.columns).intersection(set(default_columns)))
             for c in columns:
-                yield c, data[default_columns + [c]]
+                yield c, data[columns2 + [c]]
 
     def save_data(self, data, table_id, if_exists='append'):
         tar_pth = os.path.join(LOCAL_FINDB_PATH, table_id)
@@ -308,7 +318,8 @@ class WindFinanceDB(WindDB):
             table_index = self.data_dict.get_table_index(self.table_name)['DFIndex'].tolist()
             raw_data = pd.read_hdf(tar_file, "data")
             new_data = raw_data.append(data).drop_duplicates(subset=table_index, keep='last')
-            new_data = new_data.sort_values(['IDs', 'date', 'ann_dt', 'stat_type']).reset_index(drop=True)
+            c = _search_columns(new_data.columns, ['IDs', 'date', 'ann_dt', 'stat_type'])
+            new_data = new_data.sort_values(c).reset_index(drop=True)
             new_data.to_hdf(tar_file, "data", mode='w', complib='blosc', complevel=9)
 
     @clru_cache()
@@ -604,6 +615,56 @@ class WindProfitNotice(WindFinanceDB):
 
     def save_data(self, data, table_id=None, if_exists='append'):
         super(WindProfitNotice, self).save_data(data, self.table_id, if_exists)
+
+
+class WindAshareCapitalization(WindFinanceDB):
+    """
+    中国A股股本
+    """
+    table_name = u'中国A股股本'
+    table_id = 'ashare_capitalization'
+
+    def download_data(self, factors, _in=None, _between=None, _equal=None, **kwargs):
+        """取数据"""
+        def _wrapper(idata):
+            for i in idata:
+                i['ann_dt'] = i['ann_dt'].astype('int32')
+                i['IDs'] = i['IDs'].astype('int32')
+                yield i
+        data = self.load_factors(factors, self.table_name, _in, _between, _equal, **kwargs)
+        if isinstance(data, Iterator):
+            return _wrapper(data)
+        if data.empty:
+            return data
+        data['ann_dt'] = data['ann_dt'].astype('int32')
+        data['IDs'] = data['IDs'].astype('int32')
+        return data
+
+    @handle_ids
+    def load_latest(self, factor_name, start=None, end=None, dates=None, ids=None):
+        """某日最新数据"""
+        wind_id = self.data_dict.wind_factor_ids(self.table_name, factor_name)
+        if start is not None and end is not None:
+            dates = np.asarray(tc.get_trade_days(start, end, retstr='%Y%m%d')).astype('int')
+        else:
+            dates = np.asarray(dates).astype('int')
+        if ids is not None:
+            ids = np.asarray(ids).astype('int')
+        data = self.load_h5(factor_name)
+        new = self.data_loader.latest_period(data, wind_id, dates, ids, quarter=None)
+        return _reconstruct(new)
+
+    def load_avg(self, factor_name, start=None, end=None, dates=None, ids=None):
+        """两个日期之间的平均值"""
+        wind_id = self.data_dict.wind_factor_ids(self.table_name, factor_name)
+        data = self.load_latest(factor_name, dates=[start, end], ids=ids).reset_index()
+        data = pd.pivot_table(data, values=wind_id, index='IDs', columns='date', fill_value=np.nan)
+        data.replace(0.0, np.nan, inplace=True)
+        r = data.mean(axis=1)
+        return r.to_frame(wind_id)
+
+    def save_data(self, data, table_id=None, if_exists='append'):
+        super(WindAshareCapitalization, self).save_data(data, self.table_id, if_exists)
 
 
 if __name__ == '__main__':
