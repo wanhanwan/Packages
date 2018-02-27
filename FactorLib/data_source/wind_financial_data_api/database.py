@@ -6,6 +6,7 @@ from FactorLib.data_source.wind_financial_data_api.data_loader import DataLoader
 from FactorLib.data_source.base_data_source_h5 import ncdb, tc
 from FactorLib.utils.tool_funcs import ensure_dir_exists
 from FactorLib.data_source.helpers import handle_ids
+from FactorLib.utils.datetime_func import DateRange2Dates
 from collections import Iterator
 import pandas as pd
 import numpy as np
@@ -26,7 +27,7 @@ def _read_est_dict():
 
 def _drop_invalid_stocks(data):
     """去掉非法股票"""
-    invalid_ids = [x for x in data['IDs'].unique() if x[0] not in ['6', '0', '3']]
+    invalid_ids = [x for x in data['IDs'].unique() if x[0] not in ['6', '0', '3'] or not x.isdigit()]
     return data.query("IDs not in @invalid_ids")
 
 
@@ -63,6 +64,8 @@ class WindTableInfo(object):
 
     def wind_factor_ids(self, table_name, factor_names):
         """某张表中文字段对应的Wind数据库字段"""
+        if not factor_names:
+            return []
         all_factors = self.list_factors(table_name)
         if sys.version_info.major == 3:
             if isinstance(factor_names, str):
@@ -275,6 +278,8 @@ class WindFinanceDB(WindDB):
                     yield idata
                 columns = [x for x in idata.columns if x not in default_columns]
                 columns2 = list(set(idata.columns).intersection(set(default_columns)))
+                if not columns:
+                    yield self.table_id, idata[columns2]
                 for c in columns:
                     yield c, idata[columns2+[c]]
         else:
@@ -282,6 +287,8 @@ class WindFinanceDB(WindDB):
                 yield None, data    
             columns = [x for x in data.columns if x not in default_columns]
             columns2 = list(set(data.columns).intersection(set(default_columns)))
+            if not columns:
+                yield None, data[columns2]
             for c in columns:
                 yield c, data[columns2 + [c]]
 
@@ -665,6 +672,53 @@ class WindAshareCapitalization(WindFinanceDB):
 
     def save_data(self, data, table_id=None, if_exists='append'):
         super(WindAshareCapitalization, self).save_data(data, self.table_id, if_exists)
+
+
+class WindAindexMembers(WindFinanceDB):
+    """Wind指数成分"""
+    table_name = u'中国A股指数成分股'
+    table_id = 'aindexmembers'
+
+    def download_data(self, factors, _in=None, _between=None, _equal=None, **kwargs):
+        """取数据"""
+        def _wrapper(idata):
+            for i in idata:
+                i.dropna(subset=['in_date'], inplace=True)
+                i['IDs'] = i['IDs'].astype('int32')
+                i['out_date'] = i['out_date'].fillna('22000000').astype('int32')
+                i['in_date'] = i['in_date'].astype('int32')
+                yield i
+        data = self.load_factors(factors, self.table_name, _in, _between, _equal, **kwargs)
+        if isinstance(data, Iterator):
+            return _wrapper(data)
+        if data.empty:
+            return data
+        data.dropna(subset=['in_date'], inplace=True)
+        data['IDs'] = data['IDs'].astype('int32')
+        data['out_date'] = data['out_date'].fillna('22000000').astype('int32')
+        data['in_date'] = data['in_date'].astype('int32')
+        return data
+
+    def save_data(self, data, table_id=None, if_exists='append'):
+        super(WindAindexMembers, self).save_data(data, self.table_id, if_exists)
+
+    @DateRange2Dates
+    def get_members(self, idx, start_date=None, end_date=None, dates=None):
+        l = []
+        raw_data = self.load_h5(self.table_id)
+        for d in {int(x.strftime('%Y%m%d')) for x in dates}:
+            m = raw_data.query("idx_id=='%s' & in_date>=@d & out_date<=@d" % idx)
+            m['date'] = d
+            m['sign'] = 1
+            l.append(m[['IDs', 'date', 'sign']])
+        d = pd.concat(l)
+        return _reconstruct(d)
+
+
+class WindAindexMembersWind(WindAindexMembers):
+    """Wind指数成分"""
+    table_name = u'中国A股万得指数成分股'
+    table_id = 'aindexmemberswind'
 
 
 if __name__ == '__main__':
