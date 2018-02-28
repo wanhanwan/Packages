@@ -331,7 +331,10 @@ class WindFinanceDB(WindDB):
 
     @clru_cache()
     def load_h5(self, file_name):
-        wind_id = self.data_dict.wind_factor_ids(self.table_name, file_name)
+        try:
+            wind_id = self.data_dict.wind_factor_ids(self.table_name, file_name)
+        except KeyError:
+            wind_id = self.table_id
         data_pth = os.path.join(LOCAL_FINDB_PATH, self.table_id, wind_id+'.h5')
         data = pd.read_hdf(data_pth, "data")
         return data
@@ -707,12 +710,12 @@ class WindAindexMembers(WindFinanceDB):
         l = []
         raw_data = self.load_h5(self.table_id)
         for d in {int(x.strftime('%Y%m%d')) for x in dates}:
-            m = raw_data.query("idx_id=='%s' & in_date>=@d & out_date<=@d" % idx)
+            m = raw_data.query("idx_id=='%s' & in_date<=@d & out_date>=@d" % idx).copy()
             m['date'] = d
             m['sign'] = 1
             l.append(m[['IDs', 'date', 'sign']])
-        d = pd.concat(l)
-        return _reconstruct(d)
+        r = pd.concat(l).set_index(['date', 'IDs'])
+        return _reconstruct(r)
 
 
 class WindAindexMembersWind(WindAindexMembers):
