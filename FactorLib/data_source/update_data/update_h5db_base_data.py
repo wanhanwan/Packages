@@ -101,9 +101,9 @@ def stockname(start, end):
 def update_price(start, end):
     """更新价量行情数据"""
     # 股票价量数据
-    field_names = "收盘价 涨跌幅 最高价 最低价 成交量"
+    field_names = "收盘价 涨跌幅 最高价 最低价 成交量 成交额"
     data = get_history_bar(field_names.split(),start,end,**{'复权方式':'不复权'})
-    data.columns = ['close','daily_returns_%','high','low','volume']
+    data.columns = ['close','daily_returns_%','high','low','volume', 'amt']
     data['volume'] = data['volume'] / 100
     data['daily_returns'] = data['daily_returns_%'] / 100
     h5.save_factor(data, '/stocks/')

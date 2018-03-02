@@ -11,6 +11,31 @@ from ..update_data.profit_factor import ProfitFuncListDaily
 from ..update_data.universe import UniverseFuncListDaily
 
 
+def change_indexmembers():
+    from FactorLib.data_source.wind_financial_data_api import windchangecode, aindexmembers, aindexmemberswind
+    from datetime import timedelta, datetime
+
+    change_code = windchangecode.all_data
+    for table in [aindexmembers, aindexmemberswind]:
+        raw_data = table.load_h5(table.table_id)
+        for old_id, new_id, change_dt in zip(
+                change_code['IDs'].values, change_code['new_id'].values, change_code['change_dt'].values):
+            if (new_id in raw_data['IDs'].values) and (old_id not in raw_data['IDs'].values):
+                old = raw_data.query("IDs == @new_id").copy()
+                new2add = old.copy()
+
+                old = old[old['out_date'] >= change_dt]
+                old['in_date'] = int(
+                    (datetime.strptime(str(change_dt), '%Y%m%d') + timedelta(days=1)).strftime('%Y%m%d'))
+
+                new2add['IDs'] = old_id
+                new2add['cur_sign'] = 0
+                new2add.loc[new2add['out_date'] >= change_dt, 'out_date'] = change_dt
+
+                new_data = raw_data[raw_data['IDs'] != new_id].append(old).append(new2add)
+                table.save_data(new_data, if_exists='replace')
+
+
 def dailyfactors(start, end):
     # 更新价值类因子数据
     for func in ValueFuncListDaily:
@@ -47,3 +72,6 @@ def dailyfactors(start, end):
     # 更新股票池
     for func in UniverseFuncListDaily:
         func(start, end, data_source=data_source)
+
+    # 其他函数
+    change_indexmembers()

@@ -5,11 +5,13 @@ import TSLPy3 as tsl
 import os
 from FactorLib.utils.tool_funcs import tradecode_to_tslcode, tslcode_to_tradecode
 from FactorLib.utils.datetime_func import DateRange2Dates
+from FactorLib.data_source.base_data_source_h5 import sec
 from FactorLib.utils.TSDataParser import *
 from functools import reduce, partial
 
 
-_ashare = "'上证A股;深证A股;创业板;中小企业板'"
+_ashare = "'上证A股;深证A股;创业板;中小企业板;暂停上市;终止上市'"
+_condition = 'firstday()<=getsysparam(pn_date())'
 
 
 def _gstr_from_func(func_name, func_args):
@@ -154,10 +156,27 @@ class TSLDBOnline(object):
         field_dict = {"'tot_shrhldr_eqy_excl_min_int'": func_name}
         return PanelQuery(field_dict, start_date=start, end_date=end, dates=dates, stock_list=ids)
 
+    @DateRange2Dates
+    def get_index_members(self, idx, start_date=None, end_date=None, dates=None):
+        r = []
+        func = 'getBKMembers'
+        idx = "'%s'" % idx
+        for d in dates:
+            dd = d.strftime("%Y%m%d")
+            script_str = _gstr_from_func(func, [dd, idx])
+            data = tsl.RemoteExecute(script_str, {})
+            data = parse1DArray(data, "IDs", 1)
+            data['date'] = d
+            r.append(data)
+        data = pd.concat(r)
+        data['sign'] = 1
+        data['IDs'] = data['IDs'].str[2:]
+        return data.set_index(['date', 'IDs'])
+
 
 if __name__ == '__main__':
-    field = {"'list_days'": 'load_ttm(46008)'}
-    data = PanelQuery(field, start_date='20180101', end_date='20180110')
-    # a = TSLDBOnline()
-    # data = a.load_latest_year('扣除非经常性损益后的净利润', n=1, dates=['20180116'])
-    # print(data)
+    field = {"'list_days'": 'amount()'}
+    # data = PanelQuery(field, start_date='20180101', end_date='20180110')
+    a = TSLDBOnline()
+    data = a.get_index_members('中证1000', dates=['20180116'])
+    print(data)

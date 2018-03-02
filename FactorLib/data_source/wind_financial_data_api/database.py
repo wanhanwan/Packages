@@ -6,6 +6,7 @@ from FactorLib.data_source.wind_financial_data_api.data_loader import DataLoader
 from FactorLib.data_source.base_data_source_h5 import ncdb, tc
 from FactorLib.utils.tool_funcs import ensure_dir_exists
 from FactorLib.data_source.helpers import handle_ids
+from FactorLib.utils.datetime_func import DateRange2Dates
 from collections import Iterator
 import pandas as pd
 import numpy as np
@@ -26,7 +27,7 @@ def _read_est_dict():
 
 def _drop_invalid_stocks(data):
     """去掉非法股票"""
-    invalid_ids = [x for x in data['IDs'].unique() if x[0] not in ['6', '0', '3']]
+    invalid_ids = [x for x in data['IDs'].unique() if x[0] not in ['6', '0', '3'] or not x.isdigit()]
     return data.query("IDs not in @invalid_ids")
 
 
@@ -37,6 +38,14 @@ def _reconstruct(data):
     data['IDs'] = data['IDs'].astype('str').str.zfill(6)
     data['date'] = pd.to_datetime(data['date'].astype('str'))
     return data.set_index(['date', 'IDs'])
+
+
+def _search_columns(data_c, column_list):
+    r = []
+    for c in column_list:
+        if c in data_c:
+            r.append(c)
+    return r
 
 
 class WindTableInfo(object):
@@ -55,6 +64,8 @@ class WindTableInfo(object):
 
     def wind_factor_ids(self, table_name, factor_names):
         """某张表中文字段对应的Wind数据库字段"""
+        if not factor_names:
+            return []
         all_factors = self.list_factors(table_name)
         if sys.version_info.major == 3:
             if isinstance(factor_names, str):
@@ -210,7 +221,7 @@ class WindDB(BaseDB):
 
         def _query_iterator(data):
             for idata in data:
-                return _wrap_data(idata)
+                yield _wrap_data(idata)
 
         def _wrap_data(idata):
             if idata.empty:
@@ -230,7 +241,7 @@ class WindDB(BaseDB):
             _equal = {WindDB.data_dict.wind_factor_ids(table, [x])[0]: y for x, y in _equal.items()}
         table_index = WindDB.data_dict.get_table_index(table).set_index('WindID')['DFIndex'].to_dict()
         data = self.load_panel_data(wind_table_name, wind_factor_ids, _between, _in, _equal, **kwargs)
-        if kwargs.get('chuncksize', None):
+        if kwargs.get('chunksize', None):
             return _query_iterator(data)
         else:
             return _wrap_data(data)
@@ -266,14 +277,20 @@ class WindFinanceDB(WindDB):
                 if idata.empty:
                     yield idata
                 columns = [x for x in idata.columns if x not in default_columns]
+                columns2 = list(set(idata.columns).intersection(set(default_columns)))
+                if not columns:
+                    yield self.table_id, idata[columns2]
                 for c in columns:
-                    yield c, idata[default_columns+[c]]
+                    yield c, idata[columns2+[c]]
         else:
             if data.empty:
                 yield None, data    
             columns = [x for x in data.columns if x not in default_columns]
+            columns2 = list(set(data.columns).intersection(set(default_columns)))
+            if not columns:
+                yield self.table_id, data[columns2]
             for c in columns:
-                yield c, data[default_columns + [c]]
+                yield c, data[columns2 + [c]]
 
     def save_data(self, data, table_id, if_exists='append'):
         tar_pth = os.path.join(LOCAL_FINDB_PATH, table_id)
@@ -308,12 +325,16 @@ class WindFinanceDB(WindDB):
             table_index = self.data_dict.get_table_index(self.table_name)['DFIndex'].tolist()
             raw_data = pd.read_hdf(tar_file, "data")
             new_data = raw_data.append(data).drop_duplicates(subset=table_index, keep='last')
-            new_data = new_data.sort_values(['IDs', 'date', 'ann_dt', 'stat_type']).reset_index(drop=True)
+            c = _search_columns(new_data.columns, ['IDs', 'date', 'ann_dt', 'stat_type'])
+            new_data = new_data.sort_values(c).reset_index(drop=True)
             new_data.to_hdf(tar_file, "data", mode='w', complib='blosc', complevel=9)
 
     @clru_cache()
     def load_h5(self, file_name):
-        wind_id = self.data_dict.wind_factor_ids(self.table_name, file_name)
+        try:
+            wind_id = self.data_dict.wind_factor_ids(self.table_name, file_name)
+        except KeyError:
+            wind_id = self.table_id
         data_pth = os.path.join(LOCAL_FINDB_PATH, self.table_id, wind_id+'.h5')
         data = pd.read_hdf(data_pth, "data")
         return data
@@ -411,8 +432,16 @@ class WindConsensusDB(WindFinanceDB):
 
     def download_data(self, factors, _in=None, _between=None, _equal=None, **kwargs):
         """下载数据"""
+
+        def _wrap_add_quarter_year(data):
+            for idata in data:
+                yield self.add_quarter_year(idata)
+
         data = self.load_factors(factors, self.table_name, _in, _between, _equal, **kwargs)
-        return self.add_quarter_year(data)
+        if not isinstance(data, Iterator):
+            return self.add_quarter_year(data)
+        else:
+            return _wrap_add_quarter_year(data)
 
     def save_data(self, data, table_id=None, if_exists='append'):
         super(WindConsensusDB, self).save_data(data, self.table_id, if_exists)
@@ -563,15 +592,181 @@ class WindProfitExpress(WindFinanceDB):
         super(WindProfitExpress, self).save_data(data, self.table_id, if_exists)
 
 
+class WindProfitNotice(WindFinanceDB):
+    """中国A股业绩预告
+
+    业绩预告类型明细:
+        不确定 454001000
+        略减 454002000
+        略增 454003000
+        扭亏 454004000
+        其他 454005000
+        首亏 454006000
+        续亏 454007000
+        续盈 454008000
+        预减 454009000
+        预增 454010000
+    """
+    table_id = 'profit_notice'
+    table_name = u'中国A股业绩预告'
+    statement_type_map = {454001000: 0, 454002000: 1, 454003000: 2,
+                          454004000: 3, 454005000: 4, 454006000: 5,
+                          454007000: 6, 454008000: 7, 454009000: 8,
+                          454010000: 9}
+
+    def download_data(self, factors, _in=None, _between=None, _equal=None, **kwargs):
+        """
+        取数据
+        """
+        data = self.load_factors(factors, self.table_name, _in, _between, _equal, **kwargs)
+        if data.empty:
+            return data
+        return self.add_quarter_year(data)
+
+    def save_data(self, data, table_id=None, if_exists='append'):
+        super(WindProfitNotice, self).save_data(data, self.table_id, if_exists)
+
+
+class WindAshareCapitalization(WindFinanceDB):
+    """
+    中国A股股本
+    """
+    table_name = u'中国A股股本'
+    table_id = 'ashare_capitalization'
+
+    def download_data(self, factors, _in=None, _between=None, _equal=None, **kwargs):
+        """取数据"""
+        def _wrapper(idata):
+            for i in idata:
+                i['ann_dt'] = i['ann_dt'].astype('int32')
+                i['IDs'] = i['IDs'].astype('int32')
+                yield i
+        data = self.load_factors(factors, self.table_name, _in, _between, _equal, **kwargs)
+        if isinstance(data, Iterator):
+            return _wrapper(data)
+        if data.empty:
+            return data
+        data['ann_dt'] = data['ann_dt'].astype('int32')
+        data['IDs'] = data['IDs'].astype('int32')
+        return data
+
+    @handle_ids
+    def load_latest(self, factor_name, start=None, end=None, dates=None, ids=None):
+        """某日最新数据"""
+        wind_id = self.data_dict.wind_factor_ids(self.table_name, factor_name)
+        if start is not None and end is not None:
+            dates = np.asarray(tc.get_trade_days(start, end, retstr='%Y%m%d')).astype('int')
+        else:
+            dates = np.asarray(dates).astype('int')
+        if ids is not None:
+            ids = np.asarray(ids).astype('int')
+        data = self.load_h5(factor_name)
+        new = self.data_loader.latest_period(data, wind_id, dates, ids, quarter=None)
+        return _reconstruct(new)
+
+    def load_avg(self, factor_name, start=None, end=None, dates=None, ids=None):
+        """两个日期之间的平均值"""
+        wind_id = self.data_dict.wind_factor_ids(self.table_name, factor_name)
+        data = self.load_latest(factor_name, dates=[start, end], ids=ids).reset_index()
+        data = pd.pivot_table(data, values=wind_id, index='IDs', columns='date', fill_value=np.nan)
+        data.replace(0.0, np.nan, inplace=True)
+        r = data.mean(axis=1)
+        return r.to_frame(wind_id)
+
+    def save_data(self, data, table_id=None, if_exists='append'):
+        super(WindAshareCapitalization, self).save_data(data, self.table_id, if_exists)
+
+
+class WindAindexMembers(WindFinanceDB):
+    """Wind指数成分"""
+    table_name = u'中国A股指数成分股'
+    table_id = 'aindexmembers'
+
+    def download_data(self, factors, _in=None, _between=None, _equal=None, **kwargs):
+        """取数据"""
+        def _wrapper(idata):
+            for i in idata:
+                i.dropna(subset=['in_date'], inplace=True)
+                i['IDs'] = i['IDs'].astype('int32')
+                i['out_date'] = i['out_date'].fillna('22000000').astype('int32')
+                i['in_date'] = i['in_date'].astype('int32')
+                yield i
+        data = self.load_factors(factors, self.table_name, _in, _between, _equal, **kwargs)
+        if isinstance(data, Iterator):
+            return _wrapper(data)
+        if data.empty:
+            return data
+        data.dropna(subset=['in_date'], inplace=True)
+        data['IDs'] = data['IDs'].astype('int32')
+        data['out_date'] = data['out_date'].fillna('22000000').astype('int32')
+        data['in_date'] = data['in_date'].astype('int32')
+        return data
+
+    def save_data(self, data, table_id=None, if_exists='append'):
+        super(WindAindexMembers, self).save_data(data, self.table_id, if_exists)
+
+    @DateRange2Dates
+    def get_members(self, idx, start_date=None, end_date=None, dates=None):
+        l = []
+        raw_data = self.load_h5(self.table_id)
+        for d in {int(x.strftime('%Y%m%d')) for x in dates}:
+            m = raw_data.query("idx_id=='%s' & in_date<=@d & out_date>=@d" % idx).copy()
+            m['date'] = d
+            m['sign'] = 1
+            l.append(m[['IDs', 'date', 'sign']])
+        r = pd.concat(l).set_index(['date', 'IDs'])
+        return _reconstruct(r)
+
+
+class WindAindexMembersWind(WindAindexMembers):
+    """Wind指数成分"""
+    table_name = u'中国A股万得指数成分股'
+    table_id = 'aindexmemberswind'
+
+
+class WindChangeWindcode(WindFinanceDB):
+    """Wind代码变更表"""
+    table_name = u'中国A股Wind代码变更表'
+    table_id = 'asharechangewindcode'
+
+    def download_data(self, factors, _in=None, _between=None, _equal=None, **kwargs):
+        """取数据"""
+        def _reconstruct(raw):
+            raw['IDs'] = raw['IDs'].astype('int32')
+            raw['change_dt'] = raw['change_dt'].astype('int32')
+            raw['new_id'] = raw['new_id'].str[:6].astype('int32')
+            return raw
+
+        def _wrapper(idata):
+            for i in idata:
+                i = _reconstruct(i)
+                yield i
+
+        data = self.load_factors(factors, self.table_name, _in, _between, _equal, **kwargs)
+        if isinstance(data, Iterator):
+            return _wrapper(data)
+        if data.empty:
+            return data
+        data = _reconstruct(data)
+        return data
+
+    def save_data(self, data, table_id=None, if_exists='append'):
+        super(WindChangeWindcode, self).save_data(data, self.table_id, if_exists)
+
+    @property
+    def all_data(self):
+        data = self.load_h5(self.table_id)
+        return data
+
+
 if __name__ == '__main__':
     # from FactorLib.data_source.stock_universe import StockUniverse
     from datetime import datetime
     wind = WindConsensusDB()
     wind.connectdb()
-    data = wind.download_data([u'净资产收益率最小值(%)', u'净资产收益率平均值(%)', u'总资产收益率预测家数',
-                               u'净资产收益率预测家数', u'净利润预测家数', u'总资产收益率标准差(%)', u'净利润标准差(万元)',
-                               u'净资产收益率标准差(%)'],
-                              _between={u'预测日期': ('20180101', '20180210')})
+    data = wind.download_data([u'预告净利润变动幅度下限(%)', u'预告净利润变动幅度上限(%)', u'预告净利润下限(万元)',
+                               u'预告净利润上限(万元)'],
+                              _between={u'报告期': ('20061231', '20180331')}, chunksize=10000)
     wind.save_data(data)
     # u = StockUniverse('000905')
     # ttm = wind.load_latest_period('净利润(不含少数股东损益)', ids=u, start='20170101', end='20171231')
