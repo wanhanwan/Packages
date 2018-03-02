@@ -288,7 +288,7 @@ class WindFinanceDB(WindDB):
             columns = [x for x in data.columns if x not in default_columns]
             columns2 = list(set(data.columns).intersection(set(default_columns)))
             if not columns:
-                yield None, data[columns2]
+                yield self.table_id, data[columns2]
             for c in columns:
                 yield c, data[columns2 + [c]]
 
@@ -722,6 +722,41 @@ class WindAindexMembersWind(WindAindexMembers):
     """Wind指数成分"""
     table_name = u'中国A股万得指数成分股'
     table_id = 'aindexmemberswind'
+
+
+class WindChangeWindcode(WindFinanceDB):
+    """Wind代码变更表"""
+    table_name = u'中国A股Wind代码变更表'
+    table_id = 'asharechangewindcode'
+
+    def download_data(self, factors, _in=None, _between=None, _equal=None, **kwargs):
+        """取数据"""
+        def _reconstruct(raw):
+            raw['IDs'] = raw['IDs'].astype('int32')
+            raw['change_dt'] = raw['change_dt'].astype('int32')
+            raw['new_id'] = raw['new_id'].str[:6].astype('int32')
+            return raw
+
+        def _wrapper(idata):
+            for i in idata:
+                i = _reconstruct(i)
+                yield i
+
+        data = self.load_factors(factors, self.table_name, _in, _between, _equal, **kwargs)
+        if isinstance(data, Iterator):
+            return _wrapper(data)
+        if data.empty:
+            return data
+        data = _reconstruct(data)
+        return data
+
+    def save_data(self, data, table_id=None, if_exists='append'):
+        super(WindChangeWindcode, self).save_data(data, self.table_id, if_exists)
+
+    @property
+    def all_data(self):
+        data = self.load_h5(self.table_id)
+        return data
 
 
 if __name__ == '__main__':

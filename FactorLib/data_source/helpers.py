@@ -16,7 +16,7 @@ def handle_ids(func):
             stocks = ids.get(start_date=kwargs.get(s, None), end_date=kwargs.get(e, None),
                              dates=kwargs.get('dates', None))
             if 'idx' in func.__code__.co_varnames:
-                return func(*args, idx=stocks, **{k: v for k, v in kwargs.items() if k not in ['ids']})
+                return func(*args, idx=stocks, **{k: v for k, v in kwargs.items() if k not in ['ids', 'idx']})
             else:
                 tmp = func(*args, **{k: v for k, v in kwargs.items() if k not in ['ids']})
                 return tmp.reindex(stocks.index)

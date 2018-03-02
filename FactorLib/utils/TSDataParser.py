@@ -92,3 +92,12 @@ def parse2DArray(TSData, column_decode=None, encoding='utf8'):
         for column in column_decode:
             data[column] = data[column].str.decode(encoding)
     return data
+
+
+def parse1DArray(TSData, col_name, column_decode=None, encoding='utf8'):
+    if TSData[0] != 0:
+        raise ValueError("天软数据提取失败！")
+    data = pd.DataFrame(TSData[1], columns=[col_name])
+    if column_decode:
+        data[col_name] = data[col_name].str.decode(encoding)
+    return data
