@@ -5,7 +5,7 @@ from datetime import timedelta, datetime
 
 import numpy as np
 import pandas as pd
-from ..const import SW_INDUSTRY_DICT, MARKET_INDEX_DICT
+from ..const import SW_INDUSTRY_DICT, MARKET_INDEX_DICT, USER_INDEX_DICT
 from .h5db import H5DB
 from .h5db2 import H5DB2
 from .ncdb import NCDB
@@ -417,6 +417,10 @@ class sector(object):
         if ids in MARKET_INDEX_DICT:
             index_members = self.h5DB.load_factor('_%s' % ids, '/indexes/', dates=dates)
             index_members = index_members[index_members['_%s' % ids] == 1.0]
+            return index_members[index_members.index.isin(all_stocks.index)]
+        elif ids in USER_INDEX_DICT:
+            index_members = self.h5DB.load_factor('%s' % ids, '/indexes/', dates=dates)
+            index_members = index_members[index_members['%s' % ids] == 1.0]
             return index_members[index_members.index.isin(all_stocks.index)]
         else:
             for industry_name, rule in IndustryConverter._rules.items():

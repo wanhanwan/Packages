@@ -355,6 +355,20 @@ class WindFinanceDB(WindDB):
         return _reconstruct(new)
 
     @handle_ids
+    def load_spec_period(self, factor_name, year, quarter, start=None, end=None, dates=None, ids=None):
+        """指定报告期"""
+        wind_id = self.data_dict.wind_factor_ids(self.table_name, factor_name)
+        if start is not None and end is not None:
+            dates = np.asarray(tc.get_trade_days(start, end, retstr='%Y%m%d')).astype('int')
+        else:
+            dates = np.asarray(dates).astype('int')
+        if ids is not None:
+            ids = np.asarray(ids).astype('int')
+        data = self.load_h5(factor_name).query("year==@year & quarter==@quarter")
+        new = self.data_loader.latest_period(data, wind_id, dates, ids)
+        return _reconstruct(new)
+
+    @handle_ids
     def load_last_nyear(self, factor_name, n, start=None, end=None, dates=None, ids=None,
                         quarter=None):
         """回溯N年之前的财务数据"""
@@ -370,7 +384,7 @@ class WindFinanceDB(WindDB):
         return _reconstruct(new)
 
     @handle_ids
-    def load_incr_tb(self, factor_name, n, start=None, end=None, dates=None, ids=None):
+    def load_incr_tb(self, factor_name, n, start=None, end=None, dates=None, ids=None, quarter=None):
         """同比序列"""
         wind_id = self.data_dict.wind_factor_ids(self.table_name, factor_name)
         if start is not None and end is not None:
@@ -380,8 +394,8 @@ class WindFinanceDB(WindDB):
         if ids is not None:
             ids = np.asarray(ids).astype('int')
         data = self.load_h5(factor_name)
-        new = self.data_loader.inc_rate_tb(data, wind_id, dates, n, ids)
-        return new
+        new = self.data_loader.inc_rate_tb(data, wind_id, dates, n, ids, quarter=quarter)
+        return _reconstruct(new)
 
     @handle_ids
     def load_incr_hb(self, factor_name, start=None, end=None, dates=None, ids=None):

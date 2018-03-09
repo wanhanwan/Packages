@@ -15,7 +15,7 @@ def period_backward(dates, quarter=None, back_nyear=1, back_nquarter=None):
     c = calendar
     if quarter is not None:
         if isinstance(quarter, int):
-            month = np.ones(len(dates)) * quarter * 3
+            month = np.ones(len(dates)).astype('int') * quarter * 3
         else:
             month = quarter * 3
     day = np.asarray([c.monthrange(y-back_nyear, m)[1] for y, m in zip(year, month)])
@@ -35,8 +35,8 @@ def incr_rate(old, new):
     new: pd.Series
     """
     old, new = old.align(new, axis=0, join='outer')
-    old.replace(0, np.nan, inplace=True)
-    return new / old.abs() - 1
+    old.replace(0.0, np.nan, inplace=True)
+    return (new - old) / old.abs()
 
 
 def avg(old, new):
@@ -116,6 +116,8 @@ class DataLoader(object):
         """回溯N年之前的财务数据"""
         if ids is not None:
             raw_data = raw_data.query("IDs in @ids")
+        if quarter is not None:
+            raw_data = raw_data.query('quarter==@quarter')
         r = []
         for date in dates:
             data = raw_data.query("ann_dt <= @date")
@@ -211,10 +213,10 @@ class DataLoader(object):
             r.append(latest_period)
         return pd.concat(r)
 
-    def inc_rate_tb(self, raw_data, field_name, dates, n=1, ids=None):
+    def inc_rate_tb(self, raw_data, field_name, dates, n=1, ids=None, quarter=None):
         """同比增长率"""
-        new = self.latest_period(raw_data, field_name, dates, ids)
-        old = self.last_nyear(raw_data, field_name, dates, n, ids)
+        new = self.latest_period(raw_data, field_name, dates, ids, quarter=quarter)
+        old = self.last_nyear(raw_data, field_name, dates, n, ids, quarter=quarter)
         inc_r = incr_rate(old, new)
         return inc_r.to_frame("inc_rate")
 
