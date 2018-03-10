@@ -102,6 +102,25 @@ class H5DB(object):
             df.columns = [factor_name]              
             return df
 
+    def read_h5file(self, file_name, path, group='data'):
+        file_path = self.abs_factor_path(path, file_name)
+        return pd.read_hdf(file_path, group)
+
+    def save_h5file(self, data, name, path, group='data', mode='a'):
+        file_path = self.abs_factor_path(path, name)
+        if self.check_factor_exists(name, path) and mode != 'w':
+            with pd.HDFStore(file_path, complib='blosc', complevel=9) as store:
+                try:
+                    df = store.select(group)
+                    store.remove(group)
+
+                except KeyError as e:
+                    df = pd.DataFrame()
+
+                store[group] = df.append(data).drop_duplicates()
+        else:
+            data.to_hdf(file_path, group, complib='blosc', complevel=9, mode='w')
+
     def load_latest_period(self, factor_name, factor_dir=None, ids=None, idx=None):
         max_date = self.get_date_range(factor_name, factor_dir)[1]
         return self.load_factor(factor_name, factor_dir, dates=[max_date], ids=ids, idx=idx).reset_index(level=0, drop=True)

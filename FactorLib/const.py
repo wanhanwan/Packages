@@ -26,7 +26,9 @@ WIND_INDUSTRY_DICT_REVERSE = {WIND_INDUSTRY_DICT[x]: x for x in WIND_INDUSTRY_DI
 
 MARKET_INDEX_DICT = {'000905':'中证500','000300':'沪深300','000906':'中证800','881001':'万得全A','000001':'上证综指',
                      '000016':'上证50','399102':'创业板综', '399974':'中证国企改革指数', '000991': '中证全指医药',
-                     '000808':'申万医药生物', '101005': '全A(剔除银行券商)', '100001':'盈利性筛选1'}
+                     '000808':'申万医药生物', '101005': '全A(剔除银行券商)', '100001':'盈利性筛选1', '000852': '中证1000'}
+
+USER_INDEX_DICT = {'merge_acc': '并购指数'}
 
 INDUSTRY_NAME_DICT = {'中信一级':'cs_level_1','申万一级':'sw_level_1', '中信二级': 'cs_level_2', '申万二级': 'sw_level_2',
                       '万得一级':'wind_level_1', '中信细分非银':'diversified_finance_cs', '申万细分非银':'diversified_finance_sw'}
@@ -41,6 +43,7 @@ MARKET_INDEX_WINDCODE = {"中证500": "000905.SH",
                          "中证全指医药指数": "000991.SH",
                          "中证申万医药生物指数": "000808.SH",
                          "中证国企改革指数": "399974.SZ",
+                         "中证1000": "000852.SH"
                          }
 MARKET_INDEX_WINDCODE_REVERSE = {MARKET_INDEX_WINDCODE[x]: x for x in MARKET_INDEX_WINDCODE}
 

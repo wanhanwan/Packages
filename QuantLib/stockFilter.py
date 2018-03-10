@@ -169,3 +169,27 @@ def realtime_typical2(stocklist):
         stocklist = func(stocklist)
     return stocklist
 
+
+def drop_false_growth(data, upper_limit=3.0, upper_type='v', use_data=None):
+    """
+    如果增长率数值大于阈值，并且最近一年发生过并购
+    行为，那么就剔除这些股票
+    """
+    from FactorLib.data_source.wind_financial_data_api import incomesheet
+    all_dates = data.index.get_level_values('date').unique()
+    merge = data_source.sector.get_index_members('merge_acc', dates=all_dates)
+    if use_data is None:
+        filter_data = incomesheet.load_incr_tb('净利润(不含少数股东损益)', n=1, dates=list(all_dates.strftime('%Y%m%d')))
+    else:
+        filter_data = use_data.reindex(data.index)
+
+    if upper_type == 'q':
+        limit = filter_data.groupby('date').quantile(1-upper_limit)
+        limit.columns = ['limit']
+        filter_data = filter_data.join(limit)
+    else:
+        filter_data['limit'] = upper_limit
+
+    to_drop = (filter_data.iloc[:, 0] > filter_data.iloc[:, 1]) & (merge['merge_acc'] == 1)
+    return data[~data.index.isin(to_drop[to_drop == 1].index)]
+

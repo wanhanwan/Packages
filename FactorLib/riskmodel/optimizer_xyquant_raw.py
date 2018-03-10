@@ -42,8 +42,7 @@ class Optimizer(object):
 
     def __init__(self, signal, target_ids, date, ds_name, asset=None, active=False, benchmark='000905', risk_mul=0,
                  **kwargs):
-        """初始化优化器"""
-        self.target_ids = [x.encode('utf8') for x in list(set(signal.index.values).intersection(set(target_ids)))]
+        self.target_ids = list(set(signal.index.values).intersection(set(target_ids)))
         self.target_ids.sort()
         self._date = date
 
@@ -53,51 +52,29 @@ class Optimizer(object):
             self._rskds = ds_name
         self._active = active
         self._benchmark = benchmark
-        self._asset = asset
         self._riskmul = risk_mul
         self.optimal = False
         self.solution_status = ""
         self.solution_value = None
         self._internal_limit = None
         self._signalrisk = None
-        self._nontrad_pre = None
-        self._nontrad_target = None
-        self._bchmrk_notin_tar = None
-        self._signal = None
-
-        self._create_signal(signal, asset)
-        # self._allids = self._signal.index.tolist()
+        nontrad_pre, nontrad_target, bchmrk_notin_tar, self._signal = self._create_signal(signal, asset)
+        self._allids = self._signal.index.tolist()
         self._init_opt_result(asset)
-        self._init_opt_prob()
+        self._init_opt_prob(nontrad_pre, nontrad_target, bchmrk_notin_tar)
         self.names_used = []
-        self.auxiliary_vars = []
-        self.estu = self._rskds.load_factors(['Estu'], dates=[self._date]).reset_index(level='date', drop=True)
 
     def _create_signal(self, signal, asset):
-        """重新整合参数，确定需要优化的股票池以及对应的信号
-        这里需要划分几个概念：
-            1. 目标股票池，初始权重设置不为零的股票，是待优化的全样本
-            2. 基准指数池，需要用户传入，包括成分股代码和权重
-            3. 上期股票池，也需要用户传入，通常是为了设定换手率限制
-            4. 全部股票池，通常是以上所有股票的并集
-            需要优化的股票池应该设定为目标股票和基准指数的并集，不在目标股票池的基准指数
-        成分股设定的权重是零。
-            另外，上期持仓中停牌的股票、目标股票池中停牌、ST的股票都需要事先设定权重是零
-        或者期初权重
-        """
-        # 基准指数的成分股和权重，如果是NULL代表基准成分股的权重都是零。
+        # 基准指数的成分股和权重
         if self._benchmark == 'NULL':
             self._bchmrk_weight = pd.Series(np.zeros(len(self.target_ids)), index=self.target_ids, name='NULL')
         else:
-            if isinstance(self._benchmark, pd.Series):    # 自定义的基准，格式是pd.Series(IDs:weight)
-                bchmrk_weight = self._benchmark
-            else:
-                bchmrk_weight = data_source.sector.get_index_weight(
-                    ids=self._benchmark, dates=[self._date]).reset_index(level='date', drop=True).iloc[:, 0]
-            bchmrk_weight = bchmrk_weight[bchmrk_weight.index.intersection(self.estu.index)]
+            bchmrk_weight = data_source.sector.get_index_weight(
+                ids=self._benchmark, dates=[self._date]).reset_index(level='date', drop=True).iloc[:, 0]
+            estu = self._rskds.load_factors(['Estu'], dates=[self._date]).reset_index(level='date', drop=True)
+            bchmrk_weight = bchmrk_weight[bchmrk_weight.index.intersection(estu.index)]
             bchmrk_weight = bchmrk_weight / bchmrk_weight.sum()
             self._bchmrk_weight = bchmrk_weight
-
         # 找出上期持仓中停牌的股票
         if asset is not None:
             preids = [x.encode('utf8') for x in asset[asset != 0.0].index.tolist()]
@@ -107,29 +84,20 @@ class Optimizer(object):
                 nontrad_pre = []
         else:
             nontrad_pre = []
-        
-        # 找出不在target_ids中的基准成分股
+        #  找出不在target_ids中的基准成分股
         bchmrk_notin_tar = list(set(self._bchmrk_weight.index.tolist()).difference(set(self.target_ids)))
         bchmrk_notin_tar = [x.encode('utf8') for x in bchmrk_notin_tar]
-        
         # 找出target_ids中停牌的股票
         nontrad_target = suspendtrading(self.target_ids, self._date)
         nontrad_target = [x.encode('utf8') for x in nontrad_target]
-        
-        # 全部股票池包含了三部分的股票：目标股票池、基准指数以及上期股票池中停牌的股票
+        # signal 包含了三部分的股票
         allids = list(set(self.target_ids+self._bchmrk_weight.index.tolist()+nontrad_pre))
         allids = [x.encode('utf8') for x in allids]
         allids.sort()
-
-        self._allids = allids
         self._bchmrk_weight = self._bchmrk_weight.reindex(allids, fill_value=0.0)
-        self._nontrad_pre = nontrad_pre
-        self._nontrad_target = nontrad_target
-        self._bchmrk_notin_tar = bchmrk_notin_tar
-        self._signal = signal.reindex(allids, fill_value=0.0)
-        # return nontrad_pre, nontrad_target, bchmrk_notin_tar, signal.reindex(allids, fill_value=.0)
+        return nontrad_pre, nontrad_target, bchmrk_notin_tar, signal.loc[allids]
 
-    def _init_opt_prob(self):
+    def _init_opt_prob(self, nontrad_pre, nontrad_target, bchmrk_notin_tar):
         """
         初始化优化问题
         设置了现金中性、禁止做空、停牌无法交易等限制.此函数还应该生成一个signal序列， 并且包含如下的股票池：
@@ -141,18 +109,22 @@ class Optimizer(object):
         target_ids中停牌的股票设置为零。
         """
 
-        nvar = self._allids
+        nvar = [x.encode('utf8') for x in self._signal.index.tolist()]
         self._c = cpx.Cplex()
         self._c.variables.add(names=nvar)
-
         # 禁止做空
         self._c.variables.set_lower_bounds([(x, 0) for x in nvar])
-
+        # 现金中性
+        self._c.linear_constraints.add(lin_expr=[[nvar, [1]*len(nvar)]],
+                                       senses=['E'],
+                                       rhs=[1],
+                                       names=['csh_ntrl']
+                                       )
         # 加入线性限制
-        limit_ids = list(set(self._nontrad_pre+self._bchmrk_notin_tar+self._nontrad_target))
+        limit_ids = list(set(nontrad_pre+bchmrk_notin_tar+nontrad_target))
         if limit_ids:
             limit_values = pd.Series(np.zeros(len(limit_ids)), index=limit_ids)
-            limit_values.loc[self._nontrad_pre] = self.asset.loc[self._nontrad_pre, 'previous_weight']
+            limit_values.loc[nontrad_pre] = self.asset.loc[nontrad_pre, 'previous_weight']
             lin_exprs = []
             rhs = []
             names = []
@@ -163,15 +135,6 @@ class Optimizer(object):
                 names.append('notrading_%s' % i)
             self._c.linear_constraints.add(lin_expr=lin_exprs, senses=senses, rhs=rhs, names=names)
             self._internal_limit = limit_values
-
-        # 现金中性, target_ids和nontrade_pre中的股票权重之和是1
-        trading_stocks = list(set(self.target_ids) + set(self.nontrad_pre))
-        self._c.linear_constraints.add(lin_expr=[[trading_stocks, [1]*len(trading_stocks)]],
-                                       senses=['E'],
-                                       rhs=[1],
-                                       names=['csh_ntrl']
-                                       )
-
         self._c.set_warning_stream(sys.stdout)
         self._c.set_log_stream(None)
         self._c.set_error_stream(None)
@@ -180,13 +143,14 @@ class Optimizer(object):
     def _init_opt_result(self, asset):
         # 初始化优化结果，在上一期的权重里添加一列optimal_weight。若求解成功，则该列为优化后的权重，否则，仍然返回上期
         # 权重。
-        self.opt_rslt = pd.DataFrame(np.ones(len(self._signal)) / len(self._signal),
-                                     index=pd.MultiIndex.from_product([[self._date], self._signal.index], names=['date', 'IDs']),
-                                     columns=['optimal_weight'])
-        if self._asset is None:
-            self.opt_rslt['previous_weight'] = 0.0
+        if asset is None:
+            self.asset = pd.DataFrame(np.ones(len(self._signal)) / len(self._signal),
+                                      index=pd.MultiIndex.from_product([[self._date], self._signal.index], names=['date', 'IDs']),
+                                      columns=['optimal_weight'])
+            self.asset['previous_weight'] = 0
         else:
-            self.opt_rslt['previous_weight'] = self._asset.reindex(self._signal.index, fill_value=0.0)
+            self.asset = pd.concat([asset, asset], axis=1)
+            self.asset.columns = ['previous_weight', 'optimal_weight']
 
     def _add_style_cons(self, style_dict, active=True, sense='E'):
         """
@@ -595,48 +559,6 @@ class Optimizer(object):
             sigma.fillna(0.0, inplace=True)
         return sigma.values
 
-    def _add_diversion_limit(self, base, limit):
-        """添加与基准偏离的约束
-        
-        Paramters:
-        ===========
-        base : str/list/pd.Series
-            计算偏离度的基准
-        limit : float
-            设定的偏离度上限
-        """
-        if base == 'Benchmark':
-            base_weight = self.bchmrk_weight[~self.bchmrk_weight.index.isin(self._nontrad_target)]
-        elif isinstance(base, pd.Series):
-            base_weight = base[~base.index.isin(self._nontrad_target)]
-        elif isinstance(base, (list, tuple, np.array)):
-            base_weight = self.bchmrk_weight[~self.bchmrk_weight.index.isin(self._nontrad_target)].reindex(base, fill_value=0.0)
-        else:
-            raise ValueError("不支持的base设定")
-        limit_ids = list(base_weight.index.values)
-        base_weight_values = base_weight.values.tolist()
-
-        auxiliary_vars = []
-        for i in limit_ids:
-            a = get_available_names('a_%s' % i, self.auxiliary_vars)
-            auxiliary_vars.append(a)
-            self.auxiliary_vars.append(a)
-
-        # 辅助变量的绝对值之和小于等于limit
-        self._c.variables.add(names=auxiliary_vars)
-        self._c.linear_constraints.add(lin_expr=[[nvar, [1]*len(nvar)]], senses=['L'], rhs=[limit],
-                                       names=[get_available_names('diversion', self.names_used)]
-                                       )
-        self.names_used.append(get_available_names('diversion', self.names_used))
-
-        for a, b, v in zip(auxiliary_vars, limit_ids, base_weight_values):
-            name1 = get_available_names('diversion_abs', self.names_used)
-            self.names_used.append(name1)
-            name2 = get_available_names('diversion_abs', self.names_used)
-            self.names_used.append(name2)
-            self._c.linear_constraints.add(lin_expr=[[[a, b], [1, -1]],[[a, b], [1, 1]]], senses=['G','G'], rhs=[-v, v],
-                names=[name1, name2])
-
     def add_constraint(self, key, *args, **kwargs):
         """
         设置限制条件
@@ -675,8 +597,6 @@ class Optimizer(object):
             self._add_stock_limit(*args, **kwargs)
         elif key == 'UserLimit':
             self._add_userlimit(*args, **kwargs)
-        elif key == 'Diversion':
-            self._add_diversion_limit(*args, **kwargs)
         else:
             raise NotImplementedError("不支持的限制类型:%s" % key)
 
@@ -728,8 +648,7 @@ class Optimizer(object):
 
         if self.optimal:
             self.solution_value = self._c.solution.get_objective_value()
-            ans = pd.Series(self._c.solution.get_values(), index=self._c.variables.get_names())
-            self.asset['optimal_weight'] = ans.reindex(self.asset.index)
+            self.asset['optimal_weight'] = self._c.solution.get_values()
 
     def check_ktt(self):
         """
