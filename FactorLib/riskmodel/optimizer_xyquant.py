@@ -64,6 +64,7 @@ class Optimizer(object):
         self._nontrad_target = None
         self._bchmrk_notin_tar = None
         self._signal = None
+        self.estu = self._rskds.load_factors(['Estu'], dates=[self._date]).reset_index(level='date', drop=True)
 
         self._create_signal(signal, asset)
         # self._allids = self._signal.index.tolist()
@@ -71,7 +72,6 @@ class Optimizer(object):
         self._init_opt_prob()
         self.names_used = []
         self.auxiliary_vars = []
-        self.estu = self._rskds.load_factors(['Estu'], dates=[self._date]).reset_index(level='date', drop=True)
 
     def _create_signal(self, signal, asset):
         """重新整合参数，确定需要优化的股票池以及对应的信号
@@ -123,10 +123,12 @@ class Optimizer(object):
 
         self._allids = allids
         self._bchmrk_weight = self._bchmrk_weight.reindex(allids, fill_value=0.0)
+        self._signal = signal.reindex(allids, fill_value=0.0)
+        if self._asset is not None:
+            self._asset = self._asset.reindex(allids, fill_value=0.0)
         self._nontrad_pre = nontrad_pre
         self._nontrad_target = nontrad_target
         self._bchmrk_notin_tar = bchmrk_notin_tar
-        self._signal = signal.reindex(allids, fill_value=0.0)
         # return nontrad_pre, nontrad_target, bchmrk_notin_tar, signal.reindex(allids, fill_value=.0)
 
     def _init_opt_prob(self):
@@ -152,7 +154,8 @@ class Optimizer(object):
         limit_ids = list(set(self._nontrad_pre+self._bchmrk_notin_tar+self._nontrad_target))
         if limit_ids:
             limit_values = pd.Series(np.zeros(len(limit_ids)), index=limit_ids)
-            limit_values.loc[self._nontrad_pre] = self.asset.loc[self._nontrad_pre, 'previous_weight']
+            if self._nontrad_pre:
+                limit_values.loc[self._nontrad_pre] = self._asset.loc[self._nontrad_pre, 'previous_weight']
             lin_exprs = []
             rhs = []
             names = []
@@ -165,7 +168,7 @@ class Optimizer(object):
             self._internal_limit = limit_values
 
         # 现金中性, target_ids和nontrade_pre中的股票权重之和是1
-        trading_stocks = list(set(self.target_ids) + set(self.nontrad_pre))
+        trading_stocks = list(set(self.target_ids).union(set(self._nontrad_pre)))
         self._c.linear_constraints.add(lin_expr=[[trading_stocks, [1]*len(trading_stocks)]],
                                        senses=['E'],
                                        rhs=[1],
@@ -192,7 +195,7 @@ class Optimizer(object):
         """
         设置风格限制
 
-        Paramters:
+        Parameters:
         ==========
         style_dict: dict
             以字典形式进行风格约束，{key: style_name, value: constraint}
@@ -200,6 +203,11 @@ class Optimizer(object):
             单值传入与sense一致
         active: bool
             相对于基准的主动暴露，默认为True。
+
+        Examples:
+        ==========
+        >>> _add_style_cons({'Size':[0.0, 0.2]}, active=True)
+        >>> _add_style_cons({'Size': 0.2}, active=True, sense='G')
         """
         style_dict2 = {}
         for k, v in style_dict.items():
@@ -280,13 +288,18 @@ class Optimizer(object):
         """
         添加行业约束
 
-        Paramters:
+        Parameters:
         ==========
         industry_dict: dict
             以字典形式进行行业约束，{key: industry_name, value: constraint} \n
         active: bool
             相对于基准的主动暴露，默认为True。
+
+        Examples:
+        >>> self._add_industry_cons({'Banks': [0.0, 0.1]})
+        >>> self._add_industry_cons({'Banks': 0.2}, sense='L')
         """
+
         industry_dict2 = {}
         indu_bchmrk = self._prepare_benchmark_indu()
         if industry_dict is None:
@@ -354,14 +367,27 @@ class Optimizer(object):
     def _add_stock_limit(self, default_min=0.0, default_max=1.0):
         """
         添加个股权重的上下限
-        对于
+
+        Parameters:
+        =================
+        default_min : float or list of tuples
+            个股权重上限 。 float格式会广播到all_ids
+            list的格式 : [(ID, min_limit)...]
+        default_max : same as default_min
         """
+
         # assert ((default_min < 0) or (default_max > 1))
         nvar = self._signal.index.tolist()
         if self._internal_limit is not None:
             nvar = list(set(nvar).difference(set(self._internal_limit.index.tolist())))
-        min_limit = list(zip(nvar, [default_min]*len(nvar)))
-        max_limit = list(zip(nvar, [default_max]*len(nvar)))
+        if isinstance(default_min, list):
+            min_limit = [(k, v) for k, v in default_min if k in nvar]
+        else:
+            min_limit = list(zip(nvar, [default_min]*len(nvar)))
+        if isinstance(default_max, list):
+            max_limit = [(k, v) for k, v in default_max if k in nvar]
+        else:
+            max_limit = list(zip(nvar, [default_max]*len(nvar)))
         self._c.variables.set_lower_bounds(min_limit)
         self._c.variables.set_upper_bounds(max_limit)
 
@@ -606,11 +632,12 @@ class Optimizer(object):
             设定的偏离度上限
         """
         if base == 'Benchmark':
-            base_weight = self.bchmrk_weight[~self.bchmrk_weight.index.isin(self._nontrad_target)]
+            base_weight = self._bchmrk_weight[~self._bchmrk_weight.index.isin(self._nontrad_target)]
         elif isinstance(base, pd.Series):
             base_weight = base[~base.index.isin(self._nontrad_target)]
         elif isinstance(base, (list, tuple, np.array)):
-            base_weight = self.bchmrk_weight[~self.bchmrk_weight.index.isin(self._nontrad_target)].reindex(base, fill_value=0.0)
+            base_weight = self._bchmrk_weight[
+                list((set(self.target_ids)-set(self._nontrad_target)).intersection(set(base)))]
         else:
             raise ValueError("不支持的base设定")
         limit_ids = list(base_weight.index.values)
@@ -624,7 +651,7 @@ class Optimizer(object):
 
         # 辅助变量的绝对值之和小于等于limit
         self._c.variables.add(names=auxiliary_vars)
-        self._c.linear_constraints.add(lin_expr=[[nvar, [1]*len(nvar)]], senses=['L'], rhs=[limit],
+        self._c.linear_constraints.add(lin_expr=[[auxiliary_vars, [1]*len(auxiliary_vars)]], senses=['L'], rhs=[limit],
                                        names=[get_available_names('diversion', self.names_used)]
                                        )
         self.names_used.append(get_available_names('diversion', self.names_used))
@@ -637,6 +664,12 @@ class Optimizer(object):
             self._c.linear_constraints.add(lin_expr=[[[a, b], [1, -1]],[[a, b], [1, 1]]], senses=['G','G'], rhs=[-v, v],
                 names=[name1, name2])
 
+    def _add_turnover_limit(self, limit):
+        """添加换手率限制"""
+        if self._asset is None:
+            raise ValueError("设置换手率时，上期资产权重不能为空！")
+        self._add_diversion_limit(self._asset, limit)
+
     def add_constraint(self, key, *args, **kwargs):
         """
         设置限制条件
@@ -645,7 +678,10 @@ class Optimizer(object):
             2. 行业敞口限制，key='Indu'.默认所有行业都限定为中性，把需要显式设定的行业敞口按照字典形式传入。
             3. 跟踪误差限制，key='TrackingError', value= target_tracking_error.
             4. 个股权重限制, key='StockLimit'. 个股上下限以tuple形式传入。
-        Paramters:
+            5. 基准偏离限制, key='Diversion'. Base代表基准权重，limit代表上限
+            6. 换手率限制, key='Tunover'
+
+        Parameters:
         ==========
         key: str
             限制条件类型，可选选项：'Style'\'Indu'\'TrackingError'
@@ -677,6 +713,8 @@ class Optimizer(object):
             self._add_userlimit(*args, **kwargs)
         elif key == 'Diversion':
             self._add_diversion_limit(*args, **kwargs)
+        elif key == 'Turnover':
+            self._add_turnover_limit(*args, **kwargs)
         else:
             raise NotImplementedError("不支持的限制类型:%s" % key)
 
@@ -729,7 +767,7 @@ class Optimizer(object):
         if self.optimal:
             self.solution_value = self._c.solution.get_objective_value()
             ans = pd.Series(self._c.solution.get_values(), index=self._c.variables.get_names())
-            self.asset['optimal_weight'] = ans.reindex(self.asset.index)
+            self.opt_rslt['optimal_weight'] = ans.reindex(self.opt_rslt.index.get_level_values('IDs')).values
 
     def check_ktt(self):
         """
@@ -739,7 +777,7 @@ class Optimizer(object):
         indu_expo = None
         terr_expo = None
         if self.optimal:
-            optimal_weight = self.asset['optimal_weight'].reset_index(level=0, drop=True)
+            optimal_weight = self.opt_rslt['optimal_weight'].reset_index(level=0, drop=True)
             # 计算风格敞口
             bchmrk_style = self._prepare_benchmark_style('STYLE')
             portf_style = self._prepare_portfolio_style('STYLE').mul(optimal_weight, axis='index').sum()
@@ -817,7 +855,7 @@ class PortfolioOptimizer(object):
 
             if optimizer.optimal:
                 print("%s权重优化成功" % idate.strftime("%Y-%m-%d"))
-                optimal_assets.append(optimizer.asset.loc[optimizer.asset['optimal_weight'] > 0.001, 'optimal_weight'])
+                optimal_assets.append(optimizer.opt_rslt.loc[optimizer.opt_rslt['optimal_weight'] > 0.001, 'optimal_weight'])
             else:
                 print("%s权重优化失败:%s" % (idate.strftime("%Y-%m-%d"), optimizer.solution_status))
                 self.log[idate.strftime("%Y-%m-%d")] = optimizer.solution_status
