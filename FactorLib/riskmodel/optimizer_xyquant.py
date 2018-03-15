@@ -844,9 +844,8 @@ class PortfolioOptimizer(object):
             signal = self.signal.loc[idate]
             stock_pool = self.stock_pool.loc[idate].tolist()
             if 'TrackingError' in self.constraints and self.ds._name == 'xy':
-                ids = pd.read_csv(os.path.join(self.ds.h5_db.data_path, 'stockRisk', '%s.csv'%idate.strftime("%Y%m%d")),
-                                  header=0, usecols=[0], dtype={0: 'str'})
-                stock_pool = list(set(stock_pool).intersection(set(ids.iloc[:, 0].values)))
+                ids = self.ds.load_xy_riskmatrix(dates=[idate])[idate].index.tolist()
+                stock_pool = list(set(stock_pool).intersection(set(ids)))
             optimizer = Optimizer(signal, stock_pool, idate, self.ds, benchmark=self.benchmark, **self.kwargs)
 
             for k, v in self.constraints.items():

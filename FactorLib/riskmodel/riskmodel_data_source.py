@@ -526,7 +526,7 @@ class RiskDataSource(object):
                 matrixes[dates[i]] = matrix
             else:
                 warn("%s 风险矩阵不存在！用最近的风险矩阵代替!" % date)
-                csv_file = max(os.listdir(dirpth))
+                csv_file = path.join(dirpth, '%s' % max(os.listdir(dirpth)))
                 matrix = pd.read_csv(csv_file, index_col=0, header=0).rename(
                     index=lambda x: str(x).zfill(6), columns=lambda x: str(x).zfill(6))
                 matrixes[dates[i]] = matrix

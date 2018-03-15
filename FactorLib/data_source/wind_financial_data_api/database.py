@@ -275,7 +275,7 @@ class WindFinanceDB(WindDB):
         if isinstance(data, Iterator):
             for idata in data:
                 if idata.empty:
-                    yield idata
+                    yield None, idata
                 columns = [x for x in idata.columns if x not in default_columns]
                 columns2 = list(set(idata.columns).intersection(set(default_columns)))
                 if not columns:
@@ -297,7 +297,7 @@ class WindFinanceDB(WindDB):
         ensure_dir_exists(tar_pth)
         for c, d in self.gen_dataframe(data):
             if d.empty:
-                return
+                continue
             if if_exists == 'replace':
                 self.save_factor(d, tar_pth, c, if_exists='replace')
                 if_exists = 'append'
@@ -409,7 +409,7 @@ class WindFinanceDB(WindDB):
             ids = np.asarray(ids).astype('int')
         data = self.load_h5(factor_name)
         new = self.data_loader.inc_rate_hb(data, wind_id, dates, ids)
-        return new
+        return _reconstruct(new)
 
 
 class WindConsensusDB(WindFinanceDB):
@@ -459,6 +459,107 @@ class WindConsensusDB(WindFinanceDB):
 
     def save_data(self, data, table_id=None, if_exists='append'):
         super(WindConsensusDB, self).save_data(data, self.table_id, if_exists)
+
+    @handle_ids
+    def load_fy1(self, factor_name, start=None, end=None, dates=None, ids=None, stat_type=90):
+        from .est_data_loader import load_fy1
+        wind_id = self.data_dict.wind_factor_ids(self.table_name, factor_name)
+        if start is not None and end is not None:
+            dates = np.asarray(tc.get_trade_days(start, end, retstr='%Y%m%d')).astype('int')
+        else:
+            dates = np.asarray(dates).astype('int')
+        if ids is not None:
+            ids = np.asarray(ids).astype('int')
+        data = self.load_h5(factor_name)
+        new = load_fy1(data, wind_id, dates, ids, stat_type)
+        return _reconstruct(new)
+
+    @handle_ids
+    def load_fy2(self, factor_name, start=None, end=None, dates=None, ids=None, stat_type=90):
+        from .est_data_loader import load_fy2
+        wind_id = self.data_dict.wind_factor_ids(self.table_name, factor_name)
+        if start is not None and end is not None:
+            dates = np.asarray(tc.get_trade_days(start, end, retstr='%Y%m%d')).astype('int')
+        else:
+            dates = np.asarray(dates).astype('int')
+        if ids is not None:
+            ids = np.asarray(ids).astype('int')
+        data = self.load_h5(factor_name)
+        new = load_fy2(data, wind_id, dates, ids, stat_type)
+        return _reconstruct(new)
+
+    @handle_ids
+    def load_fy3(self, factor_name, start=None, end=None, dates=None, ids=None, stat_type=90):
+        from .est_data_loader import load_fy3
+        wind_id = self.data_dict.wind_factor_ids(self.table_name, factor_name)
+        if start is not None and end is not None:
+            dates = np.asarray(tc.get_trade_days(start, end, retstr='%Y%m%d')).astype('int')
+        else:
+            dates = np.asarray(dates).astype('int')
+        if ids is not None:
+            ids = np.asarray(ids).astype('int')
+        data = self.load_h5(factor_name)
+        new = load_fy3(data, wind_id, dates, ids, stat_type)
+        return _reconstruct(new)
+
+    @handle_ids
+    def load_spec_year(self, factor_name, spec_year, start=None, end=None, dates=None, ids=None, stat_type=90):
+        from .est_data_loader import load_spec_year
+        wind_id = self.data_dict.wind_factor_ids(self.table_name, factor_name)
+        if start is not None and end is not None:
+            dates = np.asarray(tc.get_trade_days(start, end, retstr='%Y%m%d')).astype('int')
+        else:
+            dates = np.asarray(dates).astype('int')
+        if ids is not None:
+            ids = np.asarray(ids).astype('int')
+        data = self.load_h5(factor_name)
+        new = load_spec_year(data, wind_id, spec_year, dates, ids, stat_type)
+        return _reconstruct(new)
+
+
+class WindEarningEst(WindFinanceDB):
+    """Wind盈利预测明细"""
+    table_name = u'中国A股盈利预测明细'
+    table_id = 'earningest'
+    statement_type_map = {'0001': 0}
+    inst_id = pd.read_csv(r"D:\Packages\FactorLib\resource\est_inst_name_id.csv", index_col=0, header=0,
+                          encoding='gbk')
+
+    def __init__(self):
+        super(WindEarningEst, self).__init__()
+
+    def add_quarter_year(self, idata):
+        idata.dropna(subset=['IDs', 'ann_dt', 'inst_name'], inplace=True)
+        if idata.empty:
+            return idata
+        idata.fillna(np.nan, inplace=True)
+        idata['stat_type'] = '0001'
+        idata['inst_name'] = idata['inst_name'].str.decode('GBK')
+        idata['inst_name'] = idata['inst_name'].map(self.inst_id['id'])
+        idata['quarter'] = pd.to_datetime(idata['date']).dt.quarter
+        idata['year'] = pd.to_datetime(idata['date']).dt.year
+        idata['date'] = idata['date'].astype('int')
+        idata['ann_dt'] = idata['ann_dt'].astype('int')
+        idata['stat_type'] = idata['stat_type'].map(self.statement_type_map)
+        idata['IDs'] = idata['IDs'].astype('int')
+        idata = idata.sort_values(['IDs', 'date', 'ann_dt', 'stat_type']).reset_index(drop=True)
+        return idata
+
+    def download_data(self, factors, _in=None, _between=None, _equal=None, **kwargs):
+        """取数据
+        """
+        def _wrap_add_quarter_year(data):
+            for idata in data:
+                yield self.add_quarter_year(idata)
+
+        data = self.load_factors(factors, self.table_name, _in, _between, _equal, **kwargs)
+        if not isinstance(data, Iterator):
+            return self.add_quarter_year(data)
+        else:
+            return _wrap_add_quarter_year(data)
+
+    def save_data(self, data, table_id=None, if_exists='append'):
+        super(WindEarningEst, self).save_data(data, self.table_id, if_exists)
 
 
 class WindIncomeSheet(WindFinanceDB):
