@@ -874,6 +874,44 @@ class WindChangeWindcode(WindFinanceDB):
         return data
 
 
+class WindIssuingDate(WindFinanceDB):
+    """中国A股定期报告披露日期"""
+    table_name = u'中国A股定期报告披露日期'
+    table_id = 'ashareissuingdatepredict'
+    
+    def download_data(self, factors, _in=None, _between=None, _equal=None, **kwargs):
+        """取数据"""
+        def _reconstruct(raw):
+            raw.fillna(0, inplace=True)
+            raw['IDs'] = raw['IDs'].astype('int32')
+            raw['date'] = raw['date'].astype('int32')
+            raw['pre_ann_dt'] = raw['pre_ann_dt'].astype('int32')
+            raw['ann_dt'] = raw['ann_dt'].astype('int32')
+            return raw
+
+        def _wrapper(idata):
+            for i in idata:
+                i = _reconstruct(i)
+                yield i
+
+        data = self.load_factors(factors, self.table_name, _in, _between, _equal, **kwargs)
+        if isinstance(data, Iterator):
+            return _wrapper(data)
+        if data.empty:
+            return data
+        data = _reconstruct(data)
+        return data
+
+    def save_data(self, data, table_id=None, if_exists='append'):
+        super(WindIssuingDate, self).save_data(data, self.table_id, if_exists)
+
+    @property
+    def all_data(self):
+        data = self.load_h5(self.table_id)
+        return data
+    
+
+
 if __name__ == '__main__':
     # from FactorLib.data_source.stock_universe import StockUniverse
     from datetime import datetime
