@@ -2,12 +2,14 @@ import pandas as pd
 import numpy as np
 from . import incomesheet, profitexpress, balancesheet, windissuingdate
 from ..base_data_source_h5 import tc
+from .database import _reconstruct
+from ..helpers import handle_ids
 from pathlib import Path
 
 
 def _read_mapping():
-    file_path = Path(__file__).parent / 'resource' / 'financesheet_map.xlsx'
-    mapping = pd.read_csv(file_path, header=0, index_col=0)
+    file_path = Path(__file__).parent.parent.parent / 'resource' / 'financesheet_map.xlsx'
+    mapping = pd.read_excel(file_path, header=0, index_col=0)
     return mapping
 
 
@@ -20,8 +22,9 @@ def _get_mapping(filed_name):
     return formal_tb, map_series.to_dict()
 
 
-def get_report_ann_dt(start_date=None, end_date=None, dates=None, ids=None, quarter=None):
-    """指定日期的最新报告期"""
+@handle_ids
+def get_latest_report(start_date=None, end_date=None, dates=None, ids=None, quarter=None):
+    """获取指定日期的最新报告期"""
     data = windissuingdate.all_data
 
     if ids is not None:
@@ -33,6 +36,9 @@ def get_report_ann_dt(start_date=None, end_date=None, dates=None, ids=None, quar
             ids_int = ids.index.get_level_values('IDs').unique().astype('int32').tolist()
             data = data.query("IDs in @ids_int")
 
+    if quarter is not None:
+        data = data[data['date'] % 10000 // 100 == quarter*3]
+
     if isinstance(dates, list):
         dates = np.asarray(dates).astype('int32')
     elif isinstance(dates, pd.DatetimeIndex):
@@ -43,15 +49,17 @@ def get_report_ann_dt(start_date=None, end_date=None, dates=None, ids=None, quar
         raise ValueError
     r = []
     for date in dates:
-        tmp = data[(data['ann_dt'] <= date) & (data['ann_dt'] != 0)].groupby('IDs')['date'].max()
-
-
-
-
+        tmp = data[(data['ann_dt'] <= date) & (data['ann_dt'] != 0)].groupby('IDs', as_index=False)['date'].max()
+        tmp.rename(columns={'date': 'report_period'}, inplace=True)
+        tmp['date'] = date
+        r.append(tmp)
+    rslt = _reconstruct(pd.concat(r).set_index(['date', 'IDs']))
+    if isinstance(ids, (pd.DataFrame, pd.Series)):
+        return rslt.reindex(ids.index)
+    return rslt
 
 
 def load_newest(field_name, year, quarter, dates, ids=None):
     """包含业绩快报和正式财报的数据"""
     table_name, field_dict = _get_mapping(field_name)
     table_name, table_id = table_name.split('_')
-    globals()[table_id].l
