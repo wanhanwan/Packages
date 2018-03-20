@@ -909,7 +909,45 @@ class WindIssuingDate(WindFinanceDB):
     def all_data(self):
         data = self.load_h5(self.table_id)
         return data
-    
+
+
+class WindAshareDesc(WindFinanceDB):
+    """A股基本资料"""
+    table_name = u'中国A股基本资料'
+    table_id = 'asharedescription'
+
+    def download_data(self, factors, _in=None, _between=None, _equal=None, **kwargs):
+        """取数据"""
+        exec_market = {'434004000': 0, '434003000': 1, '434001000': 2}
+        def _reconstruct(raw):
+            raw.dropna(subset=['listdate'], inplace=True)
+            raw.fillna({'delistdate': 21000000}, inplace=True)
+            raw['IDs'] = raw['IDs'].astype('int32')
+            raw[['listdate', 'delistdate']] = raw[['listdate', 'delistdate']].astype('int32')
+            raw['shsc'] = raw['shsc'].astype('int32')
+            raw['listboard'] = raw['listboard'].map(exec_market)
+            return raw
+
+        def _wrapper(idata):
+            for i in idata:
+                i = _reconstruct(i)
+                yield i
+
+        data = self.load_factors(factors, self.table_name, _in, _between, _equal, **kwargs)
+        if isinstance(data, Iterator):
+            return _wrapper(data)
+        if data.empty:
+            return data
+        data = _reconstruct(data)
+        return data
+
+    def save_data(self, data, table_id=None, if_exists='append'):
+        super(WindAshareDesc, self).save_data(data, self.table_id, if_exists)
+
+    @property
+    def all_data(self):
+        data = self.load_h5(self.table_id)
+        return data
 
 
 if __name__ == '__main__':
