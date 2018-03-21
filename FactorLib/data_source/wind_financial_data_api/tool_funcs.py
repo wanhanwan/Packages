@@ -59,13 +59,13 @@ def get_latest_report(start_date=None, end_date=None, dates=None, ids=None, quar
     return rslt
 
 
-def get_go_market_days(date, ids=None, uint='d'):
+def get_go_market_days(date, ids=None, unit='d'):
     """已经上市天数"""
     divider = {'d': 1, 'm': 30, 'y': 365}
     date_int = int(date)
     date_dt = pd.to_datetime(date)
     data = winddescription.all_data.query('delistdate > @date_int')
-    go_mkt_days = (date_dt - pd.to_datetime(data['listdate'].astype('str').values)) / pd.to_timedelta(divider[uint], 'd')
+    go_mkt_days = (date_dt - pd.to_datetime(data['listdate'].astype('str').values)) / pd.to_timedelta(divider[unit], 'd')
     data['go_market_days'] = go_mkt_days
     data['date'] = date_int
     if ids is not None:
