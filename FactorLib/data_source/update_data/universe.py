@@ -18,8 +18,19 @@ def u_100001(start, end, **kwargs):
     datasource.h5DB.save_factor(new.to_frame('_100001').astype('int'), '/indexes/')
 
 
+def u_100002(start, end, **kwargs):
+    """
+    最近一年出现资产重组的公司
+    """
+    from FactorLib.data_source.update_data.other_factors.merge_accquisition import merge_acc
+    datasource = kwargs['data_source']
+    dates = datasource.trade_calendar.get_trade_days(start, end)
+    stocks = merge_acc(dates=dates)
+    datasource.h5DB.save_factor(stocks, '/indexes/')
+
+
 UniverseFuncListMonthly = []
-UniverseFuncListDaily = [u_100001]
+UniverseFuncListDaily = [u_100001, u_100002]
 
 
 if __name__ == '__main__':
@@ -28,4 +39,4 @@ if __name__ == '__main__':
     # diversify_finance('20050104', '20171204', data_source=data_source)
     # excld_broker_banks('20050104', '20171204', data_source=data_source)
     # rescale_weight_afterdrop_brokers_and_banks('20050104', '20171204', data_source=data_source)
-    u_100001('20180101', '20180117', data_source=data_source)
+    u_100002('20180301', '20180320', data_source=data_source)
