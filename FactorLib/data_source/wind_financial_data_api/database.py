@@ -2,7 +2,7 @@
 from sqlalchemy import create_engine
 from fastcache import clru_cache
 from FactorLib.data_source.wind_financial_data_api.params import *
-from FactorLib.data_source.wind_financial_data_api.data_loader import DataLoader
+from FactorLib.data_source.wind_financial_data_api.data_loader import DataLoader, quarter2intdate, period_backward, avg
 from FactorLib.data_source.base_data_source_h5 import ncdb, tc
 from FactorLib.utils.tool_funcs import ensure_dir_exists
 from FactorLib.data_source.helpers import handle_ids
@@ -417,11 +417,22 @@ class WindFinanceDB(WindDB):
         return _reconstruct(new)
 
     @handle_ids
-    def load_spec_avg(self, factor_name, year, quarter, nback_quarter=1, start=None, end=None,
+    def load_spec_avg(self, factor_name, year, quarter, back_nquarter=1, start=None, end=None,
                       dates=None, ids=None):
         """两个报告期的平均值，常用在资产负债表上"""
+        new = self.load_spec_period(factor_name, year, quarter, start, end, dates, ids)
+        old_period = period_backward(np.asarray([quarter2intdate(year, quarter)]), back_nquarter=back_nquarter)[0]
+        old = self.load_spec_period(factor_name, old_period//10000, int(old_period % 10000//100/3), start, end, dates,
+                                    ids)
+        return avg(old, new)
 
-        return
+    @handle_ids
+    def load_last_nyear_avg(self, factor_name, quarter, back_nyear=1, start=None, end=None,
+                       dates=None, ids=None):
+        """n年之前报告期期初与期末的平均值"""
+        new = self.load_latest_period(factor_name, start, end, dates, ids, quarter)
+        old = self.load_last_nyear(factor_name, back_nyear, start, end, dates, ids, quarter)
+        return avg(old, new)
 
 
 class WindConsensusDB(WindFinanceDB):
