@@ -624,6 +624,12 @@ class WindIncomeSheet(WindFinanceDB):
         return _reconstruct(new)
 
 
+class WindCashFlow(WindIncomeSheet):
+    """Wind现金流量表"""
+    table_name = u'中国A股现金流量表'
+    table_id = 'cashflow'
+
+
 class WindSQIncomeSheet(WindIncomeSheet):
     table_id = 'sq_income'
     statement_type_map = {'408002000': 1, '408003000': 2}
