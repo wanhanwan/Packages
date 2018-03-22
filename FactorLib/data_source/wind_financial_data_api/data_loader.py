@@ -47,6 +47,12 @@ def avg(old, new):
     return (old + new) / 2.0
 
 
+def div(x, y):
+    """return x/y"""
+    x, y = x.align(y, axis=0, join='inner')
+    return x.iloc[:, 0] / y.iloc[:, 0]
+
+
 class DataLoader(object):
     """财务数据库的数据加载器"""
 

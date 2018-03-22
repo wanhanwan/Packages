@@ -416,6 +416,13 @@ class WindFinanceDB(WindDB):
         new = self.data_loader.inc_rate_hb(data, wind_id, dates, ids)
         return _reconstruct(new)
 
+    @handle_ids
+    def load_spec_avg(self, factor_name, year, quarter, nback_quarter=1, start=None, end=None,
+                      dates=None, ids=None):
+        """两个报告期的平均值，常用在资产负债表上"""
+
+        return
+
 
 class WindConsensusDB(WindFinanceDB):
     """Wind中国A股一致预期汇总数据库
