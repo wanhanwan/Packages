@@ -75,10 +75,10 @@ class DataLoader(object):
             else:
                 data = raw_data.query("ann_dt <= @date")
             latest = data.groupby('IDs')[[field_name, 'date']].last()
-            latest_year = data.query("quarter == 4").groupby('IDs')[field_name].last()
             tmp = data.groupby(['IDs', 'date'])[field_name].last()
-            last_year = self._last_nyear(tmp, latest['date'])
-            ittm = latest[field_name] + latest_year - last_year
+            last_year = self._last_nyear(tmp, latest['date'], quarter=4)
+            last_quarter = self._last_nyear(tmp, latest['date'])
+            ittm = latest[field_name] + last_year - last_quarter
             ittm.index = pd.MultiIndex.from_product([[date], ittm.index], names=['date', 'IDs'])
             r.append(ittm)
         return pd.concat(r)
