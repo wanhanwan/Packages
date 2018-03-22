@@ -25,10 +25,10 @@ def _read_est_dict():
     return wind_table_info, wind_factor_info
 
 
-def _drop_invalid_stocks(data):
+def _drop_invalid_stocks(data, field_name='IDs'):
     """去掉非法股票"""
-    invalid_ids = [x for x in data['IDs'].unique() if x[0] not in ['6', '0', '3'] or not x.isdigit()]
-    return data.query("IDs not in @invalid_ids")
+    invalid_ids = [x for x in data[field_name].unique() if x[0] not in ['6', '0', '3'] or not x.isdigit()]
+    return data.query("%s not in @invalid_ids" % field_name)
 
 
 def _reconstruct(data):
@@ -317,6 +317,10 @@ class WindFinanceDB(WindDB):
         idata = idata.sort_values(['IDs', 'date', 'ann_dt', 'stat_type']).reset_index(drop=True)
         return idata
 
+    def _wrap_add_quarter_year(self, data):
+        for idata in data:
+            yield self.add_quarter_year(idata)
+
     def save_factor(self, data, path, factor_name, if_exists='append'):
         tar_file = os.path.join(path, factor_name+'.h5')
         if (if_exists == 'replace') or (not os.path.isfile(tar_file)):
@@ -326,7 +330,8 @@ class WindFinanceDB(WindDB):
             raw_data = pd.read_hdf(tar_file, "data")
             new_data = raw_data.append(data).drop_duplicates(subset=table_index, keep='last')
             c = _search_columns(new_data.columns, ['IDs', 'date', 'ann_dt', 'stat_type'])
-            new_data = new_data.sort_values(c).reset_index(drop=True)
+            new_data = new_data.sort_values(c)
+            new_data.reset_index(drop=True, inplace=True)
             new_data.to_hdf(tar_file, "data", mode='w', complib='blosc', complevel=9)
 
     @clru_cache()
@@ -581,7 +586,9 @@ class WindIncomeSheet(WindFinanceDB):
         else:
             _in.update(statement_type)
         data = self.load_factors(factors, self.table_name, _in, _between, _equal, **kwargs)
-        return self.add_quarter_year(data)
+        if not isinstance(data, Iterator):
+            return self.add_quarter_year(data)
+        return self._wrap_add_quarter_year(data)
 
     def save_data(self, data, table_id=None, if_exists='append'):
         super(WindIncomeSheet, self).save_data(data, self.table_id, if_exists)
@@ -631,7 +638,9 @@ class WindSQIncomeSheet(WindIncomeSheet):
         else:
             _in.update(statement_type)
         data = self.load_factors(factors, self.table_name, _in, _between, _equal, **kwargs)
-        return self.add_quarter_year(data)
+        if not isinstance(data, Iterator):
+            return self.add_quarter_year(data)
+        return self._wrap_add_quarter_year(data)
 
 
 class WindBalanceSheet(WindFinanceDB):
@@ -653,7 +662,9 @@ class WindBalanceSheet(WindFinanceDB):
         else:
             _in.update(statement_type)
         data = self.load_factors(factors, self.table_name, _in, _between, _equal, **kwargs)
-        return self.add_quarter_year(data)
+        if not isinstance(data, Iterator):
+            return self.add_quarter_year(data)
+        return self._wrap_add_quarter_year(data)
 
     @handle_ids
     def load_ttm_avg(self, factor_name, start=None, end=None, dates=None, ids=None):
@@ -694,14 +705,21 @@ class WindProfitExpress(WindFinanceDB):
     table_id = 'profit_express'
     statement_type_map = {'0001': 0}
 
+    def add_quarter_year(self, data):
+        if data.empty:
+            return data
+        else:
+            data['stat_type'] = '0001'
+            return data
+
     def download_data(self, factors, _in=None, _between=None, _equal=None, **kwargs):
         """取数据
         """
+
         data = self.load_factors(factors, self.table_name, _in, _between, _equal, **kwargs)
-        if data.empty:
-            return data
-        data['stat_type'] = '0001'
-        return self.add_quarter_year(data)
+        if not isinstance(data, Iterator):
+            return self.add_quarter_year(data)
+        return self._wrap_add_quarter_year(data)
 
     def save_data(self, data, table_id=None, if_exists='append'):
         super(WindProfitExpress, self).save_data(data, self.table_id, if_exists)
@@ -734,9 +752,9 @@ class WindProfitNotice(WindFinanceDB):
         取数据
         """
         data = self.load_factors(factors, self.table_name, _in, _between, _equal, **kwargs)
-        if data.empty:
-            return data
-        return self.add_quarter_year(data)
+        if not isinstance(data, Iterator):
+            return self.add_quarter_year(data)
+        return self._wrap_add_quarter_year(data)
 
     def save_data(self, data, table_id=None, if_exists='append'):
         super(WindProfitNotice, self).save_data(data, self.table_id, if_exists)
@@ -847,6 +865,8 @@ class WindChangeWindcode(WindFinanceDB):
     def download_data(self, factors, _in=None, _between=None, _equal=None, **kwargs):
         """取数据"""
         def _reconstruct(raw):
+            raw.dropna(subset=['change_dt'], inplace=True)
+            raw = _drop_invalid_stocks(raw, 'new_id')
             raw['IDs'] = raw['IDs'].astype('int32')
             raw['change_dt'] = raw['change_dt'].astype('int32')
             raw['new_id'] = raw['new_id'].str[:6].astype('int32')
