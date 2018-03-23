@@ -112,8 +112,13 @@ class BaseDB(object):
 
     @staticmethod
     def create_conn_string(user_name, pass_word, db_name, ip_address, port, db_type):
+        if db_type == 'mysql':
+            return "{db_type}+pymysql://{user_name}:{pass_word}@{ip_address}:{port}/{db_name}".format(
+                db_type=db_type, user_name=user_name, pass_word=pass_word, ip_address=ip_address,
+                port=port, db_name=db_name)
         return "{db_type}://{user_name}:{pass_word}@{ip_address}:{port}/{db_name}".format(
-            db_type=db_type, user_name=user_name, pass_word=pass_word, ip_address=ip_address, port=port, db_name=db_name)
+                db_type=db_type, user_name=user_name, pass_word=pass_word, ip_address=ip_address,
+                port=port, db_name=db_name)
 
     def exec_query(self, query_str, **kwargs):
         with self.db_engine.connect() as conn, conn.begin():

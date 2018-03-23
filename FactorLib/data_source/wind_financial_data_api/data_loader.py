@@ -56,7 +56,14 @@ def avg(old, new):
 
 
 def div(x, y):
-    """return x/y"""
+    """return x/y
+
+    parameters:
+    ================
+    x : pd.DataFrame
+
+    y : pd.DataFrame
+    """
     x, y = x.align(y, axis=0, join='inner')
     return x.iloc[:, 0] / y.iloc[:, 0]
 
