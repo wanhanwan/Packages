@@ -13,6 +13,7 @@ from .database import (WindIncomeSheet,
                        WindAshareDesc,
                        WindCashFlow
                        )
+from .data_loader import div, avg, period_backward
 
 incomesheet = WindIncomeSheet()
 cashflow = WindCashFlow()
@@ -33,3 +34,5 @@ winddescription = WindAshareDesc()
 __all__ = ['incomesheet', 'sqincomesheet', 'consensussheet', 'balancesheet', 'profitexpress', 'profitnotice',
            'asharecapitalization', 'aindexmembers', 'aindexmemberswind', 'windchangecode', 'windearningest',
            'windissuingdate', 'winddescription', 'cashflow']
+
+__all__ += ['div', 'avg', 'period_backward']

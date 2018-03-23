@@ -22,6 +22,14 @@ def period_backward(dates, quarter=None, back_nyear=1, back_nquarter=None):
     return (year - back_nyear) * 10000 + month * 100 + day
 
 
+def quarter2intdate(year, quarter):
+    if quarter in [1, 4]:
+        day = 31
+    else:
+        day = 30
+    return year * 10000 + quarter * 3 * 100 + day
+
+
 def incr_rate(old, new):
     """计算增长率
     遵循如下计算规则:
@@ -45,6 +53,19 @@ def avg(old, new):
     old, new = old.align(new, axis=0, join='outer')
     old.fillna(new, inplace=True)
     return (old + new) / 2.0
+
+
+def div(x, y):
+    """return x/y
+
+    parameters:
+    ================
+    x : pd.DataFrame
+
+    y : pd.DataFrame
+    """
+    x, y = x.align(y, axis=0, join='inner')
+    return x.iloc[:, 0] / y.iloc[:, 0]
 
 
 class DataLoader(object):
