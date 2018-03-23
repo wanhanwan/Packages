@@ -1,16 +1,17 @@
 """股票池分类"""
 import pandas as pd
 from FactorLib.data_source.base_data_source_h5 import data_source, h5
+from FactorLib.data_source.wind_financial_data_api.tool_funcs import get_go_market_days
 
 
 def u_100001(start, end, **kwargs):
     """
-    1. 连续两年扣非净利润不少于一千万
+    1. 连续两年扣非净利润不少于五千万
     2. 上市时间超过两年
     """
     datasource = kwargs['data_source']
     dates = datasource.trade_calendar.get_trade_days(start, end, '1d')
-    list_days = data_source.load_factor('list_days', '/stocks/', dates=dates)
+    list_days = get_go_market_days(dates)
     np_ly0 = data_source.load_factor('net_profit_deduct_nonprofit', '/stock_profit/', dates=dates)
     np_ly1 = data_source.load_factor('net_profit_deduct_nonprofit_ly1', '/stock_profit/', dates=dates)
     data = list_days.join([np_ly0, np_ly1])
@@ -35,7 +36,6 @@ def u_100003(start, end, **kwargs):
         2. 最近一年之内没有发生资产重组
         3. 2014年之前市值小于30亿，2015年之后市值大于50亿
         """
-    from FactorLib.data_source.wind_financial_data_api.tool_funcs import get_go_market_days
     for date in data_source.trade_calendar.get_trade_days(start, end):
         date_dt = pd.to_datetime(date)
         # 上市年数
@@ -55,7 +55,7 @@ def u_100003(start, end, **kwargs):
 
 
 UniverseFuncListMonthly = []
-UniverseFuncListDaily = [u_100001, u_100002, u_100003]
+UniverseFuncListDaily = [u_100002, u_100003]
 
 
 if __name__ == '__main__':
