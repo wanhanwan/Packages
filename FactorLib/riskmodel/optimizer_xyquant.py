@@ -641,6 +641,8 @@ class Optimizer(object):
         else:
             raise ValueError("不支持的base设定")
         limit_ids = list(base_weight.index.values)
+        if isinstance(limit_ids[0], unicode):
+            limit_ids = [x.encode('utf8') for x in limit_ids]
         base_weight_values = base_weight.values.tolist()
 
         auxiliary_vars = []
@@ -650,6 +652,8 @@ class Optimizer(object):
             self.auxiliary_vars.append(a)
 
         # 辅助变量的绝对值之和小于等于limit
+        if isinstance(auxiliary_vars[0], unicode):
+            auxiliary_vars = [x.encode('utf8') for x in auxiliary_vars]
         self._c.variables.add(names=auxiliary_vars)
         self._c.linear_constraints.add(lin_expr=[[auxiliary_vars, [1]*len(auxiliary_vars)]], senses=['L'], rhs=[limit],
                                        names=[get_available_names('diversion', self.names_used)]
