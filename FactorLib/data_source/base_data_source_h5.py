@@ -419,7 +419,10 @@ class sector(object):
             index_members = index_members[index_members['_%s' % ids] == 1.0]
             return index_members[index_members.index.isin(all_stocks.index)]
         elif ids in USER_INDEX_DICT:
-            index_members = self.h5DB.load_factor('%s' % ids, '/indexes/', dates=dates)
+            try:
+                index_members = self.h5DB.load_factor('%s' % ids, '/indexes/', dates=dates)
+            except FileNotFoundError:
+                index_members = self.h5DB.load_factor('_%s' % ids, '/indexes/', dates=dates)
             index_members = index_members[index_members['%s' % ids] == 1.0]
             return index_members[index_members.index.isin(all_stocks.index)]
         else:
@@ -504,6 +507,7 @@ class sector(object):
     def get_ashare_onlist(self, dates, months_filter=24):
         """获得某一天已经上市的公司，并且上市日期不少于24个月"""
         import sys
+        from FactorLib.data_source.wind_financial_data_api.tool_funcs import get_go_market_days
         if sys.version_info.major > 2:
             ashare = self.get_history_ashare(dates).swaplevel()
             ashare_onlist_date = self.h5DB.load_factor(
@@ -520,8 +524,8 @@ class sector(object):
             temp_ind = (onlist_period / timedelta(1)) > months_filter * 30
             return ashare_info.set_index(['date', 'IDs']).loc[temp_ind.values, ['list_date']].copy()
         else:
-            ashare = self.h5DB.load_factor('list_days', '/stocks/', dates=dates)
-            ashare = ashare[ashare.list_days/30>months_filter]
+            ashare = get_go_market_days(date=dates, unit='m')
+            ashare = ashare[ashare.go_market_days > months_filter]
             return pd.DataFrame(np.ones(len(ashare)), index=ashare.index, columns=['ashare'])
 
     def get_stock_info(self, ids, date):
