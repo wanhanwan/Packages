@@ -1,8 +1,10 @@
 # coding: utf-8
-from FactorLib.data_source.base_data_source_h5 import sec
+from FactorLib.data_source.base_data_source_h5 import sec, ncdb, tc, data_source
 from fastcache import clru_cache
 from QuantLib.stockFilter import _intersection, _difference, _union
 import re
+import os
+import pandas as pd
 
 
 class StockUniverse(object):
@@ -39,6 +41,53 @@ class StockUniverse(object):
             return self.algorithm(base, other)
 
 
+class StockDummy(object):
+    """行业哑变量封装接口
+    所有的数据放在ncdb数据目录中的dummy文件夹
+    """
+    data_dir = ncdb.data_path + '/dummy'
+    all_dummies = [x[:-3] for x in os.listdir(data_dir)]
+
+    def __init__(self, name):
+        self.name = name
+
+    def check_existence(self, name):
+        return name in self.all_dummies
+
+    def get(self, start_date=None, end_date=None, dates=None):
+        """获取哑变量数据"""
+        if dates is None:
+            dates = tc.get_trade_days(start_date=start_date, end_date=end_date)
+        dummy = ncdb.load_as_dummy(self.name, '/dummy/', dates=dates)
+        return dummy
+
+    def get_stocks_of_single_field(self, field_name, start_date=None, end_date=None,
+                                   dates=None):
+        """获取某一个板块的成分股"""
+        if field_name not in self.all_fields:
+            raise KeyError
+        dummy = self.get(start_date, end_date, dates)
+        return dummy[dummy[field_name] == 1]
+
+    def get_return(self, start_date=None, end_date=None, dates=None):
+        """每个板块市值加权的日收益率"""
+        dummy = self.get(start_date, end_date, dates)
+        mv = data_source.load_factor('float_mkt_value', '/stocks/', start_date=start_date,
+                                     end_date=end_date, dates=dates) ** 0.5
+        mv = mv.reindex(dummy.index, copy=False)
+        r = data_source.load_factor('daily_returns', '/stocks/', start_date=start_date,
+                                    end_date=end_date, dates=dates)
+        r = r.reindex(dummy.index, copy=False)
+        r_mv = r.values * mv.values
+        dummy_ret = pd.DataFrame(r_mv * dummy.values, index=dummy.index, columns=dummy.columns).groupby('date').sum()
+        dummy_weight = pd.DataFrame(mv.values * dummy.values, index=dummy.index, columns=dummy.columns).groupby('date').sum()
+        return dummy_ret / dummy_weight
+
+    @property
+    def all_fields(self):
+        return ncdb.load_file_attr(self.name, '/dummy/', 'indu_names')
+
+
 def from_formula(formula):
     """把字符串公式转换成StockUniverse
 
@@ -58,10 +107,6 @@ def from_formula(formula):
 
 
 if __name__ == '__main__':
-    u1 = StockUniverse('000906')
-    u2 = StockUniverse('000300')
-
-    u = from_formula("000300")
-    s = u.get('20100104', '20110106')
-    print(s)
-    print(len(s))
+    d = StockDummy('user_dummy_class_1')
+    r = d.get_return(start_date='20180201', end_date='20180228')
+    print(r)

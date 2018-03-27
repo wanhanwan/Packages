@@ -63,7 +63,9 @@ class base_data_source(object):
     def load_factor(self, symbol, factor_path, ids=None, dates=None, start_date=None, end_date=None, idx=None):
         if idx is None:
             dates = self.trade_calendar.get_trade_days(start_date, end_date) if dates is None else dates
-        return self.h5DB.load_factor(symbol, factor_path, ids=ids, dates=dates,idx=idx)
+        if dates is None:
+            dates = self.trade_calendar.get_trade_days(start_date, end_date)
+        return self.h5DB.load_factor(symbol, factor_path, ids=ids, dates=dates, idx=idx)
 
     def get_history_price(self, ids, dates=None, start_date=None, end_date=None,
                           freq='1d', type='stock', adjust=False):
