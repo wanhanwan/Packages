@@ -77,10 +77,11 @@ class H5DB(object):
     # --------------------------数据管理-------------------------------------------
     @handle_ids
     def load_factor(self, factor_name, factor_dir=None, dates=None, ids=None, idx=None):
+        if idx is not None:
+            dates = idx.index.get_level_values('date').unique()
+            return self.load_factor(factor_name, factor_dir=factor_dir, dates=dates).reindex(idx.index, copy=False)
         factor_path = self.abs_factor_path(factor_dir, factor_name)
         panel = pd.read_hdf(factor_path, factor_name)
-        if idx is not None:
-            return panel.to_frame().rename_axis(['date','IDs']).reindex(idx.index)
         if (ids is not None) and (not isinstance(ids, list)):
             ids = [ids]
         if dates is None and ids is None:

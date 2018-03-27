@@ -10,6 +10,7 @@ from ..update_data.growth_factor import GrowthFuncListDaily
 from ..update_data.profit_factor import ProfitFuncListDaily
 from ..update_data.universe import UniverseFuncListDaily
 from .other_factors import merge_accquisition
+from .dummies.class_define import classUpdateFuncsDaily
 
 
 def change_indexmembers():
@@ -73,6 +74,10 @@ def dailyfactors(start, end):
     # 更新股票池
     for func in UniverseFuncListDaily:
         func(start, end, data_source=data_source)
+
+    # 更新哑变量
+    for func in classUpdateFuncsDaily:
+        func(start, end)
 
     # 其他函数
     change_indexmembers()
