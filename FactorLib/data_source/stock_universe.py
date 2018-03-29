@@ -67,7 +67,7 @@ class StockDummy(object):
         if field_name not in self.all_fields:
             raise KeyError
         dummy = self.get(start_date, end_date, dates)
-        return dummy[dummy[field_name] == 1]
+        return dummy.loc[dummy[field_name] == 1, [field_name]]
 
     def get_return(self, start_date=None, end_date=None, dates=None):
         """每个板块市值加权的日收益率"""
