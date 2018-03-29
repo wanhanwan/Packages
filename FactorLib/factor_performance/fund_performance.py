@@ -1,3 +1,5 @@
+# coding: utf-8
+
 from .toolfuncs import *
 from empyrical import stats
 from scipy import stats as stats_scp
