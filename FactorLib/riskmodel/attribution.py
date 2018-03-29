@@ -3,13 +3,17 @@
 
 import pandas as pd
 import numpy as np
-import TSLPy3 as tsl
 from .riskmodel_data_source import RiskDataSource
 from ..data_source.base_data_source_h5 import data_source
 from ..utils.tool_funcs import uqercode_to_windcode, windcode_to_tslcode
 from ..data_source.base_data_source_h5 import tc
 from ..data_source.trade_calendar import as_timestamp
 from fastcache import clru_cache
+
+try:
+    import TSLPy3 as tsl
+except ImportError:
+    pass
 
 
 class RiskExposureAnalyzer(object):

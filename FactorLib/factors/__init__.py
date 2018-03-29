@@ -1,5 +1,8 @@
+# coding: utf-8
+
 import pandas as pd
 from .panel_factor import panelFactor
+
 
 def load_factor(factor_path):
     """加载因子"""
