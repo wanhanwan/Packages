@@ -57,9 +57,13 @@ class RiskExposureAnalyzer(object):
         从csv文件中导入股票持仓，返回类实例 \n
         csv文件的格式：日期  代码(wind格式)  权重
         """
-        with open(csv_path) as f:
-            stocks = pd.read_csv(f, header=0, index_col=None, parse_dates=['date'],
+        try:
+            stocks = pd.read_csv(csv_path, header=0, index_col=None, parse_dates=['date'],
                                  converters={'IDs': lambda x: x[:6]})
+        except Exception as e:
+            with open(csv_path) as f:
+                stocks = pd.read_csv(f, header=0, index_col=None, parse_dates=['date'],
+                                     converters={'IDs': lambda x: x[:6]})
         stocks = stocks.set_index(['date', 'IDs'])
         return cls(stocks=stocks, **kwargs)
 
@@ -151,7 +155,7 @@ class RiskExposureAnalyzer(object):
         """
         计算单期因子暴露分析
         """
-        date = [date]
+        date = np.asarray([date])
         return self.cal_multidates_expo(date)
 
     def cal_multidates_expo(self, dates):
