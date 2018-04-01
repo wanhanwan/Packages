@@ -63,6 +63,7 @@ class Optimizer(object):
         self._nontrad_pre = None
         self._nontrad_target = None
         self._bchmrk_notin_tar = None
+        self._preid_notin_tar = None
         self._signal = None
         self.estu = self._rskds.load_factors(['Estu'], dates=[self._date]).reset_index(level='date', drop=True)
 
@@ -99,14 +100,12 @@ class Optimizer(object):
             self._bchmrk_weight = bchmrk_weight
 
         # 找出上期持仓中停牌的股票
+        preids = []
+        nontrad_pre = []
         if asset is not None:
             preids = [x.encode('utf8') for x in asset[asset != 0.0].index.tolist()]
             if preids:
                 nontrad_pre = suspendtrading(preids, self._date)
-            else:
-                nontrad_pre = []
-        else:
-            nontrad_pre = []
         
         # 找出不在target_ids中的基准成分股
         bchmrk_notin_tar = list(set(self._bchmrk_weight.index.tolist()).difference(set(self.target_ids)))
@@ -117,7 +116,7 @@ class Optimizer(object):
         nontrad_target = [x.encode('utf8') for x in nontrad_target]
         
         # 全部股票池包含了三部分的股票：目标股票池、基准指数以及上期股票池中停牌的股票
-        allids = list(set(self.target_ids+self._bchmrk_weight.index.tolist()+nontrad_pre))
+        allids = list(set(self.target_ids+self._bchmrk_weight.index.tolist()+nontrad_pre+preids))
         allids = [x.encode('utf8') for x in allids]
         allids.sort()
 
@@ -129,6 +128,7 @@ class Optimizer(object):
         self._nontrad_pre = nontrad_pre
         self._nontrad_target = nontrad_target
         self._bchmrk_notin_tar = bchmrk_notin_tar
+        self._preid_notin_tar = list(set(preids) - set(self.target_ids))
         # return nontrad_pre, nontrad_target, bchmrk_notin_tar, signal.reindex(allids, fill_value=.0)
 
     def _init_opt_prob(self):
@@ -151,11 +151,13 @@ class Optimizer(object):
         self._c.variables.set_lower_bounds([(x, 0) for x in nvar])
 
         # 加入线性限制
-        limit_ids = list(set(self._nontrad_pre+self._bchmrk_notin_tar+self._nontrad_target))
+        limit_ids = list(set(self._nontrad_pre+self._bchmrk_notin_tar+self._nontrad_target+self._preid_notin_tar))
         if limit_ids:
             limit_values = pd.Series(np.zeros(len(limit_ids)), index=limit_ids)
             if self._nontrad_pre:
-                limit_values.loc[self._nontrad_pre] = self._asset.loc[self._nontrad_pre, 'previous_weight']
+                limit_values.loc[self._nontrad_pre] = self._asset.loc[self._nontrad_pre]
+            if self._preid_notin_tar:
+                limit_values.loc[self._preid_notin_tar] = self._asset.loc[self._preid_notin_tar]
             lin_exprs = []
             rhs = []
             names = []
@@ -189,7 +191,7 @@ class Optimizer(object):
         if self._asset is None:
             self.opt_rslt['previous_weight'] = 0.0
         else:
-            self.opt_rslt['previous_weight'] = self._asset.reindex(self._signal.index, fill_value=0.0)
+            self.opt_rslt['previous_weight'] = self._asset.reindex(self._signal.index, fill_value=0.0).values
 
     def _add_style_cons(self, style_dict, active=True, sense='E'):
         """
@@ -631,7 +633,8 @@ class Optimizer(object):
         limit : float
             设定的偏离度上限
         """
-        if base == 'Benchmark':
+        if isinstance(base, str):
+            assert base == 'Benchmark'
             base_weight = self._bchmrk_weight[~self._bchmrk_weight.index.isin(self._nontrad_target)]
         elif isinstance(base, pd.Series):
             base_weight = base[~base.index.isin(self._nontrad_target)]
@@ -726,6 +729,8 @@ class Optimizer(object):
         """
         生成目标函数
         """
+        if isinstance(self._signal, pd.DataFrame):
+            self._signal = self._signal.iloc[:, 0]
         if np.any(pd.isnull(self._signal)):
             warnings.warn("组合信号存在缺失值！")
             # 把信号缺失的股票的权重设为零
@@ -858,7 +863,9 @@ class PortfolioOptimizer(object):
 
             if optimizer.optimal:
                 print("%s权重优化成功" % idate.strftime("%Y-%m-%d"))
-                optimal_assets.append(optimizer.opt_rslt.loc[optimizer.opt_rslt['optimal_weight'] > 0.001, 'optimal_weight'])
+                opt_weight = optimizer.opt_rslt.loc[optimizer.opt_rslt['optimal_weight'] > 0.001, 'optimal_weight']
+                opt_weight = opt_weight / opt_weight.sum()
+                optimal_assets.append(opt_weight)
             else:
                 print("%s权重优化失败:%s" % (idate.strftime("%Y-%m-%d"), optimizer.solution_status))
                 self.log[idate.strftime("%Y-%m-%d")] = optimizer.solution_status
