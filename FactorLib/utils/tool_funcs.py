@@ -77,6 +77,10 @@ def uqercode_to_windcode(uqercode):
     return uqercode[:6]+'.SH' if uqercode[-4:]=='XSHG' else uqercode[:6]+'.SZ'
 
 @clru_cache()
+def tradecode_to_uqercode(tradecode):
+    return tradecode+'.XSHG' if tradecode[0] == '6' else tradecode+'.XSHE'
+
+@clru_cache()
 def tradecode_to_tslcode(code):
     return 'SH'+code if code[0] == '6' else 'SZ'+code
 
