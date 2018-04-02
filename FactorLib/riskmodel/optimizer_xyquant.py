@@ -73,6 +73,7 @@ class Optimizer(object):
         self._init_opt_prob()
         self.names_used = []
         self.auxiliary_vars = []
+        self.diversion_limit_num = 0
 
     def _create_signal(self, signal, asset):
         """重新整合参数，确定需要优化的股票池以及对应的信号
@@ -151,6 +152,8 @@ class Optimizer(object):
         self._c.variables.set_lower_bounds([(x, 0) for x in nvar])
 
         # 加入线性限制
+        # 上期持仓中停牌股票的权重保持不变；不在目标股票池中的股票权重设为零；
+        # 目标持仓中停牌的股票权重亦为零
         limit_ids = list(set(self._nontrad_pre+self._bchmrk_notin_tar+self._nontrad_target+self._preid_notin_tar))
         if limit_ids:
             limit_values = pd.Series(np.zeros(len(limit_ids)), index=limit_ids)
@@ -170,9 +173,30 @@ class Optimizer(object):
                 names.append('notrading_%s' % i)
             self._c.linear_constraints.add(lin_expr=lin_exprs, senses=senses, rhs=rhs, names=names)
             self._internal_limit = limit_values
+        # 上期持仓中涨停股票不能买入，跌停股票不能卖出。
+        uplimit = data_source.sector.get_uplimit(dates=[self._date])
+        downlimit = data_source.sector.get_downlimit(dates=[self._date])
+        pre_up = list(set(uplimit.index.get_level_values('IDs'))\
+                      .intersection(self._asset[self._asset != 0.0].index.get_level_values('IDs')))
+        pre_down = list(set(downlimit.index.get_level_values('IDs'))\
+                      .intersection(self._asset[self._asset != 0.0].index.get_level_values('IDs')))
+        lin_exprs = []
+        rhs = []
+        names = []
+        senses = []
+        for i, x, v in zip(pre_up+pre_down, ['L']*len(pre_up)+['G']*len(pre_down),
+                           self._asset[pre_up+pre_down].values):
+            if isinstance(i, unicode):
+                i = i.encode('utf8')
+            lin_exprs.append([[i], [1]])
+            senses.append(x)
+            rhs.append(v)
+            names.append('tradelimit_%s' % i)
+        self._c.linear_constraints.add(lin_expr=lin_exprs, senses=senses, rhs=rhs, names=names)
+
 
         # 现金中性, target_ids和nontrade_pre中的股票权重之和是1
-        trading_stocks = list(set(self.target_ids).union(set(self._nontrad_pre)))
+        trading_stocks = list(set(self.target_ids).union(set(self._preid_notin_tar)))
         trading_stocks = [x.encode('utf8') if isinstance(x, unicode) else x for x in trading_stocks]
         self._c.linear_constraints.add(lin_expr=[[trading_stocks, [1]*len(trading_stocks)]],
                                        senses=['E'],
@@ -666,13 +690,30 @@ class Optimizer(object):
                                        )
         self.names_used.append(get_available_names('diversion', self.names_used))
 
-        for a, b, v in zip(auxiliary_vars, limit_ids, base_weight_values):
-            name1 = get_available_names('diversion_abs', self.names_used)
-            self.names_used.append(name1)
-            name2 = get_available_names('diversion_abs', self.names_used)
-            self.names_used.append(name2)
-            self._c.linear_constraints.add(lin_expr=[[[a, b], [1, -1]],[[a, b], [1, 1]]], senses=['G','G'], rhs=[-v, v],
-                names=[name1, name2])
+        # for a, b, v in zip(auxiliary_vars, limit_ids, base_weight_values):
+        #     name1 = get_available_names('diversion_abs', self.names_used)
+        #     self.names_used.append(name1)
+        #     name2 = get_available_names('diversion_abs', self.names_used)
+        #     self.names_used.append(name2)
+        #     self._c.linear_constraints.add(lin_expr=[[[a, b], [1, -1]],[[a, b], [1, 1]]], senses=['G','G'], rhs=[-v, v],
+        #         names=[name1, name2])
+
+        names = np.arange(self.diversion_limit_num+1,
+                          self.diversion_limit_num+1+len(limit_ids)*2).astype('str').tolist()
+        v = pd.DataFrame({'auxiliary_vars': auxiliary_vars, 'limit_ids': limit_ids})[['auxiliary_vars', 'limit_ids']]
+        v['v1'] = 1
+        v['v2'] = -1
+        lin_expr = v.values.reshape((-1, 2, 2)).tolist()
+        senses = ['G'] * len(limit_ids)
+        rhs = -np.asarray(base_weight_values)
+        self._c.linear_constraints.add(lin_expr=lin_expr, senses=senses, rhs=rhs.tolist(),
+                                       names=names[:len(limit_ids)])
+        v['v2'] = 1
+        lin_expr = v.values.reshape((-1, 2, 2)).tolist()
+        rhs *= -1
+        self._c.linear_constraints.add(lin_expr=lin_expr, senses=senses, rhs=rhs.tolist(),
+                                       names=names[len(limit_ids):])
+        self.diversion_limit_num += (len(limit_ids) * 2)
 
     def _add_turnover_limit(self, limit):
         """添加换手率限制"""
