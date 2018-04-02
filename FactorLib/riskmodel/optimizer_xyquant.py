@@ -129,7 +129,8 @@ class Optimizer(object):
         self._nontrad_pre = nontrad_pre
         self._nontrad_target = nontrad_target
         self._bchmrk_notin_tar = bchmrk_notin_tar
-        self._preid_notin_tar = list(set(preids) - set(self.target_ids))
+        self._preid_notin_tar = [x.encode('utf8') if isinstance(x, unicode) else x
+                                 for x in list(set(preids) - set(self.target_ids))]
         # return nontrad_pre, nontrad_target, bchmrk_notin_tar, signal.reindex(allids, fill_value=.0)
 
     def _init_opt_prob(self):
