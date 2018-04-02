@@ -1,3 +1,5 @@
+# coding: utf-8
+
 """生成股票列表"""
 from ..data_source.base_data_source_h5 import data_source
 from ..utils.tool_funcs import parse_industry
