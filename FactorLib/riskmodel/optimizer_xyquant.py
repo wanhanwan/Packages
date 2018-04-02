@@ -173,6 +173,7 @@ class Optimizer(object):
 
         # 现金中性, target_ids和nontrade_pre中的股票权重之和是1
         trading_stocks = list(set(self.target_ids).union(set(self._nontrad_pre)))
+        trading_stocks = [x.encode('utf8') if isinstance(x, unicode) else x for x in trading_stocks]
         self._c.linear_constraints.add(lin_expr=[[trading_stocks, [1]*len(trading_stocks)]],
                                        senses=['E'],
                                        rhs=[1],
