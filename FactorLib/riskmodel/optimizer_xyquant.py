@@ -163,6 +163,8 @@ class Optimizer(object):
             names = []
             senses = ['E']*len(limit_values)
             for i, x in limit_values.iteritems():
+                if isinstance(i, unicode):
+                    i = i.encode('utf8')
                 lin_exprs.append([[i], [1]])
                 rhs.append(x)
                 names.append('notrading_%s' % i)
