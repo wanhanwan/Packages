@@ -81,7 +81,7 @@ class base_data_source(object):
         if dates is None:
             dates = self.trade_calendar.get_trade_days(start_date, end_date, freq, retstr=None)
         else:
-            dates1 = self.trade_calendar.get_latest_trade_days(start_date, end_date, freq, retstr=None)
+            dates1 = self.trade_calendar.get_trade_days(start_date, end_date, freq, retstr=None)
             dates = pd.DatetimeIndex(dates).intersection(dates1)
         daily_price = self.h5DB.load_factor(symbol, database, dates=dates, ids=ids)
         return daily_price
