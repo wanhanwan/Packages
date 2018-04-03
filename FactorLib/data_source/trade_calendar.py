@@ -168,8 +168,8 @@ traderule_alias_mapping = {
 
 
 def _to_offset(freq):
-    if freq[1] in traderule_alias_mapping:
-        return traderule_alias_mapping.get(freq[1]) * int(freq[0])
+    if freq[-1] in traderule_alias_mapping:
+        return traderule_alias_mapping.get(freq[-1]) * int(freq[:-1])
     else:
         return to_offset(freq)
 
