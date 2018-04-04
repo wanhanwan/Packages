@@ -175,25 +175,28 @@ class Optimizer(object):
             self._c.linear_constraints.add(lin_expr=lin_exprs, senses=senses, rhs=rhs, names=names)
             self._internal_limit = limit_values
         # 上期持仓中涨停股票不能买入，跌停股票不能卖出。
-        uplimit = data_source.sector.get_uplimit(dates=[self._date])
-        downlimit = data_source.sector.get_downlimit(dates=[self._date])
-        pre_up = list(set(uplimit.index.get_level_values('IDs'))\
-                      .intersection(self._asset[self._asset != 0.0].index.get_level_values('IDs')))
-        pre_down = list(set(downlimit.index.get_level_values('IDs'))\
-                      .intersection(self._asset[self._asset != 0.0].index.get_level_values('IDs')))
-        lin_exprs = []
-        rhs = []
-        names = []
-        senses = []
-        for i, x, v in zip(pre_up+pre_down, ['L']*len(pre_up)+['G']*len(pre_down),
-                           self._asset[pre_up+pre_down].values):
-            if isinstance(i, unicode):
-                i = i.encode('utf8')
-            lin_exprs.append([[i], [1]])
-            senses.append(x)
-            rhs.append(v)
-            names.append('tradelimit_%s' % i)
-        self._c.linear_constraints.add(lin_expr=lin_exprs, senses=senses, rhs=rhs, names=names)
+        pre_down = []
+        pre_up = []
+        if self._asset is not None:
+            uplimit = data_source.sector.get_uplimit(dates=[self._date])
+            downlimit = data_source.sector.get_downlimit(dates=[self._date])
+            pre_up = list(set(uplimit.index.get_level_values('IDs'))\
+                          .intersection(self._asset[self._asset != 0.0].index.get_level_values('IDs')))
+            pre_down = list(set(downlimit.index.get_level_values('IDs'))\
+                          .intersection(self._asset[self._asset != 0.0].index.get_level_values('IDs')))
+            lin_exprs = []
+            rhs = []
+            names = []
+            senses = []
+            for i, x, v in zip(pre_up+pre_down, ['L']*len(pre_up)+['G']*len(pre_down),
+                               self._asset[pre_up+pre_down].values):
+                if isinstance(i, unicode):
+                    i = i.encode('utf8')
+                lin_exprs.append([[i], [1]])
+                senses.append(x)
+                rhs.append(v)
+                names.append('tradelimit_%s' % i)
+            self._c.linear_constraints.add(lin_expr=lin_exprs, senses=senses, rhs=rhs, names=names)
 
 
         # 现金中性, target_ids和nontrade_pre中的股票权重之和是1
