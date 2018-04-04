@@ -28,7 +28,10 @@ class AbstractStockGenerator(object):
         if isinstance(config_dict['factors'][0], str):
             factors = []
             for f in config_dict['factors']:
-                factors.append(globals()[f])
+                if isinstance(f, list):
+                    factors.append(tuple(f))
+                else:
+                    factors.append(globals()[f])
             config_dict['factors'] = factors
         self.config = AttrDict(config_dict)
 
