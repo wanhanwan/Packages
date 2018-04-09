@@ -914,6 +914,11 @@ class PortfolioOptimizer(object):
             else:
                 print("%s权重优化失败:%s" % (idate.strftime("%Y-%m-%d"), optimizer.solution_status))
                 self.log[idate.strftime("%Y-%m-%d")] = optimizer.solution_status
+                opt_weight = optimizer.opt_rslt.loc[optimizer.opt_rslt['previous_weight'] > 0.001, 'previous_weight']
+                if not opt_weight.empty:
+                    opt_weight = opt_weight / opt_weight.sum()
+                    opt_weight.name = 'optimal_weight'
+                    optimal_assets.append(opt_weight)
         print("优化结束...")
         self.result = pd.concat(optimal_assets).to_frame()
 
