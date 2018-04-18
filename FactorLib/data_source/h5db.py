@@ -4,10 +4,13 @@
 import pandas as pd
 import os
 import shutil
+from multiprocessing import Lock
 from ..utils.datetime_func import Datetime2DateStr, DateStr2Datetime
 from ..utils.tool_funcs import ensure_dir_exists
 from filemanager import zip_dir, unzip_file
 from .helpers import handle_ids
+
+lock = Lock()
 
 
 class H5DB(object):
@@ -138,35 +141,40 @@ class H5DB(object):
         """往数据库中写数据
         数据格式：DataFrame(index=[date,IDs],columns=data)
         """
-        if factor_data.index.nlevels == 1:
-            if isinstance(factor_data.index, pd.DatetimeIndex):
-                factor_data['IDs'] = '111111'
-                factor_data.set_index('IDs', append=True, inplace=True)
-            else:
-                factor_data['date'] = DateStr2Datetime('19000101')
-                factor_data.set_index('date', append=True, inplace=True)
-    
-        self.create_factor_dir(factor_dir)
-        for column in factor_data.columns:
-            factor_path = self.abs_factor_path(factor_dir, column)
-            if not self.check_factor_exists(column, factor_dir):
-                factor_data[[column]].dropna().to_panel().to_hdf(factor_path, column, complevel=9, complib='blosc')
-            elif if_exists == 'append':
-                old_panel = pd.read_hdf(factor_path, column)
-                new_frame = old_panel.to_frame().append(factor_data[[column]].dropna())
-                new_panel = new_frame[~new_frame.index.duplicated(keep='last')].to_panel()
-                available_name = self.get_available_factor_name(column, factor_dir)
-                new_panel.to_hdf(
-                    self.abs_factor_path(factor_dir, available_name), available_name, complevel=9, complib='blosc')
-                self.delete_factor(column, factor_dir)
-                self.rename_factor(available_name, column, factor_dir)
-            elif if_exists == 'replace':
-                self.delete_factor(column, factor_dir)
-                factor_data[[column]].dropna().to_panel().to_hdf(factor_path, column, complevel=9, complib='blosc')
-            else:
-                self._update_info()
-                raise KeyError("please make sure if_exists is valide")
-        self._update_info()
+        try:
+            lock.acquire()
+            if factor_data.index.nlevels == 1:
+                if isinstance(factor_data.index, pd.DatetimeIndex):
+                    factor_data['IDs'] = '111111'
+                    factor_data.set_index('IDs', append=True, inplace=True)
+                else:
+                    factor_data['date'] = DateStr2Datetime('19000101')
+                    factor_data.set_index('date', append=True, inplace=True)
+
+            self.create_factor_dir(factor_dir)
+            for column in factor_data.columns:
+                factor_path = self.abs_factor_path(factor_dir, column)
+                if not self.check_factor_exists(column, factor_dir):
+                    factor_data[[column]].dropna().to_panel().to_hdf(factor_path, column, complevel=9, complib='blosc')
+                elif if_exists == 'append':
+                    old_panel = pd.read_hdf(factor_path, column)
+                    new_frame = old_panel.to_frame().append(factor_data[[column]].dropna())
+                    new_panel = new_frame[~new_frame.index.duplicated(keep='last')].to_panel()
+                    available_name = self.get_available_factor_name(column, factor_dir)
+                    new_panel.to_hdf(
+                        self.abs_factor_path(factor_dir, available_name), available_name, complevel=9, complib='blosc')
+                    self.delete_factor(column, factor_dir)
+                    self.rename_factor(available_name, column, factor_dir)
+                elif if_exists == 'replace':
+                    self.delete_factor(column, factor_dir)
+                    factor_data[[column]].dropna().to_panel().to_hdf(factor_path, column, complevel=9, complib='blosc')
+                else:
+                    self._update_info()
+                    raise KeyError("please make sure if_exists is valide")
+            self._update_info()
+            lock.release()
+        except Exception as e:
+            lock.release()
     
     def to_feather(self, factor_name, factor_dir):
         """将某一个因子转换成feather格式，便于跨平台使用"""
