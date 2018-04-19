@@ -1,6 +1,7 @@
 __pycache__/
 .DS_Store
 *.xml
+*.pyc
 
 # Jupyter Notebook
 .ipynb_checkpoints
