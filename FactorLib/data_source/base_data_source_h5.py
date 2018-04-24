@@ -437,13 +437,16 @@ class sector(object):
                     continue
         raise KeyError("找不到指数ID对应成分股！")
 
-    def get_stock_industry_info(self, ids, industry='中信一级', start_date=None, end_date=None, dates=None):
+    def get_stock_industry_info(self, ids, industry='中信一级', start_date=None, end_date=None, dates=None, idx=None):
         """股票行业信息"""
-        dates = self.trade_calendar.get_trade_days(start_date, end_date) if dates is None else dates
-        if not isinstance(dates, list):
-            dates = [dates]
         symbol = parse_industry(industry)
-        industry_info = self.h5DB.load_factor(symbol, '/indexes/', ids=ids, dates=dates)
+        if idx is not None:
+            industry_info = self.h5DB.load_factor(symbol, '/indexes/', idx=idx)
+        else:
+            dates = self.trade_calendar.get_trade_days(start_date, end_date) if dates is None else dates
+            if not isinstance(dates, list):
+                dates = [dates]
+            industry_info = self.h5DB.load_factor(symbol, '/indexes/', ids=ids, dates=dates)
         return IndustryConverter.convert(symbol, industry_info[symbol]).to_frame()
 
     def get_industry_dummy(self, ids=None, industry='中信一级', start_date=None, end_date=None, dates=None,
