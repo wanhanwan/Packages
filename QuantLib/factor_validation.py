@@ -92,7 +92,7 @@ def cal_ic_by_alphalens(factor_data, prices=None, group_by=None, periods=(20,), 
 def cal_factor_group_return(factor_data, periods=(20,), prices=None, group_by=None,
     quantiles=5, freq='1d', **kwargs):
     """基于alphalens计算因子收益率"""
-    stocklist = pd.Series(np.ones(len(factor_data)), index=factor_data.index)
+    stocklist = pd.DataFrame(np.ones(len(factor_data)), index=factor_data.index, columns=['stocklist'])
     stocklist = stockFilter.typical(stocklist)
     factor_data = factor_data.reindex(stocklist.index)
 
@@ -111,8 +111,10 @@ def cal_factor_group_return(factor_data, periods=(20,), prices=None, group_by=No
     if freq != '1d':
         date_index = tc.get_trade_days(start, end, freq, retstr=None)
         prices = prices.reindex(date_index, copy=False)
+    if_groupby = group_by is not None
     merge_data = get_clean_factor_and_forward_returns(factor_data, prices, group_by,
-                                                      periods=periods, **kwargs)
+                                                      periods=periods, binning_by_group=if_groupby,
+                                                      **kwargs)
     return merge_data
 
 

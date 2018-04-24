@@ -367,6 +367,74 @@ class FactorAnalyzer(Analyzer):
         return resample_returns(self.long_short_return, convert_to=frequence)
 
 
+class AlphalensAnalyzer(object):
+    """基于alphalens工具包进行业绩分析
+    初始化时的输入变量是alphalens.utils.get_clean_factor_and_forward_return函数的输出
+    """
+    def __init__(self, clean_factor_and_forward_return, freq='d', benchmark=None):
+        self._cf_and_fr = clean_factor_and_forward_return
+        self._freq = freq
+        self._benchmark = benchmark
+
+    def get_quantile_return(self, by_group=False, demeaned=True, by_date=False,
+                            group_adjust=False):
+        """计算分组的平均收益率
+
+        Parameters:
+        ----------------------
+        by_group: bool
+            是否分组计算收益
+        demeaned: bool
+            把收益率转换成超额收益，其中基准收益是每组股票的算数平均收益率
+        by_date: bool
+            是否按照每个日期分别计算收益
+        group_adjust: bool
+            是否按组转换成超额收益
+        """
+        from alphalens.performance import mean_return_by_quantile
+        return mean_return_by_quantile(self._cf_and_fr, by_date, by_group, demeaned,
+                                       group_adjust)[0]
+
+    def get_long_short_return(self, by_group=False, by_date=False, factor_direction=1):
+        """计算第一组最后一组的多空收益
+
+        Parameters:
+        -----------------------------
+        by_group: bool
+            是否分组计算收益
+        by_date: bool
+            是否按照每个日期分别计算收益
+        factor_direction: int
+            因子的方向, 1代表正向，-1代表负向。
+        """
+        mean_return = self.get_quantile_return(by_group, by_date=by_date)
+        if factor_direction == 1:
+            long_quantile = mean_return.index.get_level_values('factor_quantile').max()
+            short_quantile = 1
+        else:
+            long_quantile = 1
+            short_quantile = mean_return.index.get_level_values('factor_quantile').max()
+        ls = mean_return.xs(long_quantile, level='factor_quantile') - \
+             mean_return.xs(short_quantile, level='factor_quantile')
+        return ls
+
+    def get_icir(self, by_group=False, by_date=True):
+        """计算因子的ICIR
+
+        Parameters:
+        -----------------------------
+        by_group: bool
+            是否分组计算ICIR
+        by_date: bool
+            是否分日期计算
+        """
+        from alphalens.performance import factor_information_coefficient
+        ic_series = factor_information_coefficient(self._cf_and_fr, by_group=by_group)
+        if not by_date:
+            return ic_series.groupby('group').mean()
+        return ic_series
+
+
 if __name__ == '__main__':
     analyzer = Analyzer(r"D:\data\factor_investment_strategies\兴业风格_价值\backtest\BTresult.pkl",
                         benchmark_name='000905')
