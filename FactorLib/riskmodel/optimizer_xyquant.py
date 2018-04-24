@@ -859,13 +859,15 @@ class Optimizer(object):
 class PortfolioOptimizer(object):
     """股票组合优化器"""
 
-    def __init__(self, signal, stock_pool, benchmark, constraints, dates=None, ds_name='xy', **kwargs):
+    def __init__(self, signal, stock_pool, benchmark, constraints, dates=None, ds_name='xy',
+                 boostrap=None, **kwargs):
         self.ds = RiskDataSource(ds_name)
         self.signal, self.stock_pool = self._create_signal_and_stockpool(signal, stock_pool, dates)
         self.benchmark = benchmark
         self.constraints = constraints
         self.result = None
         self.log = {}
+        self.boostrap = boostrap
         self.kwargs = kwargs
 
     def _create_signal_and_stockpool(self, signal, stock_pool, dates):
@@ -917,7 +919,29 @@ class PortfolioOptimizer(object):
             else:
                 print("%s权重优化失败:%s" % (idate.strftime("%Y-%m-%d"), optimizer.solution_status))
                 self.log[idate.strftime("%Y-%m-%d")] = optimizer.solution_status
-                opt_weight = optimizer.opt_rslt.loc[optimizer.opt_rslt['previous_weight'] > 0.001, 'previous_weight']
+                if self.boostrap is not None:
+                    constraints = self.constraints.copy()
+                    while 1:
+                        constraints, flag = self.boostrap(constraints)
+                        if not flag:
+                            opt_weight = optimizer.opt_rslt.loc[
+                                optimizer.opt_rslt['previous_weight'] > 0.001, 'previous_weight']
+                            break
+                        optimizer = Optimizer(signal, stock_pool, idate, self.ds, benchmark=self.benchmark,
+                                              **self.kwargs)
+                        for k, v in constraints.items():
+                            optimizer.add_constraint(k, **v)
+                        optimizer.solve()
+                        if optimizer.optimal:
+                            print("%s权重优化成功" % idate.strftime("%Y-%m-%d"))
+                            opt_weight = optimizer.opt_rslt.loc[
+                                optimizer.opt_rslt['optimal_weight'] > 0.001, 'optimal_weight']
+                            break
+                    if not optimizer.optimal:
+                        opt_weight = optimizer.opt_rslt.loc[
+                            optimizer.opt_rslt['previous_weight'] > 0.001, 'previous_weight']
+                else:
+                    opt_weight = optimizer.opt_rslt.loc[optimizer.opt_rslt['previous_weight'] > 0.001, 'previous_weight']
                 if not opt_weight.empty:
                     opt_weight = opt_weight / opt_weight.sum()
                     opt_weight.name = 'optimal_weight'
