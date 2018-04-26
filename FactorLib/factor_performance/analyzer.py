@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import os
 from empyrical import stats
+from functools import wraps
 from ..data_source.base_data_source_h5 import data_source, tc, H5DB
 from ..data_source.tseries import resample_returns, resample_func
 from functools import partial
@@ -367,14 +368,32 @@ class FactorAnalyzer(Analyzer):
         return resample_returns(self.long_short_return, convert_to=frequence)
 
 
+def add_bckmrk_ret(func):
+    from alphalens.utils import get_forward_returns_columns
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        obj = args[0]
+        if obj._bchmrk_return is None:
+            dates = obj._cf_and_fr.index.get_level_values('date').unique().tolist()
+            windows = get_forward_returns_columns(obj._cf_and_fr.columns)
+            bchmrk_return = data_source.get_forward_ndays_return(
+                ids=[obj._benchmark], windows=windows, freq=obj._freq, dates=dates, type='index')
+            obj._bchmrk_return = bchmrk_return.reset_index('IDs', drop=True)
+            return func(*args, **kwargs)
+        else:
+            return func(*args, **kwargs)
+    return wrapper
+
+
 class AlphalensAnalyzer(object):
     """基于alphalens工具包进行业绩分析
     初始化时的输入变量是alphalens.utils.get_clean_factor_and_forward_return函数的输出
     """
-    def __init__(self, clean_factor_and_forward_return, freq='d', benchmark=None):
+    def __init__(self, clean_factor_and_forward_return, freq='1d', benchmark=None):
         self._cf_and_fr = clean_factor_and_forward_return
         self._freq = freq
         self._benchmark = benchmark
+        self._bchmrk_return = None
 
     def get_quantile_return(self, by_group=False, demeaned=True, by_date=False,
                             group_adjust=False):
@@ -394,6 +413,26 @@ class AlphalensAnalyzer(object):
         from alphalens.performance import mean_return_by_quantile
         return mean_return_by_quantile(self._cf_and_fr, by_date, by_group, demeaned,
                                        group_adjust)[0]
+    
+    @add_bckmrk_ret
+    def get_excess_return(self, by_group=False, by_date=False):
+        """计算分组下的超额收益率
+
+        Parameters:
+        -----------------------
+        by_group: bool
+            是否分组计算收益
+        by_date: bool
+            是否分时间计算收益
+        """
+        from alphalens.utils import get_forward_returns_columns
+        from alphalens.performance import mean_return_by_quantile
+        cf_and_fr = self._cf_and_fr.copy()
+        return_columns = get_forward_returns_columns(cf_and_fr.columns)
+        cf_and_fr[return_columns] = cf_and_fr[return_columns].sub(self._bchmrk_return, level='date',
+                                                                  axis='index')
+        return mean_return_by_quantile(cf_and_fr, by_group=by_group, by_date=by_date,
+                                       demeaned=False)[0]
 
     def get_long_short_return(self, by_group=False, by_date=False, factor_direction=1):
         """计算第一组最后一组的多空收益
@@ -433,6 +472,17 @@ class AlphalensAnalyzer(object):
         if not by_date:
             return ic_series.groupby('group').mean()
         return ic_series
+
+    def plot_ic_series(self, by_group=False, by_date=True, ax=None):
+        """绘制IC时间序列图
+        """
+        from alphalens.plotting import plot_ic_ts, plot_ic_by_group
+        ic_ts = self.get_icir(by_group, by_date)
+        if by_group:
+            return plot_ic_by_group(ic_ts, ax=ax)
+        else:
+            return plot_ic_ts(ic_ts, ax)
+        
 
 
 if __name__ == '__main__':

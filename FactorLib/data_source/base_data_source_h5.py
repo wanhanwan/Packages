@@ -12,7 +12,7 @@ from .ncdb import NCDB
 from .csv_db import CsvDB
 from .trade_calendar import tc
 from .tseries import resample_func, resample_returns
-from ..utils.datetime_func import DateStr2Datetime
+from ..utils.datetime_func import DateStr2Datetime, DateRange2Dates
 from ..utils.tool_funcs import parse_industry, financial_data_reindex, windcode_to_tradecode
 from .converter import IndustryConverter
 from PkgConstVars import *
@@ -129,6 +129,17 @@ class base_data_source(object):
         cum_returns = (price / price.shift(window) - 1).stack()
         cum_returns.columns = ['return_%dd'%window]
         return cum_returns.loc[DateStr2Datetime(start_date):DateStr2Datetime(end_date)]
+    
+    def get_forward_ndays_return(self, ids, windows, freq='1d',
+                                 dates=None, type='stock'):
+        """计算证券未来N天的收益率"""
+        from alphalens.utils import compute_forward_returns
+        max_date = self.trade_calendar.tradeDayOffset(max(dates), max(windows)+1, freq=freq, retstr=None)
+        price = self.get_history_price(ids, start_date=min(dates), end_date=max_date,
+                                       adjust=True, type=type).iloc[:, 0].unstack()
+        ret = compute_forward_returns(price, periods=tuple(windows)).loc[pd.DatetimeIndex(dates), :]
+        ret.index.names = ['date', 'IDs']
+        return ret
 
     def get_periods_return(self, ids, dates, type='stock'):
         """

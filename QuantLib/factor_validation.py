@@ -99,7 +99,7 @@ def cal_factor_group_return(factor_data, periods=(20,), prices=None, group_by=No
     start = factor_data.index.get_level_values('date').min()
     start = tc.tradeDayOffset(start, -5)
     end = factor_data.index.get_level_values('date').max()
-    end = tc.tradeDayOffset(end, max(periods))
+    end = tc.tradeDayOffset(end, max(periods)+1, freq=freq)
     if prices is None:
         prices = data_source.load_factor('adj_close', '/stocks/', start_date=start,
                                          end_date=end)['adj_close'].unstack()
