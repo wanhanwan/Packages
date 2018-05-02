@@ -7,6 +7,7 @@ from FactorLib.data_source.base_data_source_h5 import ncdb, tc
 from FactorLib.utils.tool_funcs import ensure_dir_exists
 from FactorLib.data_source.helpers import handle_ids
 from FactorLib.utils.datetime_func import DateRange2Dates
+from pathlib import Path
 from collections import Iterator
 import pandas as pd
 import numpy as np
@@ -545,12 +546,18 @@ class WindConsensusDB(WindFinanceDB):
         return _reconstruct(new)
 
 
+def _read_inst_id():
+    p = Path(__file__)
+    file_path = p.parent.parent.parent / 'resource' / 'est_inst_name_id.csv'
+    return file_path
+
+
 class WindEarningEst(WindFinanceDB):
     """Wind盈利预测明细"""
     table_name = u'中国A股盈利预测明细'
     table_id = 'earningest'
     statement_type_map = {'0001': 0}
-    inst_id = pd.read_csv(r"D:\Packages\FactorLib\resource\est_inst_name_id.csv", index_col=0, header=0,
+    inst_id = pd.read_csv(_read_inst_id(), index_col=0, header=0,
                           encoding='gbk')
 
     def __init__(self):

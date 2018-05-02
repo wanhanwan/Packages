@@ -1,12 +1,13 @@
 # coding: utf-8
-# from FactorLib.data_source.stock_universe import StockUniverse
+# from FactorLib.data_source.stock_universe import StockUnivers
+from pandas import DataFrame, Series
 
 
 # 装饰器，当参数ids是StockUniverse实例时，将其转成具体的股票列表
 def handle_ids(func):
     def wrapper(*args, **kwargs):
         ids = kwargs.get('ids', None)
-        if not isinstance(ids, list) and ids is not None:
+        if not isinstance(ids, (list, DataFrame, Series)) and ids is not None:
             s = 'start_date'
             if 'start' in kwargs:
                 s = 'start'

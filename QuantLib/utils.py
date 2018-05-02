@@ -220,10 +220,11 @@ def __StandardFun__(data0, **kwargs):
 
 def __StandardQTFun__(data):
     # data0 = data.reset_index(level=0, drop=True)
-    NotNAN = (~np.isnan(data.values)).sum()
-    quantile = rankdata(data.values, method='min').astype('float64') / (NotNAN + 1.0)
+    data_after_standard = np.ones_like(data.values) * np.nan
+    NotNAN = ~np.isnan(data.values)
+    quantile = rankdata(data.values[NotNAN], method='min').astype('float64') / (NotNAN.sum() + 1.0)
     # quantile.loc[quantile[data.columns[0]] == 1, :] = 1 - 10 ** (-6)
-    data_after_standard = norm.ppf(quantile)
+    data_after_standard[NotNAN] = norm.ppf(quantile)
     return pd.Series(data_after_standard, index=data.index.get_level_values(1), name=data.name)
 
 
@@ -466,7 +467,7 @@ def NeutralizeBySizeIndu(factor_data, factor_name, std_qt=True, indu_name='ä¸­ä¿
         factor_data = StandardByQT(factor_data, factor_name).to_frame()
         lncap = StandardByQT(lncap, 'lncap').to_frame()
     industry_names = list(indu_flag.columns)
-    indep_data = lncap.join(indu_flag)
+    indep_data = lncap.join(indu_flag, how='inner')
     resid = Orthogonalize(factor_data, indep_data, factor_name, industry_names+['lncap'])
     return resid
 
