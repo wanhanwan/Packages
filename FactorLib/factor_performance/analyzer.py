@@ -373,6 +373,7 @@ def add_bckmrk_ret(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
         obj = args[0]
+        assert obj._benchmark is None
         if obj._bchmrk_return is None:
             dates = obj._cf_and_fr.index.get_level_values('date').unique().tolist()
             windows = get_forward_returns_columns(obj._cf_and_fr.columns)
@@ -413,6 +414,29 @@ class AlphalensAnalyzer(object):
         from alphalens.performance import mean_return_by_quantile
         return mean_return_by_quantile(self._cf_and_fr, by_date, by_group, demeaned,
                                        group_adjust)[0]
+
+    def get_winrate(self, by_group=False):
+        """计算胜率
+        当分组计算胜率时，基准采用每个分组的平均收益率似乎更加合理
+
+        Parameters：
+        by_group: bool
+            是否分组计算胜率
+        """
+
+        def _winrate_cal(ret_ts):
+            return (ret_ts > 0.0).sum() / (~ret_ts.isnull()).sum()
+
+        if by_group:
+            ret = self.get_quantile_return(by_group, demeaned=True, by_date=True)
+        else:
+            ret = self.get_excess_return(by_date=True)
+        if ret.index.nlevels > 1:
+            grouper = [x for x in ret.index.names if x != 'date']
+            win_rate = ret.groupby(grouper).agg(_winrate_cal)
+        else:
+            win_rate = _winrate_cal(ret)
+        return win_rate
     
     @add_bckmrk_ret
     def get_excess_return(self, by_group=False, by_date=False):
