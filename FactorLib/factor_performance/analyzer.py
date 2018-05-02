@@ -493,8 +493,10 @@ class AlphalensAnalyzer(object):
         """
         from alphalens.performance import factor_information_coefficient
         ic_series = factor_information_coefficient(self._cf_and_fr, by_group=by_group)
-        if not by_date:
+        if (not by_date) and by_group:
             return ic_series.groupby('group').mean()
+        elif (not by_date) and (not by_group):
+            return ic_series.mean()
         return ic_series
 
     def plot_ic_series(self, by_group=False, by_date=True, ax=None):
@@ -507,7 +509,6 @@ class AlphalensAnalyzer(object):
         else:
             return plot_ic_ts(ic_ts, ax)
         
-
 
 if __name__ == '__main__':
     analyzer = Analyzer(r"D:\data\factor_investment_strategies\兴业风格_价值\backtest\BTresult.pkl",

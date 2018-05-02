@@ -137,7 +137,7 @@ class base_data_source(object):
         max_date = self.trade_calendar.tradeDayOffset(max(dates), max(windows)+1, freq=freq, retstr=None)
         price = self.get_history_price(ids, start_date=min(dates), end_date=max_date,
                                        adjust=True, type=type).iloc[:, 0].unstack()
-        ret = compute_forward_returns(price, periods=tuple(windows)).loc[pd.DatetimeIndex(dates), :]
+        ret = compute_forward_returns(price, periods=tuple(windows)).loc[dates]
         ret.index.names = ['date', 'IDs']
         return ret
 
