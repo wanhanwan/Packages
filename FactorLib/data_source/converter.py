@@ -56,7 +56,7 @@ class Converter(object):
             keys = [r.convertfunc(x) for x in data]
             return [r.mapping[x] for x in keys]
         elif isinstance(data, pd.Series):
-            return data.apply(r.convertfunc).map(r.mapping)
+            return data.dropna().apply(r.convertfunc).map(r.mapping).reindex(data.index)
         else:
             return data
 
@@ -73,7 +73,7 @@ class Converter(object):
             codes = [r.name2id_func(x) for x in names]
             return codes
         elif isinstance(data, pd.Series):
-            return data.map(unmapping).apply(r.name2id_func)
+            return data.dropna().map(unmapping).apply(r.name2id_func).reindex(data.index)
         else:
             return data
 

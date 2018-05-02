@@ -220,10 +220,11 @@ def __StandardFun__(data0, **kwargs):
 
 def __StandardQTFun__(data):
     # data0 = data.reset_index(level=0, drop=True)
-    NotNAN = (~np.isnan(data.values)).sum()
-    quantile = rankdata(data.values, method='min').astype('float64') / (NotNAN + 1.0)
+    data_after_standard = np.ones_like(data.values) * np.nan
+    NotNAN = ~np.isnan(data.values)
+    quantile = rankdata(data.values[NotNAN], method='min').astype('float64') / (NotNAN.sum() + 1.0)
     # quantile.loc[quantile[data.columns[0]] == 1, :] = 1 - 10 ** (-6)
-    data_after_standard = norm.ppf(quantile)
+    data_after_standard[NotNAN] = norm.ppf(quantile)
     return pd.Series(data_after_standard, index=data.index.get_level_values(1), name=data.name)
 
 
@@ -258,7 +259,7 @@ def Standard(data, factor_name, mean_weight=None, std_weight=None, **kwargs):
     return afterStandard
 
 
-def StandardByQT(data, factor_name):
+def StandardByQT(data, factor_name, groups=('date',)):
     """横截面上分位数标准化
 
     参数:
@@ -268,8 +269,7 @@ def StandardByQT(data, factor_name):
 
     factor_name: str
     """
-    # factor_name = [factor_name]
-    after_standard = data.groupby(level=0)[factor_name].transform(__StandardQTFun__)
+    after_standard = data.groupby(list(groups))[factor_name].transform(__StandardQTFun__)
     return after_standard
 
 
@@ -466,7 +466,7 @@ def NeutralizeBySizeIndu(factor_data, factor_name, std_qt=True, indu_name='中�
         factor_data = StandardByQT(factor_data, factor_name).to_frame()
         lncap = StandardByQT(lncap, 'lncap').to_frame()
     industry_names = list(indu_flag.columns)
-    indep_data = lncap.join(indu_flag)
+    indep_data = lncap.join(indu_flag, how='inner')
     resid = Orthogonalize(factor_data, indep_data, factor_name, industry_names+['lncap'])
     return resid
 
