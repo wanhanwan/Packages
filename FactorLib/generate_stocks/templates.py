@@ -25,14 +25,13 @@ class AbstractStockGenerator(object):
         for k, v in kwargs:
             if k in config_dict:
                 config_dict[k] = v
-        if isinstance(config_dict['factors'][0], str):
-            factors = []
-            for f in config_dict['factors']:
-                if isinstance(f, list):
-                    factors.append(tuple(f))
-                else:
-                    factors.append(globals()[f])
-            config_dict['factors'] = factors
+        factors = []
+        for f in config_dict['factors']:
+            if isinstance(f, list):
+                factors.append(tuple(f))
+            else:
+                factors.append(globals()[f])
+        config_dict['factors'] = factors
         self.config = AttrDict(config_dict)
 
     def generate_stocks(self, start, end):
