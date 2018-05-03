@@ -259,7 +259,7 @@ def Standard(data, factor_name, mean_weight=None, std_weight=None, **kwargs):
     return afterStandard
 
 
-def StandardByQT(data, factor_name):
+def StandardByQT(data, factor_name, groups=('date',)):
     """横截面上分位数标准化
 
     参数:
@@ -269,8 +269,7 @@ def StandardByQT(data, factor_name):
 
     factor_name: str
     """
-    # factor_name = [factor_name]
-    after_standard = data.groupby(level=0)[factor_name].transform(__StandardQTFun__)
+    after_standard = data.groupby(list(groups))[factor_name].transform(__StandardQTFun__)
     return after_standard
 
 
