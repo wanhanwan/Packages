@@ -1,6 +1,7 @@
 from .data_source.base_data_source_h5 import data_source, sec, h5, tc
 from .utils.disk_persist_provider import DiskPersistProvider
 from .factor_performance.ic_analyser import IC_Calculator
+from .data_source.stock_universe import from_formula
 import pandas as pd
 import os
 
@@ -88,8 +89,7 @@ class Environment(object):
         if sector_name == '全A':
             stocks = self._env._sector.get_history_ashare(self._factor_group_info_dates)
         else:
-            stocks = self._env._sector.get_index_members(
-                sector_name, dates=self._factor_group_info_dates)
+            stocks = from_formula(sector_name).get(dates=list(self._factor_group_info_dates))
         ids = stocks.index.get_level_values(1).unique().tolist()
         for factor in factors:
             if factor.alias_name is not None:
