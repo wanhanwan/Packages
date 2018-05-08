@@ -211,7 +211,8 @@ def update_industry_index_prices(start, end):
     fields = ['open', 'high', 'low', 'close', 'pct_chg', 'volume']
     data = _load_wsd_data(CS_INDUSTRY_CODES, fields, start, end).astype('float32')
     data['volume'] /= 100
-    h5.save_factor(data, '/indexprices/cs_level_1/')
+    data.rename({'volume': 'vol', 'pct_chg': 'daily_returns_%'}, inplace=True)
+    h5.save_factor(data, '/indexprices/')
 
 
 def update_slfdef_index(start, end):

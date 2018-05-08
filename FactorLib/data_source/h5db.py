@@ -199,12 +199,12 @@ class H5DB(object):
             data = self.load_factor(f, factor_dir).reset_index()
             data.to_csv(self.csv_data_path + factor_dir + f + '.csv')
 
-    def combine_factor(self, left_name, right_name, factor_dir, drop_right=True):
+    def combine_factor(self, left_name, left_dir, right_name, right_dir, drop_right=True):
         """把两个因子合并，并删除右边的因子"""
-        right_data = self.load_factor(right_name, factor_dir).rename(columns={right_name: left_name})
-        self.save_factor(right_data, factor_dir)
+        right_data = self.load_factor(right_name, right_dir).rename(columns={right_name: left_name})
+        self.save_factor(right_data, left_dir)
         if drop_right:
-            self.delete_factor(right_name, factor_dir)
+            self.delete_factor(right_name, right_dir)
 
     def import_factor(self, factor_name, factor_dir, src_file):
         fanme = os.path.split(src_file)[1].replace('.h5', '')
