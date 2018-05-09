@@ -1,5 +1,5 @@
 # coding: utf-8
-from FactorLib.data_source.base_data_source_h5 import sec, ncdb, tc, data_source
+from FactorLib.data_source.base_data_source_h5 import sec, tc, data_source
 from fastcache import clru_cache
 from QuantLib.stockFilter import _intersection, _difference, _union
 import re
@@ -45,20 +45,21 @@ class StockDummy(object):
     """行业哑变量封装接口
     所有的数据放在ncdb数据目录中的dummy文件夹
     """
-    data_dir = ncdb.data_path + '/dummy'
+    data_dir = data_source.h5DB.data_path + '/dummy'
     all_dummies = [x[:-3] for x in os.listdir(data_dir)]
 
-    def __init__(self, name):
+    def __init__(self, name='cs_level_1'):
         self.name = name
 
     def check_existence(self, name):
         return name in self.all_dummies
 
-    def get(self, start_date=None, end_date=None, dates=None):
+    def get(self, start_date=None, end_date=None, dates=None, universe=None, idx=None,
+            drop_first=False):
         """获取哑变量数据"""
-        if dates is None:
-            dates = tc.get_trade_days(start_date=start_date, end_date=end_date)
-        dummy = ncdb.load_as_dummy(self.name, '/dummy/', dates=dates)
+        # dates = tc.get_trade_days(start_date, end_date) if dates is None else dates
+        dummy = data_source.sector.get_industry_dummy(ids=universe, start_date=start_date, end_date=end_date,
+                                                      idx=idx, industry=self.name, drop_first=drop_first)
         return dummy
 
     def get_stocks_of_single_field(self, field_name, start_date=None, end_date=None,
@@ -85,7 +86,7 @@ class StockDummy(object):
 
     @property
     def all_fields(self):
-        return ncdb.load_file_attr(self.name, '/dummy/', 'indu_names')
+        return pd.read_hdf(os.path.join(self.data_dir, self.name+'.h5'), "mapping")
 
 
 def from_formula(formula):
@@ -107,6 +108,7 @@ def from_formula(formula):
 
 
 if __name__ == '__main__':
-    d = StockDummy('user_dummy_class_1')
-    r = d.get_return(start_date='20180201', end_date='20180228')
+    d = StockDummy('cs_level_2')
+    u = StockUniverse('CI005018')
+    r = d.get(start_date='20180201', end_date='20180228', universe=u)
     print(r)

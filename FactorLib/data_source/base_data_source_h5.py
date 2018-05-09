@@ -15,6 +15,7 @@ from .tseries import resample_func, resample_returns
 from ..utils.datetime_func import DateStr2Datetime, DateRange2Dates
 from ..utils.tool_funcs import parse_industry, financial_data_reindex, windcode_to_tradecode
 from .converter import IndustryConverter
+from .helpers import handle_ids
 from PkgConstVars import *
 
 
@@ -461,7 +462,7 @@ class sector(object):
         return IndustryConverter.convert(symbol, industry_info[symbol]).to_frame()
 
     def get_industry_dummy(self, ids=None, industry='中信一级', start_date=None, end_date=None, dates=None,
-                           drop_first=True):
+                           idx=None, drop_first=True):
         """股票行业哑变量
         Parameters
         ------------------
@@ -471,24 +472,23 @@ class sector(object):
             中文行业名称， 详情查看const.py文件中的INDUSTRY_NAME_DICT
         
         """
-        dates = self.trade_calendar.get_trade_days(start_date, end_date) if dates is None else dates
+        if idx is None:
+            dates = self.trade_calendar.get_trade_days(start_date, end_date) if dates is None else dates
+        else:
+            dates = idx.index.get_level_values("date").unique()
 
         try:
             industry_id = parse_industry(industry)
         except KeyError:
             industry_id = industry
 
-        all_industries = self.ncDB.list_file_factors('industry_dummy', '/dummy/')
-        factor_names = [x for x in all_industries if x.startswith(industry_id)]
-        dummy = (self.ncDB
-            .load_factor('industry_dummy', '/dummy/', factor_names=factor_names, ids=ids, dates=dates)
-            .dropna(how='all').sort_index(axis=1))
-        industry_names = self.ncDB.load_file_attr('industry_dummy', '/dummy/', industry_id).split(",")
-        dummy_value = np.unpackbits(dummy.values.astype('uint8'), axis=1)[:, :len(industry_names)]
-        new_dummy = pd.DataFrame(dummy_value, index=dummy.index, columns=industry_names)
+        dummy = self.h5DB.load_as_dummy(industry_id, '/dummy/', ids=ids, dates=dates, idx=idx)
+        if idx is not None:
+            dummy = dummy.reindex(idx.index, fill_value=0)
+        dummy = dummy.loc[:, (dummy != 0).any()]
         if drop_first:
-            return new_dummy.iloc[:, 1:]
-        return new_dummy
+            return dummy.iloc[:, 1:]
+        return dummy
 
     def get_index_weight(self, ids, start_date=None, end_date=None, dates=None):
         """获取指数个股权重"""
