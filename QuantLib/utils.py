@@ -228,7 +228,8 @@ def __StandardQTFun__(data):
     return pd.Series(data_after_standard, index=data.index.get_level_values(1), name=data.name)
 
 
-def Standard(data, factor_name, mean_weight=None, std_weight=None, **kwargs):
+def Standard(data, factor_name, mean_weight=None, std_weight=None, ret_raw=True,
+             **kwargs):
     """横截面上标准化数据
 
     参数
@@ -251,12 +252,18 @@ def Standard(data, factor_name, mean_weight=None, std_weight=None, **kwargs):
         factor_name_list += [mean_weight]
     if std_weight is not None:
         factor_name_list += [std_weight]
-    tempData = data[
-        ['date', 'IDs']+factor_name_list].set_index(['date', 'IDs'])
+    if 'date' in data.columns and 'IDs' in data.columns:
+        tempData = data[
+            ['date', 'IDs'] + factor_name_list].set_index(['date', 'IDs'])
+    else:
+        tempData = data[factor_name_list]
     params = {'factor_name': factor_name,
               'mean_weight': mean_weight, 'std_weight': std_weight}
     afterStandard = tempData.groupby(level=0).apply(__StandardFun__, **params)
-    return afterStandard
+    if ret_raw:
+        return afterStandard
+    else:
+        return afterStandard[[factor_name+'_after_standard']]
 
 
 def StandardByQT(data, factor_name, groups=('date',)):
