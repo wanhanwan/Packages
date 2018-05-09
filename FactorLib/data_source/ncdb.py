@@ -105,18 +105,19 @@ class NCDB(object):
             factor_names_drop = [x for x in all_names if x not in factor_names]
         else:
             factor_names_drop = None
-        if dates is None:
-            dates = self.list_file_dates(file_name, file_dir)
+        if idx is None:
+            if dates is None:
+                dates = self.list_file_dates(file_name, file_dir)
+            else:
+                dates = pd.DatetimeIndex(dates)
+            if ids is None:
+                ids = self.list_file_ids(file_name, file_dir)
+            idx1 = pd.MultiIndex.from_product([dates, ids], names=['date', 'IDs'])
         else:
-            dates = pd.DatetimeIndex(dates)
-        if ids is None:
-            ids = self.list_file_ids(file_name, file_dir)
-        idx1 = pd.MultiIndex.from_product([dates, ids], names=['date', 'IDs'])
-        if idx is not None:
-            idx1 = idx1.intersection(idx.index)
+            idx1 = idx.index
         file_path = self.abs_factor_path(file_dir, file_name)
         file = xr.open_dataset(file_path, "data", engine="netcdf4", drop_variables=factor_names_drop, autoclose=True)
-        factor_data = file.sel(date=idx1.get_level_values(0).unique(), IDs=idx1.get_level_values(1).unique())
+        factor_data = file.sel(date=idx1.get_level_values('date').unique(), IDs=idx1.get_level_values('IDs').unique())
         if ret == 'ndarry':
             length = len(ids)
             width = len(dates)
@@ -124,14 +125,15 @@ class NCDB(object):
             return np.array(dates), np.array(ids).astype('uint32'), factor_data.values.reshape((width, length, height))
         elif ret == 'xarray':
             return factor_data
-        elif reset_index:
-            return factor_data.to_dataframe().dropna(how='all').reset_index()
+        factor_data = factor_data.to_dataframe()
+        if reset_index:
+            return factor_data.dropna(how='all').reset_index()
         else:
-            df = factor_data.to_dataframe().dropna(how='all')
+            df = factor_data.dropna(how='all')
             if df.index.names[0] == 'IDs':
                 df.index = df.index.swaplevel('IDs', 'date')
                 df.sort_index(inplace=True)
-        return df
+            return df
 
     def save_factor(self, factor_data, file_name, file_dir, if_exists='append', dtypes=None,
                     append_type='combine_first'):
@@ -188,9 +190,12 @@ class NCDB(object):
         """
         from .converter import INTEGER_ENCODING
         factor_data = factor_data.drop('T00018', axis=0, level=1).fillna(0)
+        if self.check_file_exists(file_name, file_dir):
+            indu_names = self.load_file_attr(file_name, file_dir, 'indu_names').split(",")
+            factor_data = factor_data.reindex(columns=indu_names, copy=False)
+        indu_names = ",".join(factor_data.columns)
         dummy_pack = np.packbits(factor_data.values.astype(dtype='uint8', copy=False), axis=1)
         new_dummy = pd.DataFrame(dummy_pack, index=factor_data.index, columns=[str(x) for x in range(dummy_pack.shape[1])])
-        indu_names = ",".join(factor_data.columns)
         self.save_factor(new_dummy, file_name, file_dir, dtypes={str(x): INTEGER_ENCODING for x in new_dummy.columns},
                          if_exists=if_exists)
         self.add_file_attr(file_name, file_dir, {'indu_names': indu_names})

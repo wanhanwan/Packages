@@ -1,4 +1,4 @@
-from FactorLib.data_source.base_data_source_h5 import sec, ncdb
+from FactorLib.data_source.base_data_source_h5 import sec, data_source
 from FactorLib.data_source.update_data.dummies import file_path
 import pandas as pd
 
@@ -9,11 +9,11 @@ def update1(start_date, end_date):
                                             end_date=end_date)
     indu_info['tagID'] = indu_info['cs_level_1'].map(mapping['TagID'])
     dummy = pd.get_dummies(indu_info['tagID'])
-    ncdb.save_as_dummy(dummy, 'user_dummy_class_1', '/dummy/')
+    data_source.h5DB.save_as_dummy(dummy, '/dummy/', indu_name='user_dummy_class_1')
 
 
 classUpdateFuncsDaily = [update1]
 
 
 if __name__ == '__main__':
-    update('20100101', '20180326')
+    update1('20100101', '20180502')

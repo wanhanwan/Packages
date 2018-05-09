@@ -2,6 +2,7 @@
 """基于HDF文件的数据库"""
 
 import pandas as pd
+import numpy as np
 import os
 import shutil
 from multiprocessing import Lock
@@ -175,6 +176,54 @@ class H5DB(object):
             lock.release()
         except Exception as e:
             lock.release()
+
+    def save_as_dummy(self, factor_data, factor_dir, indu_name=None, if_exists='append'):
+        """往数据库中存入哑变量数据
+        factor_data: pd.Series or pd.DataFrame
+        当factor_data是Series时，首先调用pd.get_dummy()转成行业哑变量
+        """
+        if isinstance(factor_data, pd.Series):
+            assert factor_data.name is not None or indu_name is not None
+            factor_data.dropna(inplace=True)
+            indu_name = indu_name if indu_name is not None else factor_data.name
+            factor_data = pd.get_dummies(factor_data)
+        else:
+            assert isinstance(factor_data, pd.DataFrame) and indu_name is not None
+        factor_data.drop('T00018', axis=0, level='IDs').fillna(0)
+        factor_data = factor_data.loc[(factor_data!=0).any(axis=1)]
+        file_pth = self.abs_factor_path(factor_dir, indu_name)
+        if self.check_factor_exists(indu_name, factor_dir):
+            try:
+                lock.acquire()
+                mapping = pd.read_hdf(file_pth, 'mapping', mode='r')
+            finally:
+                lock.release()
+            factor_data = factor_data.reindex(columns=mapping.values)
+            new_saver = pd.DataFrame(np.argmax(factor_data.values, axis=1), columns=[indu_name],
+                                     index=factor_data.index)
+        else:
+            new_saver = pd.DataFrame(np.argmax(factor_data.values, axis=1), columns=[indu_name],
+                                     index=factor_data.index)
+            mapping = pd.Series(factor_data.columns.values)
+        self.save_factor(new_saver, factor_dir, if_exists=if_exists)
+        try:
+            lock.acquire()
+            mapping.to_hdf(file_pth, "mapping", complevel=9, complib='blosc')
+        finally:
+            lock.release()
+
+    def load_as_dummy(self, factor_name, factor_dir, dates=None, ids=None, idx=None):
+        """读取行业哑变量"""
+        file_pth = self.abs_factor_path(factor_dir, factor_name)
+        try:
+            lock.acquire()
+            mapping = pd.read_hdf(file_pth, "mapping", mode='r')
+        finally:
+            lock.release()
+        data = self.load_factor(factor_name, factor_dir, dates=dates, ids=ids, idx=idx)
+        dummy = np.zeros((len(data), len(mapping)))
+        dummy[np.arange(len(data)), data[factor_name].values.astype('int')] = 1
+        return pd.DataFrame(dummy, index=data.index, columns=mapping.values, dtype='int8')
     
     def to_feather(self, factor_name, factor_dir):
         """将某一个因子转换成feather格式，便于跨平台使用"""
