@@ -127,7 +127,7 @@ def update_indu_dummy(start, end, **kwargs):
     datasource = kwargs['data_source']
     for k, v in INDUSTRY_NAME_DICT.items():
         industry_info = datasource.sector.get_stock_industry_info(None, k, start, end)
-        data_source.h5DB.save_as_dummy(industry_info[v], '/dummy/')
+        datasource.h5DB.save_as_dummy(industry_info[v], '/dummy/')
 
 AlternativeFuncListMonthly = []
 AlternativeFuncListDaily = [iffr, unst, diversify_finance, excld_broker_banks,
