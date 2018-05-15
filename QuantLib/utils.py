@@ -222,8 +222,8 @@ def __StandardQTFun__(data):
     # data0 = data.reset_index(level=0, drop=True)
     data_after_standard = np.ones_like(data.values) * np.nan
     NotNAN = ~np.isnan(data.values)
-    quantile = rankdata(data.values[NotNAN], method='min').astype('float64') / (NotNAN.sum() + 1.0)
-    # quantile.loc[quantile[data.columns[0]] == 1, :] = 1 - 10 ** (-6)
+    quantile = rankdata(data.values[NotNAN], method='min').astype('float64') / (NotNAN.sum())
+    quantile[quantile == 1] = 1 - 10 ** (-6)
     data_after_standard[NotNAN] = norm.ppf(quantile)
     return pd.Series(data_after_standard, index=data.index.get_level_values(1), name=data.name)
 
@@ -286,14 +286,21 @@ def _resid_ols(y, x):
     return resid
 
 
-def OLS(df):
+def OLS(df, no_raise=True):
     v = df.values
     # v2 = right.loc[df.index.values].values
-    resid = _resid_ols(v[:, 0], v[:, 1:])
+    try:
+        resid = _resid_ols(v[:, 0], v[:, 1:])
+    except Exception as e:
+        if no_raise:
+            return pd.DataFrame(np.ones((len(df), 1))*np.nan, index=df.index,
+                                columns=['resid'])
+        else:
+            raise e
     return pd.DataFrame(resid, index=df.index, columns=['resid'])
 
 
-def Orthogonalize(left_data, right_data, left_name, right_name):
+def Orthogonalize(left_data, right_data, left_name, right_name, add_const=False):
     """因子正交化
        因子数据的格式为：[index(date,IDs),factor1,factor2...]
     参数
@@ -309,10 +316,10 @@ def Orthogonalize(left_data, right_data, left_name, right_name):
     factor_1 = left_data[[left_name]].dropna().reset_index()
     factor_1['IDs'] = factor_1['IDs'].astype('category', copy=False)
     if not isinstance(right_name, list):
-        right_name = [right_name, 'alpha']
-    else:
+        right_name = [right_name]
+    if add_const:
         right_name.append('alpha')
-    right_data['alpha'] = 1.0  # 加入常数项
+        right_data['alpha'] = 1.0  # 加入常数项
     factor_2 = right_data[right_name].dropna().reset_index()
     factor_2['IDs'] = factor_2['IDs'].astype('category')
     factor = pd.merge(factor_1, factor_2, on=['date', 'IDs'], how='inner')
@@ -446,7 +453,8 @@ def ScoringFactors(factor_data, factors, **kwargs):
     return dd.rename(columns=lambda x:x.replace('_after_standard', ''))
 
 
-def NeutralizeBySizeIndu(factor_data, factor_name, std_qt=True, indu_name='中信一级'):
+def NeutralizeBySizeIndu(factor_data, factor_name, std_qt=True, indu_name='中信一级',
+                         drop_first_indu=True, **kwargs):
     """ 为因子进行市值和行业中性化
 
     市值采用对数市值(百万为单位);
@@ -467,15 +475,17 @@ def NeutralizeBySizeIndu(factor_data, factor_name, std_qt=True, indu_name='中�
     ids = factor_data.index.get_level_values(1).unique().tolist()
     lncap = np.log(data_source.load_factor('float_mkt_value', '/stocks/', dates=dates, ids=ids) / 10000.0). \
         rename(columns={'float_mkt_value': 'lncap'}).reindex(factor_data.index)
-    indu_flag = data_source.sector.get_industry_dummy(None, industry=indu_name, dates=dates).reindex(factor_data.index)
+    indu_flag = data_source.sector.get_industry_dummy(None, industry=indu_name, dates=dates,
+                                                      idx=factor_data.dropna(), drop_first=drop_first_indu)
+    indu_flag = indu_flag[(indu_flag==1).any(axis=1)]
 
     if std_qt:
         factor_data = StandardByQT(factor_data, factor_name).to_frame()
         lncap = StandardByQT(lncap, 'lncap').to_frame()
     industry_names = list(indu_flag.columns)
     indep_data = lncap.join(indu_flag, how='inner')
-    resid = Orthogonalize(factor_data, indep_data, factor_name, industry_names+['lncap'])
-    return resid
+    resid = Orthogonalize(factor_data, indep_data, factor_name, industry_names+['lncap'], **kwargs)
+    return resid.reindex(factor_data.index)
 
 
 if __name__ == '__main__':

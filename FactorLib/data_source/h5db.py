@@ -220,7 +220,7 @@ class H5DB(object):
             mapping = pd.read_hdf(file_pth, "mapping", mode='r')
         finally:
             lock.release()
-        data = self.load_factor(factor_name, factor_dir, dates=dates, ids=ids, idx=idx)
+        data = self.load_factor(factor_name, factor_dir, dates=dates, ids=ids, idx=idx).dropna()
         dummy = np.zeros((len(data), len(mapping)))
         dummy[np.arange(len(data)), data[factor_name].values.astype('int')] = 1
         return pd.DataFrame(dummy, index=data.index, columns=mapping.values, dtype='int8')
