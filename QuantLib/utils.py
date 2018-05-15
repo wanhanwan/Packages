@@ -134,7 +134,8 @@ def __DropOutlierBoxPlot__(data, **kwargs):
 
 
 def DropOutlier(data, factor_name, method='FixedRatio',
-                drop_ratio=0.1, drop_mode='截断', alpha=3, **kwargs):
+                drop_ratio=0.1, drop_mode='截断', alpha=3,
+                ret_raw=True, **kwargs):
     """ 处理异常值函数
 
     参数
@@ -171,7 +172,10 @@ def DropOutlier(data, factor_name, method='FixedRatio',
     afterDropOutlier = tempData.groupby(
         level=0).apply(dropFuncs[method], **params)
 
-    return afterDropOutlier
+    if ret_raw:
+        return afterDropOutlier
+    else:
+        return afterDropOutlier[[factor_name]]
 
 
 def __StandardFun__(data0, **kwargs):

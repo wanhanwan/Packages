@@ -36,7 +36,7 @@ def plot_long_short_return(factor):
     # 多空净值曲线
     long_short_cum_returns = long_short_returns.apply(stats.cum_returns,args=(1,))
     long_short_cum_returns.plot(linewidth=2, ax=axes[1])
-    axes[1].set_title("Net Value of Long-Short Portfolio", fontsize=9)
+    axes[1].set_title("Net Value of Long-Short Portfolio Of %s"%factor.name, fontsize=9)
 
     return fig, axes
 
@@ -52,7 +52,7 @@ def plot_bar_group_return(factor):
     excess_return = group_annual_return.subtract(average_annual_return, axis=0, level=0)
     excess_return = excess_return.swaplevel().unstack()
 
-    ax = excess_return.plot(kind='bar', title="Excess Return")
+    ax = excess_return.plot(kind='bar', title="Excess Return Of %s"%factor.name)
     return ax.figure, ax
 
 def plot_group_cum_return(factor):
@@ -65,7 +65,7 @@ def plot_group_cum_return(factor):
             ax = (1 + group_return.loc[:, (method, group_ids)]).cumprod().copy().plot(ax=axes[i], linewidth=2)
         except:
             ax = (1 + group_return.loc[:, (method, group_ids)]).cumprod().copy().plot(ax=axes, linewidth=2)
-        ax.set_title(method, fontsize=9)
+        ax.set_title('_'.join([factor.name, method]), fontsize=9)
     return fig, axes
 
 def plot_first_group_return(factor):
@@ -79,16 +79,31 @@ def plot_first_group_return(factor):
 
     m_returns.plot(kind='bar',ax=axes[0])
     _adjust_date_axis(axes[0], new_index)
-    axes[0].set_title("Monthly Return of First Group Portfolio", fontsize=9)
+    axes[0].set_title("Monthly Return of First Group Portfolio Of %s"%factor.name, fontsize=9)
 
     # 多空净值曲线
     first_group_cum_return = first_group_return.apply(stats.cum_returns,args=(1,))
     first_group_cum_return['benchmark'] = stats.cum_returns(benchmark, 1)
 
     first_group_cum_return.plot(linewidth=2, ax=axes[1])
-    axes[1].set_title("Net Value of First Group Portfolio", fontsize=9)
+    axes[1].set_title("Net Value of First Group Portfolio Of %s"%factor.name, fontsize=9)
 
     return fig, axes
+
+
+def plot_excess_nav_of_first_group(factor):
+    """绘制第一组超额净值图"""
+    fig, axes = plt.subplots(len(factor.group_return.group_methods), 1)
+    excess_ret = factor.first_group_active_return.to_frame()
+    excess_nav = (1.0 + excess_ret).cumprod()
+    for i, method in enumerate(factor.group_return.group_methods):
+        try:
+            ax = excess_nav[method].plot(ax=axes[i], linewidth=2)
+        except:
+            ax = excess_nav[method].plot(ax=axes, linewidth=2)
+        ax.set_title('_'.join([factor.name, method]), fontsize=9)
+    return fig, axes
+
 
 def monthly_active_return_heat_map(factor):
     """绘制月收益率热力图"""
@@ -101,7 +116,7 @@ def monthly_active_return_heat_map(factor):
             ax = plot_monthly_returns_heatmap(actice_return, ax=axes[i])
         except:
             ax = plot_monthly_returns_heatmap(actice_return, ax=axes)
-        ax.title.set_text("Monthly Return(%s)" % method)
+        ax.title.set_text("Monthly Return(%s, %s)" % (method, factor.name))
     return fig, axes
 
 def _adjust_date_axis(ax, date_seq):
@@ -120,4 +135,4 @@ def _adjust_date_axis(ax, date_seq):
     ax.set_xlabel("")
 
 FuncList = [plot_ic, plot_bar_group_return, plot_long_short_return, plot_first_group_return,
-            plot_group_cum_return, monthly_active_return_heat_map]
+            plot_group_cum_return, monthly_active_return_heat_map, plot_excess_nav_of_first_group]
