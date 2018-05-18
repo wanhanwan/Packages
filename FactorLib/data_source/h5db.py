@@ -108,24 +108,55 @@ class H5DB(object):
             df.columns = [factor_name]              
             return df
 
-    def read_h5file(self, file_name, path, group='data'):
+    @handle_ids
+    def load_h5file(self, file_name, path, group='data', ids=None, dates=None,
+                    idx=None, **kwargs):
+        """读取h5File"""
+        attr_file_path = self.data_path + path + file_name + '_attr.pkl'
         file_path = self.abs_factor_path(path, file_name)
-        return pd.read_hdf(file_path, group)
-
-    def save_h5file(self, data, name, path, group='data', mode='a'):
-        file_path = self.abs_factor_path(path, name)
-        if self.check_factor_exists(name, path) and mode != 'w':
-            with pd.HDFStore(file_path, complib='blosc', complevel=9) as store:
-                try:
-                    df = store.select(group)
-                    store.remove(group)
-
-                except KeyError as e:
-                    df = pd.DataFrame()
-
-                store[group] = df.append(data).drop_duplicates()
+        try:
+            attr = pd.read_pickle(attr_file_path)
+            fill_value = attr['fill_value']
+            multiplier = attr['multiplier']
+        except FileNotFoundError as e:
+            fill_value = kwargs.get('fill_value', 100)
+            multiplier = kwargs.get('multiplier', 100)
+        
+        data = pd.read_hdf(file_path, group)
+        if idx is not None:
+            data = data.reindex(idx.index)
         else:
-            data.to_hdf(file_path, group, complib='blosc', complevel=9, mode='w')
+            if dates is not None:
+                data = data.loc[pd.DatetimeIndex(dates).values]
+            if ids is not None:
+                data = data.loc[pd.IndexSlice[:, list(ids)], :]
+        data /= multiplier
+        data.replace(fill_value, np.nan, inplace=True)
+        return data
+
+    def save_h5file(self, data, path, name, group='data',
+                    multiplier=100, fill_value=100, **kwargs):
+        """保存多列的DataFrame"""
+        file_path = self.abs_factor_path(path, name)
+        attr_file_path = self.data_path + path + name + '_attr.pkl'
+        if os.path.isfile(attr_file_path):
+            attr = pd.read_pickle(attr_file_path)
+            multiplier = attr['multiplier']
+            fill_value = attr['fill_value']
+        data = (data.fillna(fill_value) * multiplier).astype('int')
+        with pd.HDFStore(file_path, complib='blosc', complevel=9, mode='a') as store:
+            try:
+                df = store.select(group)
+                store.remove(group)
+            except KeyError as e:
+                df = pd.DataFrame()
+        new_df = df.append(data)
+        new_df = new_df[~new_df.index.duplicated(keep='last')]
+        ensure_dir_exists(self.data_path+path)
+        data.to_hdf(file_path, group, complib='blosc', complevel=9, mode='w')
+        persist_provider = DiskPersistProvider(self.data_path+path)
+        persist_provider.dump({'multiplier': multiplier, 'fill_value':fill_value},
+                              name=name+'_attr', protocol=2)
 
     def load_latest_period(self, factor_name, factor_dir=None, ids=None, idx=None):
         max_date = self.get_date_range(factor_name, factor_dir)[1]
