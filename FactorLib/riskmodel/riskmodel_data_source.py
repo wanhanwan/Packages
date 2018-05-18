@@ -276,7 +276,7 @@ class RiskDataSource(object):
 
     def list_factor_names(self, file_name, file_dir):
         """列出文件所包含的因子名称"""
-        return self.nc_db.list_file_factors(file_name, file_dir)
+        return self.h5_db.list_h5file_factors(file_name, file_dir)
 
     def list_file_meta(self, file_name, file_dir, attr_name):
         """列出文件的meta data"""
@@ -284,7 +284,7 @@ class RiskDataSource(object):
 
     @property
     def max_date_of_factor(self):
-        min_date, max_date = self.nc_db.get_date_range('risk_factor', '/factorData/')
+        min_date, max_date = self.h5_db.get_date_range('risk_factor', '/factorData/')
         return max_date
 
     @property
@@ -309,38 +309,37 @@ class RiskDataSource(object):
         """
         raw_dates = pd.DatetimeIndex(dates)
         dates = raw_dates.copy()
-        ret = 'df'
         max_date_of_factor = self.max_date_of_factor
+        if_reindex = False
         if max(dates) > max_date_of_factor:
             warn("不是所有日期都存在风险数据, 风险数据的最近日期为%s"%max_date_of_factor.strftime("%Y-%m-%d"))
-            ret = 'xarray'
+            if_reindex = True
             if len(dates) == 1:
                 dates = pd.DatetimeIndex([max_date_of_factor])
             else:
                 dates = dates[dates <= max_date_of_factor]
+                if max_date_of_factor not in dates:
+                    dates = dates.append(pd.DatetimeIndex([max_date_of_factor]))
         if factor_names == 'ALL':
-            style = self.nc_db.load_factor('risk_factor', '/factorData/', dates=dates, ret='xarray', ids=ids)
-            indu = self.nc_db.load_as_dummy('industry', '/factorData/', dates=dates, ids=ids).to_xarray()
-            new = style.update(indu)
-            if ret == 'df':
-                new = new.to_dataframe()
-        elif factor_names == 'STYLE':
-            new = self.nc_db.load_factor('risk_factor', '/factorData/', dates=dates, ids=ids, ret=ret)
-        elif 'Estu' not in factor_names:
-            style = self.nc_db.load_factor('risk_factor', '/factorData/', dates=dates, ids=ids)
+            style = self.h5_db.load_h5file('risk_factor', '/factorData/', dates=dates, ids=ids)
             indu = self.nc_db.load_as_dummy('industry', '/factorData/', dates=dates, ids=ids)
             new = style.join(indu, how='left')
+        elif factor_names == 'STYLE':
+            new = self.h5_db.load_h5file('risk_factor', '/factorData/', dates=dates, ids=ids)
+        elif 'Estu' not in factor_names:
+            new = self.h5_db.load_h5file('risk_factor', '/factorData/', dates=dates, ids=ids)
+            if any([x.startswith('Indu_') for x in factor_names]):
+                indu = self.nc_db.load_as_dummy('industry', '/factorData/', dates=dates, ids=ids)
+                new = new.join(indu, how='left')
             new = new[factor_names]
-            if ret == 'xarray':
-                new = new.to_xarray()
         else:
             new = self.h5_db.load_factor('Estu', '/factorData/', ids=ids, dates=dates)
-            if ret == 'xarray':
-                new = new.to_xarray()
-        if ret == 'xarray':
+        if if_reindex:
+            new = new.to_xarray()
             new = new.reindex({'date': raw_dates}, method='ffill').to_dataframe().dropna(how='all')
-            new.index = new.index.swaplevel('IDs', 'date')
-            new.sort_index(inplace=True)
+            if new.index.names[0] == 'IDs':
+                new.index = new.index.swaplevel('IDs', 'date')
+                new.sort_index(inplace=True)
         new.rename(columns=lambda x: x[5:] if x.startswith("Indu_") else x, inplace=True)
         return new
 
@@ -358,13 +357,16 @@ class RiskDataSource(object):
                 dates = pd.DatetimeIndex([max_date_of_factor])
             else:
                 dates = dates[dates <= max_date_of_factor]
+                if max_date_of_factor not in dates:
+                    dates = dates.append(pd.DatetimeIndex([max_date_of_factor]))
 
-        style = self.nc_db.load_factor('risk_factor', '/factorData/', factor_names=factor_names, dates=dates, ids=ids,
-                                       ret=ret)
+        style = self.h5_db.load_h5file('risk_factor', '/factorData/', factor_names=factor_names, dates=dates, ids=ids)
         if ret == 'xarray':
+            style = style.to_xarray()
             style = style.reindex({'date': raw_dates}, method='ffill').to_dataframe().dropna(how='all')
-            style.index = style.index.swaplevel('IDs', 'date')
-            style.sort_index(inplace=True)
+            if style.index.names[0] == 'IDs':
+                style.index = style.index.swaplevel('IDs', 'date')
+                style.sort_index(inplace=True)
         return style
 
     @DateRange2Dates

@@ -39,7 +39,7 @@ class H5DB(object):
         self.data_path = path
         self._update_info()
     
-    #---------------------------因子管理---------------------------------------
+    # ---------------------------因子管理---------------------------------------
     # 查看因子是否存在
     def check_factor_exists(self, factor_name, factor_dir='/'):
         return factor_name in self.data_dict[self.data_dict['path']==factor_dir]['name'].values
@@ -74,10 +74,26 @@ class H5DB(object):
     
     # 因子的时间区间
     def get_date_range(self, factor_name, factor_path):
-        panel = pd.read_hdf(self.abs_factor_path(factor_path, factor_name))
-        min_date = Datetime2DateStr(panel.major_axis.min())
-        max_date = Datetime2DateStr(panel.major_axis.max())
+        try:
+            max_date = self.read_h5file_attr(factor_name, factor_path, 'max_date')
+            min_date = self.read_h5file_attr(factor_name, factor_path, 'min_date')
+        except:
+            panel = pd.read_hdf(self.abs_factor_path(factor_path, factor_name))
+            if isinstance(panel, pd.Panel):
+                min_date = Datetime2DateStr(panel.major_axis.min())
+                max_date = Datetime2DateStr(panel.major_axis.max())
+            else:
+                min_date = panel.index.get_level_values('date').min()
+                max_date = panel.index.get_level_values('date').max()
         return min_date, max_date
+
+    # 读取多列因子的属性
+    def read_h5file_attr(self, factor_name, factor_path, attr_name):
+        attr_file_path = self.abs_factor_attr_path(factor_path, factor_name)
+        if os.path.isfile(attr_file_path):
+            return pd.read_pickle(attr_file_path)[attr_name]
+        else:
+            raise FileNotFoundError('找不到因子属性文件!')
 
     # --------------------------数据管理-------------------------------------------
     @handle_ids
@@ -110,28 +126,34 @@ class H5DB(object):
 
     @handle_ids
     def load_h5file(self, file_name, path, group='data', ids=None, dates=None,
-                    idx=None, **kwargs):
+                    idx=None, factor_names=None, **kwargs):
         """读取h5File"""
         attr_file_path = self.data_path + path + file_name + '_attr.pkl'
         file_path = self.abs_factor_path(path, file_name)
         try:
-            attr = pd.read_pickle(attr_file_path)
-            fill_value = attr['fill_value']
-            multiplier = attr['multiplier']
-        except FileNotFoundError as e:
-            fill_value = kwargs.get('fill_value', 100)
-            multiplier = kwargs.get('multiplier', 100)
-        
-        data = pd.read_hdf(file_path, group)
-        if idx is not None:
-            data = data.reindex(idx.index)
-        else:
-            if dates is not None:
-                data = data.loc[pd.DatetimeIndex(dates).values]
-            if ids is not None:
-                data = data.loc[pd.IndexSlice[:, list(ids)], :]
-        data /= multiplier
-        data.replace(fill_value, np.nan, inplace=True)
+            lock.acquire()
+            try:
+                attr = pd.read_pickle(attr_file_path)
+                fill_value = attr['fill_value']
+                multiplier = attr['multiplier']
+            except FileNotFoundError as e:
+                fill_value = kwargs.get('fill_value', 100)
+                multiplier = kwargs.get('multiplier', 100)
+
+            data = pd.read_hdf(file_path, group)
+            if idx is not None:
+                data = data.reindex(idx.index)
+            else:
+                if dates is not None:
+                    data = data.loc[pd.DatetimeIndex(dates).values]
+                if ids is not None:
+                    data = data.loc[pd.IndexSlice[:, list(ids)], :]
+            data /= multiplier
+            data.replace(fill_value, np.nan, inplace=True)
+        finally:
+            lock.release()
+        if factor_names is not None:
+            return data[factor_names]
         return data
 
     def save_h5file(self, data, path, name, group='data',
@@ -139,28 +161,47 @@ class H5DB(object):
         """保存多列的DataFrame"""
         file_path = self.abs_factor_path(path, name)
         attr_file_path = self.data_path + path + name + '_attr.pkl'
-        if os.path.isfile(attr_file_path):
+        try:
+            lock.acquire()
+            if os.path.isfile(attr_file_path):
+                attr = pd.read_pickle(attr_file_path)
+                multiplier = attr['multiplier']
+                fill_value = attr['fill_value']
+            data = (data.fillna(fill_value) * multiplier).astype('int')
+            with pd.HDFStore(file_path, complib='blosc', complevel=9, mode='a') as store:
+                try:
+                    df = store.select(group)
+                    store.remove(group)
+                except KeyError as e:
+                    df = pd.DataFrame()
+            new_df = df.append(data)
+            new_df = new_df[~new_df.index.duplicated(keep='last')].sort_index()
+            ensure_dir_exists(self.data_path+path)
+            new_df.to_hdf(file_path, group, complib='blosc', complevel=9, mode='w')
+            persist_provider = DiskPersistProvider(self.data_path+path)
+            persist_provider.dump({'multiplier': multiplier, 'fill_value': fill_value,
+                                   'factors': new_df.columns.tolist(),
+                                   'max_date': new_df.index.get_level_values('date').max(),
+                                   'min_date': new_df.index.get_level_values('date').min()},
+                                  name=name+'_attr', protocol=2)
+        finally:
+            lock.release()
+
+    def list_h5file_factors(self, file_name, file_pth):
+        """"提取h5File的所有列名"""
+        attr_file_path = self.data_path + file_pth + file_name + '_attr.pkl'
+        file_path = self.abs_factor_path(file_pth, file_name)
+        try:
             attr = pd.read_pickle(attr_file_path)
-            multiplier = attr['multiplier']
-            fill_value = attr['fill_value']
-        data = (data.fillna(fill_value) * multiplier).astype('int')
-        with pd.HDFStore(file_path, complib='blosc', complevel=9, mode='a') as store:
-            try:
-                df = store.select(group)
-                store.remove(group)
-            except KeyError as e:
-                df = pd.DataFrame()
-        new_df = df.append(data)
-        new_df = new_df[~new_df.index.duplicated(keep='last')]
-        ensure_dir_exists(self.data_path+path)
-        data.to_hdf(file_path, group, complib='blosc', complevel=9, mode='w')
-        persist_provider = DiskPersistProvider(self.data_path+path)
-        persist_provider.dump({'multiplier': multiplier, 'fill_value':fill_value},
-                              name=name+'_attr', protocol=2)
+            return attr['factors']
+        except FileNotFoundError:
+            df = pd.read_hdf(file_path, "data", mode="r")
+            return df.columns.tolist()
 
     def load_latest_period(self, factor_name, factor_dir=None, ids=None, idx=None):
         max_date = self.get_date_range(factor_name, factor_dir)[1]
-        return self.load_factor(factor_name, factor_dir, dates=[max_date], ids=ids, idx=idx).reset_index(level=0, drop=True)
+        return self.load_factor(factor_name, factor_dir, dates=[max_date], ids=ids, idx=idx).reset_index(level=0,
+                                                                                                         drop=True)
 
     def load_factors(self, factor_names_dict, dates=None, ids=None):
         _l = []
@@ -221,7 +262,7 @@ class H5DB(object):
             factor_data = pd.get_dummies(factor_data)
         else:
             assert isinstance(factor_data, pd.DataFrame) and indu_name is not None
-        factor_data.drop('T00018', axis=0, level='IDs').fillna(0)
+        factor_data = factor_data.drop('T00018', axis=0, level='IDs').fillna(0)
         factor_data = factor_data.loc[(factor_data!=0).any(axis=1)]
         file_pth = self.abs_factor_path(factor_dir, indu_name)
         if self.check_factor_exists(indu_name, factor_dir):
@@ -351,6 +392,9 @@ class H5DB(object):
     #-------------------------工具函数-------------------------------------------
     def abs_factor_path(self, factor_path, factor_name):
         return self.data_path + os.path.join(factor_path, factor_name+'.h5')
+
+    def abs_factor_attr_path(self, factor_path, factor_name):
+        return self.data_path + factor_path + factor_name + '_attr.pkl'
     
     def get_available_factor_name(self, factor_name, factor_path):
         i = 2
