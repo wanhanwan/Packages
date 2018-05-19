@@ -321,13 +321,13 @@ class RiskDataSource(object):
                 if max_date_of_factor not in dates:
                     dates = dates.append(pd.DatetimeIndex([max_date_of_factor]))
         if factor_names == 'ALL':
-            style = self.h5_db.load_h5file('risk_factor', '/factorData/', dates=dates, ids=ids)
+            style = self.h5_db.load_multi_columns('risk_factor', '/factorData/', dates=dates, ids=ids)
             indu = self.nc_db.load_as_dummy('industry', '/factorData/', dates=dates, ids=ids)
             new = style.join(indu, how='left')
         elif factor_names == 'STYLE':
-            new = self.h5_db.load_h5file('risk_factor', '/factorData/', dates=dates, ids=ids)
+            new = self.h5_db.load_multi_columns('risk_factor', '/factorData/', dates=dates, ids=ids)
         elif 'Estu' not in factor_names:
-            new = self.h5_db.load_h5file('risk_factor', '/factorData/', dates=dates, ids=ids)
+            new = self.h5_db.load_multi_columns('risk_factor', '/factorData/', dates=dates, ids=ids)
             if any([x.startswith('Indu_') for x in factor_names]):
                 indu = self.nc_db.load_as_dummy('industry', '/factorData/', dates=dates, ids=ids)
                 new = new.join(indu, how='left')
@@ -360,7 +360,7 @@ class RiskDataSource(object):
                 if max_date_of_factor not in dates:
                     dates = dates.append(pd.DatetimeIndex([max_date_of_factor]))
 
-        style = self.h5_db.load_h5file('risk_factor', '/factorData/', factor_names=factor_names, dates=dates, ids=ids)
+        style = self.h5_db.load_multi_columns('risk_factor', '/factorData/', factor_names=factor_names, dates=dates, ids=ids)
         if ret == 'xarray':
             style = style.to_xarray()
             style = style.reindex({'date': raw_dates}, method='ffill').to_dataframe().dropna(how='all')

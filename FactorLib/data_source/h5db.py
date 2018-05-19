@@ -125,8 +125,8 @@ class H5DB(object):
             return df
 
     @handle_ids
-    def load_h5file(self, file_name, path, group='data', ids=None, dates=None,
-                    idx=None, factor_names=None, **kwargs):
+    def load_multi_columns(self, file_name, path, group='data', ids=None, dates=None,
+                           idx=None, factor_names=None, **kwargs):
         """读取h5File"""
         attr_file_path = self.data_path + path + file_name + '_attr.pkl'
         file_path = self.abs_factor_path(path, file_name)
@@ -156,8 +156,8 @@ class H5DB(object):
             return data[factor_names]
         return data
 
-    def save_h5file(self, data, path, name, group='data',
-                    multiplier=100, fill_value=100, **kwargs):
+    def save_multi_columns(self, data, path, name, group='data',
+                           multiplier=100, fill_value=100, **kwargs):
         """保存多列的DataFrame"""
         file_path = self.abs_factor_path(path, name)
         attr_file_path = self.data_path + path + name + '_attr.pkl'
@@ -186,6 +186,23 @@ class H5DB(object):
                                   name=name+'_attr', protocol=2)
         finally:
             lock.release()
+    
+    def read_h5file(self, file_name, path, group='data'):
+        file_path = self.abs_factor_path(path, file_name)
+        return pd.read_hdf(file_path, group)
+
+    def save_h5file(self, data, name, path, group='data', mode='a'):
+        file_path = self.abs_factor_path(path, name)
+        if self.check_factor_exists(name, path) and mode != 'w':
+            with pd.HDFStore(file_path, complib='blosc', complevel=9) as store:
+                try:
+                    df = store.select(group)
+                    store.remove(group)
+                except KeyError as e:
+                    df = pd.DataFrame()
+                store[group] = df.append(data).drop_duplicates()
+        else:
+            data.to_hdf(file_path, group, complib='blosc', complevel=9, mode='w')
 
     def list_h5file_factors(self, file_name, file_pth):
         """"提取h5File的所有列名"""
