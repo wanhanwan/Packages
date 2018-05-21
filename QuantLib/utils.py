@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 import statsmodels.api as sm
 from scipy.stats import norm, rankdata
+from FactorLib.riskmodel.riskmodel_data_source import RiskDataSource
+from FactorLib.data_source.base_data_source_h5 import data_source
 
 def __DropOutlierFixedRate__(data, **kwargs):
     """以固定比率截断一部分异常值
@@ -175,7 +177,7 @@ def DropOutlier(data, factor_name, method='FixedRatio',
     if ret_raw:
         return afterDropOutlier
     else:
-        return afterDropOutlier[[factor_name]]
+        return afterDropOutlier[[factor_name+'_after_drop_outlier']]
 
 
 def __StandardFun__(data0, **kwargs):
@@ -490,6 +492,36 @@ def NeutralizeBySizeIndu(factor_data, factor_name, std_qt=True, indu_name='中�
     indep_data = lncap.join(indu_flag, how='inner')
     resid = Orthogonalize(factor_data, indep_data, factor_name, industry_names+['lncap'], **kwargs)
     return resid.reindex(factor_data.index)
+
+
+def NeutralizeByRiskFactors(factor_data, factor_name=None, risk_factor_names=None, indu_name='中信一级',
+                            risk_source='xy', std_indep=True, **kwargs):
+    """对因子进行风险中性化"""
+    if isinstance(factor_data, pd.Series):
+        factor_name = factor_data.name
+        factor_data = factor_data.to_frame()
+    assert isinstance(factor_data, pd.DataFrame)
+    risk_ds = RiskDataSource(risk_source)
+    all_risk_factors = risk_ds.list_factor_names('risk_factor', '/factorData/')
+    if risk_factor_names is None:
+        risk_factor_names = all_risk_factors
+    else:
+        risk_factor_names = [x for x in risk_factor_names if x in all_risk_factors]
+    style = risk_ds.load_style_factor(factor_names=risk_factor_names,
+                                      ids=factor_data.index.get_level_values('IDs').unique().tolist(),
+                                      dates=factor_data.index.get_level_values('date').unique().tolist())
+    if std_indep:
+        style = style.apply(lambda x: StandardByQT(x.to_frame(), x.name))
+    drop_first_indu = kwargs.get('drop_first_indu', True)
+    indu = data_source.sector.get_industry_dummy(idx=factor_data, industry=indu_name, drop_first=drop_first_indu)
+    indu = indu[(indu==1).any(axis=1)]
+    X = style.join(indu, how='inner')
+    add_const = kwargs.get('add_const', True)
+    resid = Orthogonalize(factor_data, X,
+                          left_name=factor_name,
+                          right_name=X.columns.tolist(),
+                          add_const=add_const)
+    return resid
 
 
 if __name__ == '__main__':
