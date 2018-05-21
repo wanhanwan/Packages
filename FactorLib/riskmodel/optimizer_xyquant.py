@@ -198,7 +198,6 @@ class Optimizer(object):
                 names.append('tradelimit_%s' % i)
             self._c.linear_constraints.add(lin_expr=lin_exprs, senses=senses, rhs=rhs, names=names)
 
-
         # 现金中性, target_ids和nontrade_pre中的股票权重之和是1
         trading_stocks = list(set(self.target_ids).union(set(self._preid_notin_tar)))
         trading_stocks = [x.encode('utf8') if isinstance(x, unicode) else x for x in trading_stocks]
@@ -224,7 +223,7 @@ class Optimizer(object):
         else:
             self.opt_rslt['previous_weight'] = self._asset.reindex(self._signal.index, fill_value=0.0).values
 
-    def _add_style_cons(self, style_dict, active=True, sense='E'):
+    def _add_style_cons(self, style_dict, active=True, sense='E', std_qt=False, **kwargs):
         """
         设置风格限制
 
@@ -242,6 +241,7 @@ class Optimizer(object):
         >>> _add_style_cons({'Size':[0.0, 0.2]}, active=True)
         >>> _add_style_cons({'Size': 0.2}, active=True, sense='G')
         """
+        style_data = self._get_style_factors(list(style_dict), std_qt=std_qt)
         style_dict2 = {}
         for k, v in style_dict.items():
             if isinstance(v, list):
@@ -249,9 +249,9 @@ class Optimizer(object):
         if style_dict2:
             cons2 = pd.DataFrame(style_dict2).T.rename(columns={0: 'min', 1: 'max'})
             if active:
-                bchmk_style = self._prepare_benchmark_style(list(style_dict2))
+                bchmk_style = self._prepare_benchmark_style(list(style_dict2), data=style_data)
                 cons2 = cons2.add(bchmk_style, axis=0)
-            portf_style = self._prepare_portfolio_style(list(style_dict2))
+            portf_style = self._prepare_portfolio_style(list(style_dict2), data=style_data)
             if np.any(pd.isnull(portf_style)) or np.any(pd.isnull(cons2)):
                 warnings.warn("设置风格敞口时, 风格因子数据存在缺失值!")
                 na_stocks = portf_style[portf_style.isnull().any(axis=1)]
@@ -285,9 +285,9 @@ class Optimizer(object):
         if style_dict:
             cons = pd.Series(style_dict)
             if active:
-                bchmk_style = self._prepare_benchmark_style(list(style_dict))
+                bchmk_style = self._prepare_benchmark_style(list(style_dict), data=style_data)
                 cons = cons + bchmk_style
-            portf_style = self._prepare_portfolio_style(list(style_dict))
+            portf_style = self._prepare_portfolio_style(list(style_dict), data=style_data)
             if np.any(pd.isnull(portf_style)) or np.any(pd.isnull(cons)):
                 warnings.warn("设置风格敞口时, 风格因子数据存在缺失值!")
                 na_stocks = portf_style[portf_style.isnull().any(axis=1)]
@@ -449,7 +449,19 @@ class Optimizer(object):
             indu = indu.mul(weight, axis='index').sum()
         return indu
 
-    def _prepare_portfolio_style(self, styles):
+    def _get_style_factors(self, styles, std_qt=False):
+        """提取风格因子数据
+
+        Return
+        -----------------
+        data: pd.DataFrame(index=[date, IDs], values=style_factor)
+        """
+        data = self._rskds.load_style_factor(styles, dates=[self._date])
+        if std_qt:
+            data = data.apply(lambda x: StandardByQT(x.to_frame(), x.name))
+        return data
+
+    def _prepare_portfolio_style(self, styles, data=None, **kwargs):
         """
         组合的风格因子
 
@@ -458,11 +470,17 @@ class Optimizer(object):
         data: DataFrame
             DataFrame(index:[factor_names], columns:[IDs])
         """
-        portfolio = self._signal.index.tolist()
-        data = self._rskds.load_factors(styles, ids=portfolio, dates=[self._date]).reset_index(level='date', drop=True)
+        if data is None:
+            portfolio = self._signal.index.tolist()
+            data = self._rskds.load_style_factor(styles, ids=portfolio, dates=[self._date]) \
+                              .reset_index(level='date', drop=True)
+            if kwargs.get('std_qt', False):
+                data = data.apply(lambda x: StandardByQT(x.to_frame(), x.name))
+        else:
+            data = data.reindex(columns=styles).reset_index(level='date', drop=True)
         return data.reindex(self._signal.index)
 
-    def _prepare_benchmark_style(self, styles):
+    def _prepare_benchmark_style(self, styles, data=None, **kwargs):
         """
         基准的风格因子
 
@@ -473,7 +491,14 @@ class Optimizer(object):
         """
         weight = self._bchmrk_weight
         members = weight.index.tolist()
-        style_data = self._rskds.load_factors(styles, ids=members, dates=[self._date]).reset_index(level='date', drop=True)
+        if data is None:
+            style_data = self._rskds.load_style_factor(styles, ids=members, dates=[self._date])\
+                .reset_index(level='date', drop=True)
+            if kwargs.get('std_qt', False):
+                style_data = style_data.apply(lambda x: StandardByQT(x.to_frame(), x.name))
+        else:
+            style_data = data.reindex(columns=styles).reset_index(level='date', drop=True)
+
         if weight.sum() > 0:
             style_benchmark = style_data.mul(weight, axis='index').sum() / weight.sum()
         else:
