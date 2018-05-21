@@ -224,7 +224,7 @@ class Optimizer(object):
         else:
             self.opt_rslt['previous_weight'] = self._asset.reindex(self._signal.index, fill_value=0.0).values
 
-    def _add_style_cons(self, style_dict, active=True, sense='E'):
+    def _add_style_cons(self, style_dict, active=True, sense='E', std_qt=False, **kwargs):
         """
         设置风格限制
 
