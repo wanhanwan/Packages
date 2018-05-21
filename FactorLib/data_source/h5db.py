@@ -148,10 +148,14 @@ class H5DB(object):
             else:
                 if dates is not None:
                     dates = pd.DatetimeIndex(dates).intersection(all_dates)
+                else:
+                    dates = all_dates
                     # data = data.loc[pd.DatetimeIndex(dates).values].copy()
                 if ids is not None:
                     # data = data.loc[pd.IndexSlice[:, list(ids)], :]
                     ids = np.intersect1d(ids, all_ids)
+                else:
+                    ids = all_ids
                 idx = pd.MultiIndex.from_product([dates, ids], names=['date', 'IDs'])
                 data = data.reindex(idx)
             data /= multiplier
