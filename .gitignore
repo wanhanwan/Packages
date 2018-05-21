@@ -9,3 +9,6 @@ __pycache__/
 # Session Data files
 .RData
 .idea/Packages.iml
+
+# test file
+test.py

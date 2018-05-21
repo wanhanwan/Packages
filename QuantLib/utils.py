@@ -500,7 +500,7 @@ def NeutralizeByRiskFactors(factor_data, factor_name=None, risk_factor_names=Non
     if isinstance(factor_data, pd.Series):
         factor_name = factor_data.name
         factor_data = factor_data.to_frame()
-    assert isinstance(factor_data, pd.DataFrame)
+    assert isinstance(factor_data, pd.DataFrame) and (factor_name is not None)
     risk_ds = RiskDataSource(risk_source)
     all_risk_factors = risk_ds.list_factor_names('risk_factor', '/factorData/')
     if risk_factor_names is None:

@@ -141,13 +141,19 @@ class H5DB(object):
                 multiplier = kwargs.get('multiplier', 100)
 
             data = pd.read_hdf(file_path, group)
+            all_dates = data.index.get_level_values('date').unique()
+            all_ids = data.index.get_level_values('IDs').unique()
             if idx is not None:
                 data = data.reindex(idx.index)
             else:
                 if dates is not None:
-                    data = data.loc[pd.DatetimeIndex(dates).values]
+                    dates = pd.DatetimeIndex(dates).intersection(all_dates)
+                    # data = data.loc[pd.DatetimeIndex(dates).values].copy()
                 if ids is not None:
-                    data = data.loc[pd.IndexSlice[:, list(ids)], :]
+                    # data = data.loc[pd.IndexSlice[:, list(ids)], :]
+                    ids = np.intersect1d(ids, all_ids)
+                idx = pd.MultiIndex.from_product([dates, ids], names=['date', 'IDs'])
+                data = data.reindex(idx)
             data /= multiplier
             data.replace(fill_value, np.nan, inplace=True)
         finally:
