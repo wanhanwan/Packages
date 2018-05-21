@@ -10,5 +10,5 @@ __pycache__/
 .RData
 .idea/Packages.iml
 
-# test file
-test.py
+# test file in root dir
+/test.py
