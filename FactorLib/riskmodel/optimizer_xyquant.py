@@ -243,7 +243,7 @@ class Optimizer(object):
         """
         style_data = self._get_style_factors(list(style_dict), std_qt=std_qt)
         style_dict2 = {}
-        for k, v in style_dict.items():
+        for k, v in style_dict.copy().items():
             if isinstance(v, list):
                 style_dict2[k] = style_dict.pop(k)
         if style_dict2:

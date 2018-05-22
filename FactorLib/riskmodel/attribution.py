@@ -206,7 +206,7 @@ class RiskExposureAnalyzer(object):
 class RiskModelAttribution(object):
     """
     风险模型的收益归因分析
-    已知组合的主动暴露(风格暴露和行业暴露)，把组合的收益率归因到因子上去
+    已知组合的主动暴露(风格暴露和行业暴露)，把组合的收益率归因到 因子上去
     """
     def __init__(self, ret_ptf, style_expo, industry_expo, bchmrk_name='000905', barra_ds='xy'):
         self.ret_ptf = ret_ptf                                                # 组合日频收益率
