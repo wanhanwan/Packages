@@ -243,8 +243,10 @@ class Optimizer(object):
         """
         style_data = self._get_style_factors(list(style_dict), std_qt=std_qt)
         style_dict2 = {}
-        for k, v in style_dict.copy().items():
+        style_dict = style_dict.copy()
+        for k, v in style_dict.items():
             if isinstance(v, list):
+                assert v[0] <= v[1]
                 style_dict2[k] = style_dict.pop(k)
         if style_dict2:
             cons2 = pd.DataFrame(style_dict2).T.rename(columns={0: 'min', 1: 'max'})
@@ -334,6 +336,7 @@ class Optimizer(object):
         """
 
         industry_dict2 = {}
+        industry_dict = industry_dict.copy()
         indu_bchmrk = self._prepare_benchmark_indu()
         if industry_dict is None:
             cons = indu_bchmrk
@@ -575,6 +578,7 @@ class Optimizer(object):
         if isinstance(limit, dict):
             for k, v in limit.items():
                 if isinstance(v, list):
+                    assert v[0] <= v[1]
                     limit_min[k] = v[0]
                     limit_max[k] = v[1]
                 elif isinstance(v, (int, float)):
