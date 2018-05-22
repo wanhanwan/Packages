@@ -43,7 +43,7 @@ class CustomBusinessWeekEnd(DateOffset):
                  holidays=None, calendar=None, **kwds):
         self.n = n
         self.normalized = normalize
-        self.kwds = kwds
+        self.kwds.update(kwds)
         self.offset = kwds.get('offset', timedelta(0))
         self.cbday = CustomBusinessDay(n=1, normalize=normalize, weekmask=weekmask, holidays=holidays,
                                        calendar=calendar, **kwds)
@@ -84,7 +84,7 @@ class CustomBusinessQuaterEnd(QuarterOffset):
                  holidays=None, calendar=None, **kwds):
         self.n = n
         self.normalize = normalize
-        self.kwds = kwds
+        self.kwds.update(kwds)
         self.offset = kwds.get('offset', timedelta(0))
         self.startingMonth = kwds.get('startingMonth', 3)
         self.cbday = CustomBusinessDay(n=1, normalize=normalize, weekmask=weekmask, holidays=holidays,
@@ -126,7 +126,7 @@ class CustomBusinessYearEnd(YearOffset):
                  holidays=None, calendar=None, **kwds):
         self.n = n
         self.normalize = normalize
-        self.kwds = kwds
+        self.kwds.update(kwds)
         self.offset = kwds.get('offset', timedelta(0))
         self.month = kwds.get('month', self._default_month)
         self.cbday = CustomBusinessDay(n=1, normalize=normalize, weekmask=weekmask, holidays=holidays,
