@@ -30,6 +30,7 @@ def update_raw_from_uqer(start, end, **kwargs):
     u = UqerDB.get_instance()
     u.connect()
     s = kwargs['data_source'].trade_calendar.get_trade_days(start, end)[0][:4]+'0101'
+    s = kwargs['data_source'].trade_calendar.tradeDayOffset(s, 1, incl_on_offset_today=True)
     e = s[:4]+'1231'
     all_ids = kwargs['data_source'].sector.get_history_ashare(dates=[s], history=False)
     data = u.run_api('EquRestructuringGet', ticker=list(all_ids[all_ids['ashare']==1.0].index.get_level_values('IDs')),

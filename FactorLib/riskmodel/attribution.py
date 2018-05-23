@@ -84,7 +84,8 @@ class RiskExposureAnalyzer(object):
         if new_dates:
             new_barra_data = self.barra_ds.load_factors(factor_names='STYLE', dates=new_dates)
             if self.industry is not None:
-                new_industry_data = data_source.sector.get_industry_dummy(ids=None, dates=new_dates, drop_first=False)
+                new_industry_data = data_source.sector.get_industry_dummy(ids=None, dates=new_dates, drop_first=False,
+                                                                          industry=self.industry)
             else:
                 new_industry_data = self.barra_ds.load_industry(ids=None, dates=new_dates)
             if self.risk_factors is not None:
@@ -173,6 +174,7 @@ class RiskExposureAnalyzer(object):
             DataFrame(index:[date  riskfactor_name], columns:[portfolio benchmark expo])
         """
         max_date = self.barra_ds.max_date_of_factor
+        dates = pd.to_datetime(dates)
         dates = dates[dates <= pd.to_datetime(max_date)]
         if len(dates) == 0:
             return None, None, None
