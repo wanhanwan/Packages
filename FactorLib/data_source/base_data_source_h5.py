@@ -486,6 +486,7 @@ class sector(object):
         if idx is not None:
             dummy = dummy.reindex(idx.index, fill_value=0)
         dummy = dummy.loc[:, (dummy != 0).any()]
+        dummy = dummy[(dummy == 1).any(axis=1)]
         if drop_first:
             return dummy.iloc[:, 1:]
         return dummy

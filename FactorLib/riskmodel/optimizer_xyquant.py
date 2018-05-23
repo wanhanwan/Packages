@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import cplex as cpx
 import os
+import copy
 import sys
 import warnings
 from FactorLib.data_source.base_data_source_h5 import data_source
@@ -949,7 +950,7 @@ class PortfolioOptimizer(object):
                 print("%s权重优化失败:%s" % (idate.strftime("%Y-%m-%d"), optimizer.solution_status))
                 self.log[idate.strftime("%Y-%m-%d")] = optimizer.solution_status
                 if self.boostrap is not None:
-                    constraints = self.constraints.copy()
+                    constraints = copy.deepcopy(self.constraints)
                     while 1:
                         constraints, flag = self.boostrap(constraints)
                         if not flag:

@@ -514,7 +514,7 @@ def NeutralizeByRiskFactors(factor_data, factor_name=None, risk_factor_names=Non
         style = style.apply(lambda x: StandardByQT(x.to_frame(), x.name))
     drop_first_indu = kwargs.get('drop_first_indu', True)
     indu = data_source.sector.get_industry_dummy(idx=factor_data, industry=indu_name, drop_first=drop_first_indu)
-    indu = indu[(indu==1).any(axis=1)]
+    # indu = indu[(indu==1).any(axis=1)]
     X = style.join(indu, how='inner')
     add_const = kwargs.get('add_const', True)
     resid = Orthogonalize(factor_data, X,
