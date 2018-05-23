@@ -486,7 +486,7 @@ def collect_nav(mailling=False):
     indexreturns = (h5.load_factor('daily_returns_%', '/indexprices/', dates=[maxdate]) / 100).reset_index()
     indexreturns.insert(0, 'name', indexreturns['IDs'].map(MARKET_INDEX_DICT))
     indexreturns = indexreturns.set_index(['date', 'IDs'])
-    industry_returns = (h5.load_factor('pct_chg', '/indexprices/cs_level_1/', dates=[maxdate]) / 100).reset_index()
+    industry_returns = (h5.load_factor('pct_chg', '/indexprices/', dates=[maxdate]) / 100).reset_index()
     industry_returns.insert(0, 'name', industry_returns['IDs'].map(CS_INDUSTRY_DICT))
     industry_returns = industry_returns.set_index(['date', 'IDs'])
     ensure_dir_exists("D:/data/strategy_performance/%s"%maxdate)
