@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import os
 import shutil
+import warnings
 from multiprocessing import Lock
 from ..utils.datetime_func import Datetime2DateStr, DateStr2Datetime
 from ..utils.tool_funcs import ensure_dir_exists
@@ -13,6 +14,7 @@ from filemanager import zip_dir, unzip_file
 from .helpers import handle_ids
 
 lock = Lock()
+warnings.simplefilter('ignore', category=FutureWarning)
 
 
 class H5DB(object):

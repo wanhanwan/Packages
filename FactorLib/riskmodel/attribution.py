@@ -67,6 +67,10 @@ class RiskExposureAnalyzer(object):
         stocks = stocks.set_index(['date', 'IDs'])
         return cls(stocks=stocks, **kwargs)
 
+    @property
+    def all_dates(self):
+        return self.stock_positions.index.get_level_values('date').unique()
+
     def _load_data(self, dates):
         """
         加载风险数据,风险数据包括BARRA风险因子，行业因子，自定义风险因子

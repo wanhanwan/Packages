@@ -1,5 +1,8 @@
 """优矿数据库"""
 from uqer import Client, DataAPI
+from urllib3.exceptions import InsecureRequestWarning
+import warnings
+warnings.simplefilter('ignore', category=InsecureRequestWarning)
 
 
 class UqerDB(object):
