@@ -129,6 +129,10 @@ class CustomBusinessYearEnd(YearOffset):
         self.kwds.update(kwds)
         self.offset = kwds.get('offset', timedelta(0))
         self.month = kwds.get('month', self._default_month)
+        try:
+            kwds.pop('month')
+        except Exception as e:
+            pass
         self.cbday = CustomBusinessDay(n=1, normalize=normalize, weekmask=weekmask, holidays=holidays,
                                        calendar=calendar, **kwds)
         self.kwds['calendar'] = self.cbday.calendar
