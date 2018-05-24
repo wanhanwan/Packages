@@ -132,14 +132,19 @@ class base_data_source(object):
         return cum_returns.loc[DateStr2Datetime(start_date):DateStr2Datetime(end_date)]
     
     def get_forward_ndays_return(self, ids, windows, freq='1d',
-                                 dates=None, type='stock'):
+                                 dates=None, type='stock', idx=None):
         """计算证券未来N天的收益率"""
         from alphalens.utils import compute_forward_returns
+        if idx is not None:
+            ids = idx.index.get_level_values('IDs').unique().tolist()
+            dates = idx.index.get_level_values('date').unique()
         max_date = self.trade_calendar.tradeDayOffset(max(dates), max(windows)+1, freq=freq, retstr=None)
         price = self.get_history_price(ids, start_date=min(dates), end_date=max_date,
                                        adjust=True, type=type).iloc[:, 0].unstack()
         ret = compute_forward_returns(price, periods=tuple(windows)).loc[dates]
         ret.index.names = ['date', 'IDs']
+        if idx is not None:
+            ret = ret.reindex(idx.index)
         return ret
 
     def get_periods_return(self, ids, dates, type='stock'):

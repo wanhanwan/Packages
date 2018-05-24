@@ -68,7 +68,16 @@ def cal_diversion_of_large_weight(portfolio_weight, benchmark_weight, n=10,
 
 
 def cal_total_weight_in_benchmark(portfolio_weight, benchmark):
-    """计算组合中属于基准成分股中的股票权重之和"""
+    """计算组合中属于基准成分股中的股票权重之和
+
+    Parameters:
+    -------------------------
+    portfolio_weight: pd.DataFrame or Series
+        持仓权重(index=[date, IDs], columns=weight)
+
+    benchmark: str or pd.DataFrame
+        基准名称
+    """
     if isinstance(benchmark, str):
         dates = portfolio_weight.index.get_level_values('date').unique()
         benchmark = data_source.sector.get_index_members(ids=benchmark, dates=dates)
@@ -77,7 +86,16 @@ def cal_total_weight_in_benchmark(portfolio_weight, benchmark):
 
 
 def cal_total_num_in_benchmark(portfolio_weight, benchmark):
-    """计算组合中属于基准成分股中的股票数量"""
+    """计算组合中属于基准成分股中的股票数量
+
+    Parameters:
+    -------------------------
+    portfolio_weight: pd.DataFrame or Series
+        持仓权重(index=[date, IDs], columns=weight)
+
+    benchmark: str or pd.DataFrame
+        基准名称
+    """
     if isinstance(benchmark, str):
         dates = portfolio_weight.index.get_level_values('date').unique()
         benchmark = data_source.sector.get_index_members(ids=benchmark, dates=dates)
@@ -86,7 +104,16 @@ def cal_total_num_in_benchmark(portfolio_weight, benchmark):
 
 
 def cal_ratio_in_benchmark(portfolio_weight, benchmark):
-    """计算组合中属于基准成分股中的股票数量比例"""
+    """计算组合中属于基准成分股中的股票数量比例
+
+    Parameters:
+    -------------------------
+    portfolio_weight: pd.DataFrame or Series
+        持仓权重(index=[date, IDs], columns=weight)
+
+    benchmark: str or pd.DataFrame
+        基准名称
+    """
     if isinstance(benchmark, str):
         dates = portfolio_weight.index.get_level_values('date').unique()
         benchmark = data_source.sector.get_index_members(ids=benchmark, dates=dates)
@@ -94,7 +121,75 @@ def cal_ratio_in_benchmark(portfolio_weight, benchmark):
     return portfolio_in_benchmark.groupby('date').size() / portfolio_weight.groupby('date').size()
 
 
+@format_benchmark
+def compare_large_weight_with_benchmark(portfolio_weight, benchmark_weight, n=10, base='portfolio'):
+    """与基准比较权重股的权重
+
+    Parameters:
+    ------------------------
+    portfolio_weight: pd.DataFrame or Series
+        持仓权重(index=[date, IDs], columns=weight)
+    benchmark_weight: str or pd.DataFrame
+        基准权重
+    n: int
+        取前N大重仓
+    base: str
+        取值: portfolio or benchmark 以组合或者基准的重仓股为基准
+    """
+    if base == 'portfolio':
+        base_weight = portfolio_weight.groupby('date', group_keys=False).apply(lambda x: x.nlargest(n, x.columns))
+        other_weight = benchmark_weight.reindex(base_weight.index)
+    else:
+        base_weight = benchmark_weight.groupby('date', group_keys=False).apply(lambda x: x.nlargest(n, x.columns))
+        other_weight = portfolio_weight.reindex(base_weight.index)
+    diff = base_weight.join(other_weight)
+    diff['Diff'] = base_weight.iloc[:, 0] - other_weight.iloc[:, 0]
+    return diff
+
+
+@format_benchmark
+def compare_total_weight_with_benchmark(portfolio_weight, benchmark_weight, n=10, base='portfolio'):
+    """与基准比较权重股总权重的差别"""
+    if base == 'portfolio':
+        base_weight = portfolio_weight.groupby('date', group_keys=False).apply(lambda x: x.nlargest(n, x.columns))
+        other_weight = benchmark_weight.reindex(base_weight.index)
+    else:
+        base_weight = benchmark_weight.groupby('date', group_keys=False).apply(lambda x: x.nlargest(n, x.columns))
+        other_weight = portfolio_weight.reindex(base_weight.index)
+    diff = pd.concat([base_weight.groupby('date').sum(),
+                      other_weight.groupby('date').sum()], axis=1)
+    diff['Diff'] = diff.iloc[:, 0] - diff.iloc[:, 1]
+    return diff
+
+
+def cal_future_return(portfolio_weight, group=None, window_len='20d'):
+    """计算股票组合未来的收益率
+
+    Parameters:
+    -------------------------
+    portfolio_weight: pd.DataFrame or Series
+        组合的权重
+    group: pd.Series
+        可以用来给组合权重分组的分类器
+    window_len: str
+        未来的时间窗口
+    """
+    def cal_weighted_ret(x, y):
+        return x.dot(y)
+
+    future_ret = data_source.get_forward_ndays_return(None, idx=portfolio_weight, windows=[1], freq=window_len)[1]
+    grouper = ['date']
+    if group is not None:
+        grouper.append(group)
+    weight_name = portfolio_weight.columns[0]
+    a = portfolio_weight.groupby(grouper, group_keys=False)[weight_name].agg(
+        lambda x: cal_weighted_ret(x.values, future_ret.reindex(x.index).values))
+    return a
+
+
 if __name__ == '__main__':
-    p = data_source.sector.get_index_weight('000300', dates=['20180521'])
+    from alphalens.utils import quantize_factor
+    p = data_source.sector.get_index_weight('000300', dates=['20170228'])
     p.columns = ['a']
-    print(cal_ratio_in_benchmark(p, '000300'))
+    group = quantize_factor(p.rename(columns=lambda x: 'factor'), quantiles=10).rename(index={'asset': 'IDs'})
+    print(cal_future_return(p, group=group))

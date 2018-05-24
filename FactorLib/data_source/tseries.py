@@ -5,7 +5,6 @@ from fastcache import clru_cache
 import pandas as pd
 import numpy as np
 
-
 def _convert_to_nav(ret, ret_freq=None):
     """
     从收益率转成净值数据
@@ -142,8 +141,8 @@ def move_dtindex(dataframe, shift, freq):
         dataframe = dataframe.to_frame()
         is_ser = True
     if isinstance(dataframe.index, pd.MultiIndex):
-        dates_shift = [_tradeDayOffset(x, shift, freq=freq) for x in dataframe.index.get_level_values('date')]
-        new_frame = pd.DataFrame(dataframe.values, index=dataframe.index.set_levels(dates_shift,level='date'),
+        dates_shift = [_tradeDayOffset(x, shift, freq=freq) for x in dataframe.index.unique(level='date')]
+        new_frame = pd.DataFrame(dataframe.values, index=dataframe.index.set_levels(dates_shift, level='date'),
                                  columns=dataframe.columns)
     else:
         dates_shift = [_tradeDayOffset(x, shift, freq=freq) for x in dataframe.index]
