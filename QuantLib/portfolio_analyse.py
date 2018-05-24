@@ -138,12 +138,16 @@ def compare_large_weight_with_benchmark(portfolio_weight, benchmark_weight, n=10
     """
     if base == 'portfolio':
         base_weight = portfolio_weight.groupby('date', group_keys=False).apply(lambda x: x.nlargest(n, x.columns))
+        base_weight.columns = [base]
         other_weight = benchmark_weight.reindex(base_weight.index)
+        other_weight.columns = ['benchmark']
     else:
         base_weight = benchmark_weight.groupby('date', group_keys=False).apply(lambda x: x.nlargest(n, x.columns))
+        base_weight.columns = [base]
         other_weight = portfolio_weight.reindex(base_weight.index)
-    diff = base_weight.join(other_weight)
-    diff['Diff'] = base_weight.iloc[:, 0] - other_weight.iloc[:, 0]
+        other_weight.columns = ['portfolio']
+    diff = base_weight.join(other_weight)[['portfolio', 'benchmark']]
+    diff['Diff'] = diff.portfolio - diff.benchmark
     return diff
 
 
@@ -152,13 +156,17 @@ def compare_total_weight_with_benchmark(portfolio_weight, benchmark_weight, n=10
     """与基准比较权重股总权重的差别"""
     if base == 'portfolio':
         base_weight = portfolio_weight.groupby('date', group_keys=False).apply(lambda x: x.nlargest(n, x.columns))
+        base_weight.columns = [base]
         other_weight = benchmark_weight.reindex(base_weight.index)
+        other_weight.columns = ['benchmark']
     else:
         base_weight = benchmark_weight.groupby('date', group_keys=False).apply(lambda x: x.nlargest(n, x.columns))
+        base_weight.columns = [base]
         other_weight = portfolio_weight.reindex(base_weight.index)
+        other_weight.columns = ['portfolio']
     diff = pd.concat([base_weight.groupby('date').sum(),
-                      other_weight.groupby('date').sum()], axis=1)
-    diff['Diff'] = diff.iloc[:, 0] - diff.iloc[:, 1]
+                      other_weight.groupby('date').sum()], axis=1)[['portfolio', 'benchmark']]
+    diff['Diff'] = diff.portfolio - diff.benchmark
     return diff
 
 
