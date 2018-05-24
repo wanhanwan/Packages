@@ -156,7 +156,7 @@ class BarraFactorReturn(object):
     @DateRange2Dates
     def getResgressWeight(self, ids=None, start_date=None, end_date=None, dates=None, percentile=0.95, idx=None):
         """计算回归权重, 流通市值的平方根"""
-        weight = h5.load_factor(self.args['回归权重因子'], '/stocks/', dates=dates, idx=idx.index)
+        weight = h5.load_factor(self.args['回归权重因子'], '/stocks/', dates=dates, idx=idx)
         weight = np.sqrt(weight).astype('float32')
         weight_sum_perdate = weight.groupby(level=0).sum()
         weight = weight / weight_sum_perdate
@@ -167,7 +167,7 @@ class BarraFactorReturn(object):
 
     def getIndustryMarketValue(self, industry_dummy):
         """计算行业市值"""
-        float_mkt_mv = h5.load_factor('float_mkt_value', '/stocks/', idx=industry_dummy.index)
+        float_mkt_mv = h5.load_factor('float_mkt_value', '/stocks/', idx=industry_dummy)
         industry_mv = pd.DataFrame(industry_dummy.values * float_mkt_mv.values, index=industry_dummy.index, columns=industry_dummy.columns)
         industry_mv = industry_mv.sum(level=0).stack()
         return industry_mv
