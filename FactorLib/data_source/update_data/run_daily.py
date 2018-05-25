@@ -10,6 +10,7 @@ from ..update_data.growth_factor import GrowthFuncListDaily
 from ..update_data.profit_factor import ProfitFuncListDaily
 from ..update_data.universe import UniverseFuncListDaily
 from .other_factors import merge_accquisition
+from .other_factors import barra_factor_return
 from .dummies.class_define import classUpdateFuncsDaily
 
 
@@ -82,3 +83,4 @@ def dailyfactors(start, end):
     # 其他函数
     change_indexmembers()
     merge_accquisition.update_raw_from_uqer(start, end, data_source=data_source)
+    barra_factor_return.cal_barra_factor_return(start, end)

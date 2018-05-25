@@ -1,9 +1,15 @@
 # coding: utf-8
 
-from .toolfuncs import *
+from FactorLib.factor_performance.toolfuncs import *
 from empyrical import stats
 from scipy import stats as stats_scp
 import pyfolio as pf
+from functools import lru_cache
+from FactorLib.data_source.uqer_db import UqerDB
+from FactorLib.data_source.base_data_source_h5 import data_source
+from FactorLib.riskmodel.attribution import RiskExposureAnalyzer
+
+
 '''给定收益率序列，计算相关指标'''
 
 
@@ -301,3 +307,81 @@ class LongShortReturn(object):
                 continue
             self.long_short_returns[method].update_stock_return(stock_return)
             self.long_short_returns[method].update_benchmark_return(benchmark_return)
+
+
+class CommonFundPerformance(object):
+    """公募基金分析"""
+    uqer_db = UqerDB.get_instance()
+
+    def __init__(self, fund_id):
+        self.fund_id = fund_id
+
+    @lru_cache()
+    def describe(self):
+        """公募基金的基本资料
+        返回的信息有：
+            基金简称 基金经理 成立日期 业绩比较基准
+        """
+        filed = ['ticker', 'secShortName', 'establishDate', 'perfBenchmark']
+        data = self.uqer_db.run_api("FundGet", ticker=self.fund_id, field=filed)
+        return data
+
+    def history_holdings(self, start_date, end_date, all_holdings=True):
+        """历史持仓
+        Parameters:
+        ---------------------
+        start_date: str
+            开始日期
+        end_date: str
+            终止日期
+        all_holdings: bool
+            是否只返回全部持仓
+        """
+        start_date = pd.to_datetime(start_date)
+        end_date = pd.to_datetime(end_date)
+        if all_holdings:
+            freq = '2Q'
+        else:
+            freq = '1Q'
+        all_quarters = pd.date_range(str(start_date.year-1)+'1231', end=end_date, freq=freq)
+        all_quarters = all_quarters[all_quarters >= start_date]
+        reportDate = list(all_quarters.strftime("%Y%m%d"))
+        field = ['reportDate', 'holdingTicker', 'ratioInNa']
+        holdings = self.uqer_db.run_api("FundHoldingsGet", ticker=self.fund_id,
+                                        beginDate=min(reportDate), endDate=max(reportDate),
+                                        secType='E', field=field)
+        holdings['reportDate'] = holdings['reportDate'].str.replace('-', '')
+        holdings = holdings[holdings['reportDate'].isin(reportDate)]
+        holdings['reportDate'] = pd.to_datetime(holdings['reportDate'])
+        holdings.rename(columns={'reportDate': 'date', 'holdingTicker': 'IDs', 'ratioInNa': 'Weight'},
+                        inplace=True)
+        holdings.set_index(['date', 'IDs'], inplace=True)
+        holdings /= holdings.groupby('date').sum()
+        return holdings.sort_index()
+
+    def risk_exposure(self, start_date, end_date, data_source='xy', user_risk=None,
+                      benchmark=None):
+        """计算风险暴露"""
+        fund_pos = self.history_holdings(start_date, end_date)
+        dates = fund_pos.index.unique(level='date')
+        a = RiskExposureAnalyzer.from_df(fund_pos, barra_datasource=data_source,
+                                         industry='diversified_finance_cs',
+                                         benchmark=benchmark,
+                                         risk_factors=user_risk)
+        barra, indu, user = a.cal_multidates_expo(dates)
+        return barra, indu, user
+
+    def nav_series(self, start_date, end_date, freq='1d', start_point=1):
+        dates = data_source.trade_calendar.get_trade_days(start_date, end_date, freq, retstr=None)
+        nav = self.uqer_db.run_api("FundNavGet", ticker=self.fund_id, beginDate=start_date,
+                                   endDate=end_date, field=['endDate', 'ADJUST_NAV'])
+        nav.rename(columns={'endDate': 'date', 'ADJUST_NAV': 'NAV'}, inplace=True)
+        nav['date'] = pd.to_datetime(nav['date'])
+        nav.set_index('date', inplace=True)
+        nav = nav.reindex(dates, method='ffill') / nav.iloc[0] * start_point
+        return nav
+
+
+if __name__ == '__main__':
+    fund = CommonFundPerformance('000311')
+    fund.nav_series(start_date='20141231', end_date='20150331')
