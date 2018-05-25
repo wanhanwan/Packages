@@ -275,7 +275,8 @@ class trade_calendar(object):
         """
         遍历days中的每个元素，返回距离每个元素最近的交易日。
         """
-        if isinstance(days, list):
+        from pandas.core.dtypes.inference import is_list_like
+        if is_list_like(days):
             timeindex = pd.DatetimeIndex(days)
             return pd.DatetimeIndex([traderule_alias_mapping['d'].rollback(x) for x in timeindex])
         else:

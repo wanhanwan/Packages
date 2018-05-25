@@ -359,16 +359,18 @@ class CommonFundPerformance(object):
         holdings /= holdings.groupby('date').sum()
         return holdings.sort_index()
 
-    def risk_exposure(self, start_date, end_date, data_source='xy', user_risk=None,
+    def risk_exposure(self, start_date, end_date, risk_ds='xy', user_risk=None,
                       benchmark=None):
         """计算风险暴露"""
         fund_pos = self.history_holdings(start_date, end_date)
         dates = fund_pos.index.unique(level='date')
-        a = RiskExposureAnalyzer.from_df(fund_pos, barra_datasource=data_source,
+        latest_trade_dates = data_source.trade_calendar.get_latest_trade_days(list(dates), retstr=None)
+        fund_pos.index = fund_pos.index.set_levels(latest_trade_dates, level='date')
+        a = RiskExposureAnalyzer.from_df(fund_pos, barra_datasource=risk_ds,
                                          industry='diversified_finance_cs',
                                          benchmark=benchmark,
                                          risk_factors=user_risk)
-        barra, indu, user = a.cal_multidates_expo(dates)
+        barra, indu, user = a.cal_multidates_expo(latest_trade_dates)
         return barra, indu, user
 
     def nav_series(self, start_date, end_date, freq='1d', start_point=1):
@@ -384,4 +386,4 @@ class CommonFundPerformance(object):
 
 if __name__ == '__main__':
     fund = CommonFundPerformance('000311')
-    fund.nav_series(start_date='20141231', end_date='20150331')
+    fund.risk_exposure(start_date='20161231', end_date='20161231')
