@@ -11,4 +11,4 @@ def cal_barra_factor_return(start, end, **kwargs):
 
 
 if __name__ == '__main__':
-    cal_barra_factor_return('20100101', '20180524')
+    cal_barra_factor_return('20180525', '20180525')

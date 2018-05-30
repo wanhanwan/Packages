@@ -1,5 +1,6 @@
 """股票池分类"""
 import pandas as pd
+import numpy as np
 from FactorLib.data_source.base_data_source_h5 import data_source, h5
 from FactorLib.data_source.wind_financial_data_api.tool_funcs import get_go_market_days
 
@@ -54,6 +55,23 @@ def u_100003(start, end, **kwargs):
         data_source.h5DB.save_factor(valid.to_frame('_100003'), '/indexes/')
 
 
+def u_100004(start, end, **kwargs):
+    """4号股票池筛选标准
+    1. 2014年之前市值小于30亿,2014年之后市值小于50亿
+    2. 处在风险预警池之中
+    """
+    dates = data_source.trade_calendar.get_trade_days(start, end)
+    mkt_value = h5.load_factor('float_mkt_value', '/stocks/', dates=dates)
+    stock_pool_1 = mkt_value[
+        ((mkt_value.index.get_level_values('date').year<2014) & (mkt_value['float_mkt_value']<3e5)) |
+    ((mkt_value.index.get_level_values('date').year>=2014) & (mkt_value['float_mkt_value']<5e5))]
+    risky_stocks = data_source.sector.get_index_members('risky_stocks', dates=dates)
+    new_idx = stock_pool_1.index.union(risky_stocks.index)
+    new_pool = pd.DataFrame(np.ones(len(new_idx)), index=new_idx, columns=['_100004'])
+    new_pool.index.names = ['date', 'IDs']
+    data_source.h5DB.save_factor(new_pool, '/indexes/')
+
+
 UniverseFuncListMonthly = []
 UniverseFuncListDaily = [u_100002, u_100003]
 
@@ -64,4 +82,4 @@ if __name__ == '__main__':
     # diversify_finance('20050104', '20171204', data_source=data_source)
     # excld_broker_banks('20050104', '20171204', data_source=data_source)
     # rescale_weight_afterdrop_brokers_and_banks('20050104', '20171204', data_source=data_source)
-    u_100003('20170101', '20180228', data_source=data_source)
+    u_100004('20180228', '20180528', data_source=data_source)

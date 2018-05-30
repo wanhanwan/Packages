@@ -58,12 +58,13 @@ class RiskExposureAnalyzer(object):
         csv文件的格式：日期  代码(wind格式)  权重
         """
         try:
-            stocks = pd.read_csv(csv_path, header=0, index_col=None, parse_dates=['date'],
+            stocks = pd.read_csv(csv_path, header=0, index_col=None, parse_dates=[0],
                                  converters={'IDs': lambda x: x[:6]})
         except Exception as e:
             with open(csv_path) as f:
-                stocks = pd.read_csv(f, header=0, index_col=None, parse_dates=['date'],
+                stocks = pd.read_csv(f, header=0, index_col=None, parse_dates=[0],
                                      converters={'IDs': lambda x: x[:6]})
+        stocks.columns = ['date', 'IDs', 'Weight']
         stocks = stocks.set_index(['date', 'IDs'])
         return cls(stocks=stocks, **kwargs)
 
@@ -124,16 +125,16 @@ class RiskExposureAnalyzer(object):
             riskfactor_p = pd.DataFrame(np.zeros((len(dates), len(risk_factor.columns))), index=dates, columns=risk_factor.columns)
         else:
             riskfactor_p = None
-
-        idata, iweight = barra.align(self.stock_positions, join='right', axis=0)
+        dates = list(dates)
+        idata, iweight = barra.align(self.stock_positions.loc[dates], join='right', axis=0)
         idata.fillna(idata.mean(), inplace=True)
         barra_p = idata.mul(iweight.iloc[:, 0], axis='index').groupby('date').sum()
 
-        iindu, iweight = indus.align(self.stock_positions, join='right', axis=0, fill_value=0)
+        iindu, iweight = indus.align(self.stock_positions.loc[dates], join='right', axis=0, fill_value=0)
         indus_p = iindu.mul(iweight.iloc[:, 0], axis='index').groupby('date').sum()
 
         if risk_factor is not None:
-            irisk, iweight = indus.align(self.stock_positions, join='right', axis=0)
+            irisk, iweight = indus.align(self.stock_positions.loc[dates], join='right', axis=0)
             irisk.fillna(irisk.mean(), inplace=True)
             riskfactor_p = irisk.mul(iweight.iloc[:, 0], axis='index').groupby('date').sum()
         return barra_p, indus_p, riskfactor_p

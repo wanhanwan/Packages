@@ -326,7 +326,9 @@ class CommonFundPerformance(object):
         data = self.uqer_db.run_api("FundGet", ticker=self.fund_id, field=filed)
         return data
 
-    def history_holdings(self, start_date, end_date, all_holdings=True):
+    @lru_cache()
+    def history_holdings(self, start_date, end_date, all_holdings=True,
+                         trade_day_index=False):
         """历史持仓
         Parameters:
         ---------------------
@@ -357,33 +359,48 @@ class CommonFundPerformance(object):
                         inplace=True)
         holdings.set_index(['date', 'IDs'], inplace=True)
         holdings /= holdings.groupby('date').sum()
-        return holdings.sort_index()
+        holdings.sort_index(inplace=True)
+        if trade_day_index:
+            dates = holdings.index.unique(level='date')
+            latest_trade_dates = data_source.trade_calendar.get_latest_trade_days(list(dates), retstr=None)
+            holdings.index = holdings.index.set_levels(latest_trade_dates, level='date')
+        return holdings
 
+    @lru_cache()
     def risk_exposure(self, start_date, end_date, risk_ds='xy', user_risk=None,
-                      benchmark=None):
+                      benchmark=None, industry='diversified_finance_cs'):
         """计算风险暴露"""
         fund_pos = self.history_holdings(start_date, end_date)
         dates = fund_pos.index.unique(level='date')
         latest_trade_dates = data_source.trade_calendar.get_latest_trade_days(list(dates), retstr=None)
         fund_pos.index = fund_pos.index.set_levels(latest_trade_dates, level='date')
         a = RiskExposureAnalyzer.from_df(fund_pos, barra_datasource=risk_ds,
-                                         industry='diversified_finance_cs',
+                                         industry=industry,
                                          benchmark=benchmark,
                                          risk_factors=user_risk)
         barra, indu, user = a.cal_multidates_expo(latest_trade_dates)
         return barra, indu, user
 
-    def nav_series(self, start_date, end_date, freq='1d', start_point=1):
+    @lru_cache()
+    def nav_series(self, start_date, end_date, freq='1d', start_point=1, benchmark=None,
+                   divider=1):
         dates = data_source.trade_calendar.get_trade_days(start_date, end_date, freq, retstr=None)
         nav = self.uqer_db.run_api("FundNavGet", ticker=self.fund_id, beginDate=start_date,
                                    endDate=end_date, field=['endDate', 'ADJUST_NAV'])
         nav.rename(columns={'endDate': 'date', 'ADJUST_NAV': 'NAV'}, inplace=True)
         nav['date'] = pd.to_datetime(nav['date'])
         nav.set_index('date', inplace=True)
+        ret = nav['NAV'].pct_change() / divider
+        if benchmark is not None:
+            benchmark_ret = data_source.load_factor('daily_returns_%', '/indexprices/', ids=[benchmark],
+                                                    dates=ret.index.tolist()).reset_index('IDs', drop=True) / 100
+            ret = ret - benchmark_ret['daily_returns_%']
+        nav = (1.0 + ret).cumprod().fillna(1.0)
         nav = nav.reindex(dates, method='ffill') / nav.iloc[0] * start_point
+        nav.name = 'nav'
         return nav
 
 
 if __name__ == '__main__':
     fund = CommonFundPerformance('000311')
-    fund.risk_exposure(start_date='20161231', end_date='20161231')
+    fund.nav_series(start_date='20161231', end_date='20170131', benchmark='000300')
