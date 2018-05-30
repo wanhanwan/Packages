@@ -343,6 +343,7 @@ class RiskDataSource(object):
         new.rename(columns=lambda x: x[5:] if x.startswith("Indu_") else x, inplace=True)
         return new
 
+    @DateRange2Dates
     def load_style_factor(self, factor_names, ids=None, start_date=None, end_date=None, dates=None):
         """加载风格因子数据"""
         raw_dates = pd.DatetimeIndex(dates)
@@ -436,7 +437,7 @@ class RiskDataSource(object):
         else:
             print(FileNotFoundError("因子收益率文件不存在！"))
             return pd.DataFrame()
-        return ret['factor_return'].unstack()
+        return ret['factor_return'].unstack().astype('float')
 
     def load_snapshot_return(self, date):
         """
