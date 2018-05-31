@@ -58,12 +58,13 @@ class RiskExposureAnalyzer(object):
         csv文件的格式：日期  代码(wind格式)  权重
         """
         try:
-            stocks = pd.read_csv(csv_path, header=0, index_col=None, parse_dates=['date'],
+            stocks = pd.read_csv(csv_path, header=0, index_col=None, parse_dates=[0],
                                  converters={'IDs': lambda x: x[:6]})
         except Exception as e:
             with open(csv_path) as f:
-                stocks = pd.read_csv(f, header=0, index_col=None, parse_dates=['date'],
+                stocks = pd.read_csv(f, header=0, index_col=None, parse_dates=[0],
                                      converters={'IDs': lambda x: x[:6]})
+        stocks.columns = ['date', 'IDs', 'Weight']
         stocks = stocks.set_index(['date', 'IDs'])
         return cls(stocks=stocks, **kwargs)
 
@@ -71,38 +72,19 @@ class RiskExposureAnalyzer(object):
     def all_dates(self):
         return self.stock_positions.index.get_level_values('date').unique()
 
+    @clru_cache()
     def _load_data(self, dates):
         """
         加载风险数据,风险数据包括BARRA风险因子，行业因子，自定义风险因子
         """
-        old_dates = list(set(dates).intersection(set(self.barra_data.keys())))
-        new_dates = list(set(dates).difference(set(old_dates)))
-        old_barra_data = new_barra_data = pd.DataFrame()
-        old_industry_data = new_industry_data = pd.DataFrame()
-        old_riskfactors_data = new_risk_data = pd.DataFrame()
-        if old_dates:
-            old_barra_data = pd.concat([self.barra_data[x] for x in old_dates])
-            old_industry_data = pd.concat([self.industry_data[x] for x in old_dates])
-            if self.risk_factors is not None:
-                old_riskfactors_data = pd.concat([self.risk_factors_data[x] for x in old_dates])
-        if new_dates:
-            new_barra_data = self.barra_ds.load_factors(factor_names='STYLE', dates=new_dates)
-            if self.industry is not None:
-                new_industry_data = data_source.sector.get_industry_dummy(ids=None, dates=new_dates, drop_first=False,
-                                                                          industry=self.industry)
-            else:
-                new_industry_data = self.barra_ds.load_industry(ids=None, dates=new_dates)
-            if self.risk_factors is not None:
-                new_risk_data = data_source.h5DB.load_factors(self.risk_factors, dates=new_dates)
-            for d in new_dates:
-                self.barra_data[d] = new_barra_data.loc[[pd.to_datetime(d)]]
-                self.industry_data[d] = new_industry_data.loc[[pd.to_datetime(d)]]
-                if self.risk_factors is not None:
-                    self.risk_factors_data[d] = new_risk_data.loc[[pd.to_datetime(d)]]
-        barra_data = pd.concat([old_barra_data, new_barra_data]).sort_index()
-        industry_data = pd.concat([old_industry_data, new_industry_data]).sort_index()
+        dates = list(dates)
+        barra_data = self.barra_ds.load_style_factor(None, dates=dates)
+        if self.industry is None:
+            industry_data = self.barra_ds.load_industry(dates=dates)
+        else:
+            industry_data = data_source.sector.get_industry_dummy(industry=self.industry, dates=dates)
         if self.risk_factors is not None:
-            risk_data = pd.concat([old_riskfactors_data, new_risk_data]).sort_index()
+            risk_data = self.risk_factors.loc[dates]
         else:
             risk_data = None
         return barra_data, industry_data, risk_data
@@ -120,16 +102,18 @@ class RiskExposureAnalyzer(object):
             riskfactor_b = None
         if self.benchmark is not None:
             weight_bchmrk = data_source.sector.get_index_weight(ids=self.benchmark, dates=dates)
-            for d in dates:
-                idata, iweight = barra.loc[d].align(weight_bchmrk.loc[d], join='right', axis=0)
-                barra_b.loc[d] = idata.mul(iweight.iloc[:, 0], axis='index').sum()
 
-                iindu, iweight = indus.loc[d].align(weight_bchmrk.loc[d], join='right', axis=0)
-                indus_b.loc[d] = iindu.mul(iweight.iloc[:, 0], axis='index').sum()
+            idata, iweight = barra.align(weight_bchmrk, join='right', axis=0)
+            idata.fillna(idata.mean(), inplace=True)
+            barra_b = idata.mul(iweight.iloc[:, 0], axis='index').groupby('date').sum()
 
-                if risk_factor is not None:
-                    irisk, iweight = indus.loc[d].align(weight_bchmrk.loc[d], join='right', axis=0)
-                    riskfactor_b.loc[d] = irisk.mul(iweight.iloc[:, 0], axis='index').sum()
+            iindu, iweight = indus.align(weight_bchmrk, join='right', axis=0, fill_value=0)
+            indus_b = iindu.mul(iweight.iloc[:, 0], axis='index').groupby('date').sum()
+
+            if risk_factor is not None:
+                irisk, iweight = indus.align(weight_bchmrk, join='right', axis=0)
+                irisk.fillna(irisk.mean(), inplace=True)
+                riskfactor_b = irisk.mul(iweight.iloc[:, 0], axis='index').groupby('date').sum()
         return barra_b, indus_b, riskfactor_b
 
     def cal_risk_of_portfolio(self, dates):
@@ -137,22 +121,22 @@ class RiskExposureAnalyzer(object):
         计算组合的风险因子值
         """
         barra, indus, risk_factor = self._load_data(dates)
-        barra_p = pd.DataFrame(np.zeros((len(dates), len(barra.columns))), index=dates, columns=barra.columns)
-        indus_p = pd.DataFrame(np.zeros((len(dates), len(indus.columns))), index=dates, columns=indus.columns)
         if risk_factor is not None:
             riskfactor_p = pd.DataFrame(np.zeros((len(dates), len(risk_factor.columns))), index=dates, columns=risk_factor.columns)
         else:
             riskfactor_p = None
-        for d in dates:
-            idata, iweight = barra.loc[d].align(self.stock_positions.loc[pd.to_datetime(d)], join='right', axis=0)
-            barra_p.loc[d] = idata.mul(iweight.iloc[:, 0], axis='index').sum()
+        dates = list(dates)
+        idata, iweight = barra.align(self.stock_positions.loc[dates], join='right', axis=0)
+        idata.fillna(idata.mean(), inplace=True)
+        barra_p = idata.mul(iweight.iloc[:, 0], axis='index').groupby('date').sum()
 
-            iindu, iweight = indus.loc[d].align(self.stock_positions.loc[pd.to_datetime(d)], join='right', axis=0)
-            indus_p.loc[d] = iindu.mul(iweight.iloc[:, 0], axis='index').sum()
+        iindu, iweight = indus.align(self.stock_positions.loc[dates], join='right', axis=0, fill_value=0)
+        indus_p = iindu.mul(iweight.iloc[:, 0], axis='index').groupby('date').sum()
 
-            if risk_factor is not None:
-                irisk, iweight = indus.loc[d].align(self.stock_positions.loc[pd.to_datetime(d)], join='right', axis=0)
-                riskfactor_p.loc[d] = irisk.mul(iweight.iloc[:, 0], axis='index').sum()
+        if risk_factor is not None:
+            irisk, iweight = indus.align(self.stock_positions.loc[dates], join='right', axis=0)
+            irisk.fillna(irisk.mean(), inplace=True)
+            riskfactor_p = irisk.mul(iweight.iloc[:, 0], axis='index').groupby('date').sum()
         return barra_p, indus_p, riskfactor_p
 
     @clru_cache()
@@ -183,8 +167,8 @@ class RiskExposureAnalyzer(object):
         if len(dates) == 0:
             return None, None, None
 
-        risk_b = self._cal_risk_of_bchmrk(dates)
-        risk_p = self.cal_risk_of_portfolio(dates)
+        risk_b = self._cal_risk_of_bchmrk(tuple(dates))
+        risk_p = self.cal_risk_of_portfolio(tuple(dates))
 
         # BARRA风险
         barra_expo = pd.concat([risk_p[0].stack(), risk_b[0].stack()], axis=1, ignore_index=True)

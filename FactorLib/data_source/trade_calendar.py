@@ -129,6 +129,10 @@ class CustomBusinessYearEnd(YearOffset):
         self.kwds.update(kwds)
         self.offset = kwds.get('offset', timedelta(0))
         self.month = kwds.get('month', self._default_month)
+        try:
+            kwds.pop('month')
+        except Exception as e:
+            pass
         self.cbday = CustomBusinessDay(n=1, normalize=normalize, weekmask=weekmask, holidays=holidays,
                                        calendar=calendar, **kwds)
         self.kwds['calendar'] = self.cbday.calendar
@@ -271,7 +275,8 @@ class trade_calendar(object):
         """
         遍历days中的每个元素，返回距离每个元素最近的交易日。
         """
-        if isinstance(days, list):
+        from pandas.core.dtypes.inference import is_list_like
+        if is_list_like(days):
             timeindex = pd.DatetimeIndex(days)
             return pd.DatetimeIndex([traderule_alias_mapping['d'].rollback(x) for x in timeindex])
         else:

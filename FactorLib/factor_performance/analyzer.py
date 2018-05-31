@@ -508,7 +508,211 @@ class AlphalensAnalyzer(object):
             return plot_ic_by_group(ic_ts, ax=ax)
         else:
             return plot_ic_ts(ic_ts, ax)
-        
+
+
+class ReturnAnalyzer(object):
+    def __init__(self, portfolio_ret, benchmark=None):
+        self.portfolio_ret = portfolio_ret
+        self.dates = portfolio_ret.index
+        if isinstance(benchmark, str):
+            self.benchmark_ret = data_source.load_factor('daily_returns_%',
+                                                       dates=self.dates.tolist(),
+                                                       ids=[benchmark]).iloc[:, 0] / 100
+        elif isinstance(benchmark, pd.Series):
+            self.benchmark_ret = benchmark.reindex(self.dates, method='ffill')
+        else:
+            self.benchmark_ret = pd.Series(np.zeros(len(self.portfolio_ret)), index=self.dates)
+        self.active_return = stats._adjust_returns(self.portfolio_ret, self.benchmark_ret)
+
+    def resample_portfolio_return(self, freq):
+        return resample_returns(self.portfolio_ret, convert_to=freq)
+
+    def resample_benchmark_return(self, freq):
+        return resample_returns(self.benchmark_ret, convert_to=freq)
+
+    @property
+    def abs_nav(self):
+        return (1 + self.portfolio_ret).cumprod()
+
+    @property
+    def rel_nav(self):
+        return (1 + self.active_return).cumprod()
+
+    @property
+    def benchmark_nav(self):
+        return (1 + self.benchmark_ret).cumprod()
+
+    @property
+    def abs_annual_return(self):
+        return stats.annual_return(self.portfolio_ret)
+
+    @property
+    def rel_annual_return(self):
+        return stats.annual_return(self.portfolio_ret) - stats.annual_return(self.benchmark_ret)
+
+    @property
+    def abs_total_return(self):
+        return stats.cum_returns_final(self.portfolio_ret)
+
+    @property
+    def rel_total_return(self):
+        return self.abs_total_return - self.total_benchmark_return
+
+    @property
+    def total_benchmark_return(self):
+        return stats.cum_returns_final(self.benchmark_ret)
+
+    @property
+    def abs_annual_volatility(self):
+        return stats.annual_volatility(self.portfolio_ret)
+
+    @property
+    def rel_annual_volatility(self):
+        return stats.annual_volatility(self.active_return)
+
+    @property
+    def abs_sharp_ratio(self):
+        return stats.sharpe_ratio(self.portfolio_ret, simple_interest=True)
+
+    @property
+    def rel_sharp_ratio(self):
+        return stats.sharpe_ratio(self.active_return, simple_interest=True)
+
+    @property
+    def abs_maxdrawdown(self):
+        return stats.max_drawdown(self.portfolio_ret)
+
+    @property
+    def rel_maxdrawdown(self):
+        return stats.max_drawdown(self.active_return)
+
+    @property
+    def abs_weekly_performance(self):
+        df = self.resample_portfolio_return('1w').rename('weekly_return')
+        return df
+
+    @property
+    def rel_weekly_performance(self):
+        df = self.resample_benchmark_return('1w').rename('weekly_return')
+        return self.abs_weekly_performance - df
+
+    @property
+    def abs_monthly_performance(self):
+        func_dict = {
+            'cum_return': (lambda x: stats.cum_returns_final(self.portfolio_ret.reindex(x.index)) -
+                                     stats.cum_returns_final(self.benchmark_ret.reindex(x.index))),
+            'volatility': lambda x: np.std(x, ddof=1) * 20 ** 0.5,
+            'weekly_win_rate': lambda x: stats.win_rate(x, self.benchmark_ret, 'weekly'),
+            'daily_win_rate': lambda x: stats.win_rate(x, self.benchmark_ret, 'daily')
+        }
+        df = resample_func(self.portfolio_ret, convert_to='1m', func=func_dict)
+        return df
+
+    @property
+    def rel_monthly_performance(self):
+        func_dict = {
+            'cum_return': (lambda x: stats.cum_returns_final(self.portfolio_ret.reindex(x.index)) -
+                                     stats.cum_returns_final(self.benchmark_ret.reindex(x.index))),
+            'volatility': lambda x: np.std(x, ddof=1) * 20 ** 0.5,
+            'weekly_win_rate': lambda x: stats.win_rate(x, 0, 'weekly'),
+            'daily_win_rate': lambda x: stats.win_rate(x, 0, 'daily')
+        }
+        df = resample_func(self.active_return, convert_to='1m', func=func_dict)
+        return df
+
+    @property
+    def abs_yearly_performance(self):
+        func_dict = {
+            'cum_return': lambda x: stats.cum_returns_final(self.portfolio_ret.reindex(x.index)),
+            'volatility': lambda x: np.std(x, ddof=1) * 250 ** 0.5,
+            'sharp_ratio': lambda x: stats.sharpe_ratio(x, simple_interest=True),
+            'maxdd': stats.max_drawdown,
+            'IR': lambda x: stats.information_ratio(x, self.benchmark_ret),
+            'monthly_win_rate': lambda x: stats.win_rate(x, 0.0, 'monthly'),
+            'weekly_win_rate': lambda x: stats.win_rate(x, 0.0, 'weekly'),
+            'daily_win_rate': lambda x: stats.win_rate(x, 0.0, 'daily')
+        }
+        df = resample_func(self.portfolio_ret, convert_to='1y', func=func_dict)
+        return df
+
+    @property
+    def rel_yearly_performance(self):
+        func_dict = {
+            'cum_return': lambda x: stats.cum_returns_final(self.portfolio_ret.reindex(x.index)),
+            'benchmark_return': lambda x: stats.cum_returns_final(self.benchmark_ret.reindex(x.index)),
+            'volatility': lambda x: np.std(x, ddof=1) * 250 ** 0.5,
+            'sharp_ratio': lambda x: stats.sharpe_ratio(x, simple_interest=True),
+            'maxdd': stats.max_drawdown,
+            'IR': partial(stats.information_ratio, factor_returns=0),
+            'monthly_win_rate': partial(stats.win_rate, factor_returns=0, period='monthly'),
+            'weekly_win_rate': partial(stats.win_rate, factor_returns=0, period='weekly'),
+            'daily_win_rate': partial(stats.win_rate, factor_returns=0, period='daily')
+        }
+        df = resample_func(self.active_return, convert_to='1y', func=func_dict)
+        df.insert(2, 'active_return', df['cum_return'] - df['benchmark_return'])
+        return df
+
+    @property
+    def total_performance(self):
+        """策略全局表现"""
+        win_rate_func = lambda x, y: stats.win_rate(x, factor_returns=0, period=y)
+        df = pd.DataFrame([[self.abs_total_return, self.total_benchmark_return, self.rel_total_return],
+                           [self.abs_maxdrawdown, stats.max_drawdown(self.benchmark_ret), self.rel_maxdrawdown],
+                           [self.abs_annual_volatility, stats.annual_volatility(self.benchmark_ret),
+                            self.rel_annual_volatility],
+                           [self.abs_annual_return, stats.annual_return(self.benchmark_ret), self.rel_annual_return],
+                           [self.abs_sharp_ratio, stats.sharpe_ratio(self.benchmark_ret, simple_interest=True),
+                            self.rel_sharp_ratio],
+                           [win_rate_func(self.portfolio_ret, 'monthly'),
+                            win_rate_func(self.benchmark_ret, 'monthly'),
+                            win_rate_func(self.active_return, 'monthly')]],
+                          columns=['portfolio', 'benchmark', 'hedge'],
+                          index=['total_return', 'maxdd', 'volatility', 'annual_return', 'sharp', 'win_rate'])
+        return df
+
+    def range_performance(self, start, end):
+        portfolio_return = self.portfolio_ret.loc[start:end]
+        benchmark_return = self.benchmark_ret.loc[start:end]
+        a = self.__class__(portfolio_return, benchmark_return)
+        return a.total_performance
+
+    def range_pct(self, start, end, rel=True):
+        try:
+            if rel:
+                return stats.cum_returns_final(self.active_return.loc[start:end])
+            else:
+                return stats.cum_returns_final(self.portfolio_ret.loc[start:end])
+        except:
+            return np.nan
+
+    def range_maxdrawdown(self, start, end, rel=True):
+        try:
+            if rel:
+                return stats.max_drawdown(self.active_return.loc[start:end])
+            else:
+                return stats.max_drawdown(self.portfolio_ret.loc[start:end])
+        except:
+            return np.nan
+
+    def returns_sheet(self, cur_day=None):
+        if cur_day is None:
+            cur_day = pd.to_datetime(data_source.trade_calendar.get_latest_trade_days(
+                datetime.today().strftime("%Y%m%d")))
+        else:
+            cur_day = pd.to_datetime(cur_day)
+        dates = [
+                    cur_day,
+                    cur_day.to_period('W').start_time,
+                    cur_day + MonthBegin(-1),
+                    cur_day + QuarterBegin(n=-1, startingMonth=1),
+                    cur_day + MonthBegin(-6),
+                    cur_day + YearBegin(-1),
+                    cur_day + YearBegin(-2)
+                ]
+        returns = list(map(lambda x: self.range_pct(x, cur_day), dates)) + \
+                  [self.rel_annual_return, self.rel_total_return]
+        return pd.DataFrame([returns], columns=['日回报', '本周以来', '本月以来', '本季以来', '近6个月', '今年以来',
+                                                '近两年', '年化回报', '成立以来'])
 
 if __name__ == '__main__':
     analyzer = Analyzer(r"D:\data\factor_investment_strategies\兴业风格_价值\backtest\BTresult.pkl",

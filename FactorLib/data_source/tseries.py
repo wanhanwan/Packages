@@ -142,8 +142,9 @@ def move_dtindex(dataframe, shift, freq):
         dataframe = dataframe.to_frame()
         is_ser = True
     if isinstance(dataframe.index, pd.MultiIndex):
-        dates_shift = [_tradeDayOffset(x, shift, freq=freq) for x in dataframe.index.get_level_values('date')]
-        new_frame = pd.DataFrame(dataframe.values, index=dataframe.index.set_levels(dates_shift,level='date'),
+        level_number = dataframe.index._get_level_number('date')
+        dates_shift = [_tradeDayOffset(x, shift, freq=freq) for x in dataframe.index.levels[level_number]]
+        new_frame = pd.DataFrame(dataframe.values, index=dataframe.index.set_levels(dates_shift, level='date'),
                                  columns=dataframe.columns)
     else:
         dates_shift = [_tradeDayOffset(x, shift, freq=freq) for x in dataframe.index]
