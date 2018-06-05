@@ -26,40 +26,6 @@ class base_data_source(object):
         self.sector = sector
         self.hdf5DB = sector.hdf5DB
         self.ncDB = sector.ncDB
-        self.dividend = None
-        # self._load_dividends()
-    
-    def _load_dividends(self):
-        def _save_convert(x):
-            if isinstance(x, str):
-                return datetime.strptime(x, "%Y-%m-%d")
-            else:
-                return x
-
-        def _earliest_date(x):
-            if 0 in x.values:
-                try:
-                    return _save_convert(x[x != 0].iloc[0])
-                except IndexError:
-                    return np.nan
-            else:
-                return x.apply(_save_convert).min()
-
-        dividend_csv_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-        dividend_csv_path = os.path.join(dividend_csv_path, 'resource/dividends.xlsx')
-        xr = pd.ExcelFile(dividend_csv_path)
-        l = []
-        for sheet_name in xr.sheet_names:
-            data = pd.read_excel(xr, sheetname=sheet_name, skiprows=3, header=1)[
-                ['Wind代码', '分红预披露公告日', '预案公告日', '每股股利', '分红总额']]
-            data['Wind代码'] = data['Wind代码'].apply(windcode_to_tradecode)
-            data['period'] = sheet_name
-            data['ann_dt'] = data[['分红预披露公告日', '预案公告日']].apply(_earliest_date, axis=1)
-            data['ann_dt'] = data['ann_dt'].fillna(datetime.strptime(sheet_name+'0430', '%Y%m%d'))
-            data = data.rename(columns={'Wind代码': 'IDs', '每股股利':'dividend_pershare', '分红总额':'total_dividend'})
-            l.append(data)
-        dividend_data = pd.concat(l)[['IDs','ann_dt','period','dividend_pershare','total_dividend']]
-        self.dividend = dividend_data
 
     def load_factor(self, symbol, factor_path, ids=None, dates=None, start_date=None, end_date=None, idx=None):
         if idx is None:
@@ -130,7 +96,7 @@ class base_data_source(object):
         cum_returns = (price / price.shift(window) - 1).stack()
         cum_returns.columns = ['return_%dd'%window]
         return cum_returns.loc[DateStr2Datetime(start_date):DateStr2Datetime(end_date)]
-    
+
     def get_forward_ndays_return(self, ids, windows, freq='1d',
                                  dates=None, type='stock', idx=None):
         """计算证券未来N天的收益率"""
@@ -197,7 +163,7 @@ class base_data_source(object):
             'turn': 'sum',
             'amt': 'sum',
             'daily_returns_%': cum_returns_final
-            }
+        }
 
         data_begin_date = self.trade_calendar.tradeDayOffset(start, -1, freq=freq)
         daily_dates = self.trade_calendar.get_trade_days(data_begin_date, end)
@@ -252,7 +218,7 @@ class base_data_source(object):
             idx = self.get_latest_report_date(dates, report_type)
         raw_data = self.h5DB.load_factor(field, '/stock_financial_data/', ids=ids)
         return financial_data_reindex(raw_data, idx)
-    
+
     def get_nlatest_reports(self, field, n, ids=None, dates=None, start_date=None,
                             end_date=None, freq='1d', report_type=None):
         """获得最近N期财务数据"""
@@ -268,7 +234,7 @@ class base_data_source(object):
         idx = self.get_nlatest_report_dates(dates, n, report_type)
         raw_data = self.h5DB.load_factor(field, '/stock_financial_data/', ids=ids)
         return financial_data_reindex(raw_data, idx)
-    
+
     def get_nlatest_report_dates(self, dates, n, report_type=None):
         """特定日期序列的前n个最大报告期"""
         ann_report_dates = self.get_report_ann_dt(report_type)
@@ -281,7 +247,7 @@ class base_data_source(object):
             max_date.index = pd.MultiIndex.from_product([[date], max_date.index], names=['date', 'IDs'])
             _.append(max_date)
         return pd.concat(_).rename('max_report_date').to_frame()
-    
+
     def get_latest_report_date(self, dates, report_type=None):
         """特定日期序列的最大报告期"""
         ann_report_dates = self.get_report_ann_dt(report_type)
@@ -294,7 +260,7 @@ class base_data_source(object):
             max_date.index = pd.MultiIndex.from_product([[date], max_date.index], names=['date', 'IDs'])
             _.append(max_date)
         return pd.concat(_).rename('max_report_date').to_frame()
-    
+
     def get_report_ann_dt(self, report_type):
         ann_report_dates = self.h5DB.load_factor('ann_dt', '/stock_financial_data/').reset_index(level=0)
         if report_type is None:
@@ -332,23 +298,6 @@ class base_data_source(object):
             data = data.set_index(['realdate', 'IDs'])[[factorname]].unstack().reindex(dates, method='ffill').stack()
             data.index.names = ['date', 'IDs']
             self.h5DB.save_factor(data, '/stock_financial_data/daily/')
-
-    def get_dividends(self, ids, dates):
-        """在指定截止日前最近年报的红利数据"""
-        if self.dividend is None:
-            self._load_dividends()
-        dates = pd.DatetimeIndex(dates)
-        l = []
-        for date in dates:
-            d = self.dividend[self.dividend['ann_dt'] <= date].sort_values('ann_dt').groupby('IDs').last()
-            d['date'] = date
-            d = d.set_index(['date'], append=True).swaplevel()
-            l.append(d[['total_dividend']])
-        if ids is None:
-            return pd.concat(l)
-        else:
-            d = pd.concat(l)
-        return d[d.index.get_level_values(1).isin(ids)]
 
     def test_completeness(self, file_name, file_dir, data_src='h5DB', details=False):
         if not hasattr(self, data_src):
@@ -456,7 +405,10 @@ class sector(object):
 
     def get_stock_industry_info(self, ids, industry='中信一级', start_date=None, end_date=None, dates=None, idx=None):
         """股票行业信息"""
-        symbol = parse_industry(industry)
+        try:
+            symbol = parse_industry(industry)
+        except KeyError:
+            symbol = industry
         if idx is not None:
             industry_info = self.h5DB.load_factor(symbol, '/indexes/', idx=idx)
         else:
@@ -508,14 +460,12 @@ class sector(object):
     def get_index_industry_weight(self, ids, industry_name='中信一级', start_date=None,
                                   end_date=None, dates=None):
         """获取指数的行业权重"""
-        symbol = parse_industry(industry_name)
         dates = self.trade_calendar.get_trade_days(start_date, end_date) if dates is None else dates
         index_weight = self.get_index_weight(ids, dates=dates)
-        all_stocks = list(index_weight.index.levels[1].unique())
-        industry_data = self.get_stock_industry_info(all_stocks, industry=industry_name, dates=dates)
-        common = pd.concat([index_weight, industry_data], join='inner', axis=1)
-        index_industry_weight = common.reset_index().groupby(['date', symbol])[index_weight.columns[0]].sum()
-        return index_industry_weight
+        industry_data = self.get_stock_industry_info(None, industry=industry_name, idx=index_weight)
+        industry_weight = index_weight.groupby(['date', industry_data.iloc[:, 0]]).sum()
+        # index_industry_weight = common.reset_index().groupby(['date', symbol])[index_weight.columns[0]].sum()
+        return industry_weight.iloc[:, 0]
 
     def get_history_ashare(self, dates, history=False):
         """获得某一天的所有上市A股"""
@@ -555,14 +505,14 @@ class sector(object):
         信息包括公司代码、公司简称、上市日期、所属行业(中信一级,wind一级)"""
         if not isinstance(date, list):
             date = [date]
-        if (not isinstance(ids, list)) and (ids is not None):
-            ids = [ids]
+        # if (not isinstance(ids, list)) and (ids is not None):
+        #     ids = [ids]
         factors = {'/stocks/': ['name', 'list_date']}
         stock_name_listdate = self.h5DB.load_factors(factors, ids=ids)
         stock_name_listdate = stock_name_listdate.reset_index(level=0, drop=True)
 
         stock_members = self.get_stock_industry_info(ids, dates=date).swaplevel()
-        stocks_members_wind = self.get_stock_industry_info(ids, dates=date, industry='万得一级').swaplevel()
+        stocks_members_wind = self.get_stock_industry_info(ids, dates=date, industry='中信二级').swaplevel()
         members = pd.concat([stock_members, stocks_members_wind], axis=1)
         stock_info = pd.merge(members, stock_name_listdate, left_index=True, right_index=True, how='left')
         stock_info = stock_info.swaplevel()
@@ -586,9 +536,3 @@ riskDB = H5DB(RISKMODEL_PATH)
 sec = sector(h5, tc, hdf5, ncdb)
 data_source = base_data_source(sec)
 csv = CsvDB()
-
-if __name__ == '__main__':
-    data_source.get_history_bar(['000001','000002'], start='20100101',end='20161231', freq='2w')
-
-
-

@@ -125,4 +125,4 @@ if __name__ == '__main__':
     from FactorLib.data_source.base_data_source_h5 import data_source
     # bp('20170630', '20170904', data_source=data_source)
     # epttm_divide_median('20070101', '20180109', data_source=data_source)
-    pe('20180112', '20180112', data_source=data_source)
+    dividend_ratio('20180101', '20180131', data_source=data_source)

@@ -10,7 +10,7 @@ from ..update_data.growth_factor import GrowthFuncListDaily
 from ..update_data.profit_factor import ProfitFuncListDaily
 from ..update_data.universe import UniverseFuncListDaily
 from .other_factors import merge_accquisition
-from .other_factors import barra_factor_return, gtja_risky_stocks
+from .other_factors import barra_factor_return, gtja_risky_stocks, dividends
 from .dummies.class_define import classUpdateFuncsDaily
 
 
@@ -73,6 +73,7 @@ def dailyfactors(start, end):
         func(start, end, data_source=data_source)
 
     # 更新股票池
+    gtja_risky_stocks.get_risky_stocks(start, end, data_source=data_source)
     for func in UniverseFuncListDaily:
         func(start, end, data_source=data_source)
 
@@ -84,4 +85,4 @@ def dailyfactors(start, end):
     change_indexmembers()
     merge_accquisition.update_raw_from_uqer(start, end, data_source=data_source)
     barra_factor_return.cal_barra_factor_return(start, end)
-    gtja_risky_stocks.get_risky_stocks(start, end, data_source=data_source)
+    dividends.get_dividends(start, end)

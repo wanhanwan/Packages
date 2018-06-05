@@ -14,4 +14,4 @@ def get_risky_stocks(start, end, **kwargs):
 
 
 if __name__  == '__main__':
-    get_risky_stocks('20170101', '20180527', data_source=data_source)
+    get_risky_stocks('20180527', '20180531', data_source=data_source)

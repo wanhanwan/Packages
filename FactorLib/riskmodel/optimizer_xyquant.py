@@ -97,7 +97,7 @@ class Optimizer(object):
             else:
                 bchmrk_weight = data_source.sector.get_index_weight(
                     ids=self._benchmark, dates=[self._date]).reset_index(level='date', drop=True).iloc[:, 0]
-            bchmrk_weight = bchmrk_weight[bchmrk_weight.index.intersection(self.estu.index)]
+            # bchmrk_weight = bchmrk_weight[bchmrk_weight.index.intersection(self.estu.index)]
             bchmrk_weight = bchmrk_weight / bchmrk_weight.sum()
             self._bchmrk_weight = bchmrk_weight
 
@@ -401,7 +401,7 @@ class Optimizer(object):
                 self._c.linear_constraints.add(lin_expr=lin_exprs, rhs=rhs_max, senses=['L']*len(cons2),
                                                names=[x+'2' for x in names])
 
-    def _add_stock_limit(self, default_min=0.0, default_max=1.0):
+    def _add_stock_limit(self, default_min=0.0, default_max=1.0, active=False, abs_max=0.07):
         """
         添加个股权重的上下限
 
@@ -417,14 +417,30 @@ class Optimizer(object):
         nvar = self._signal.index.tolist()
         if self._internal_limit is not None:
             nvar = list(set(nvar).difference(set(self._internal_limit.index.tolist())))
-        if isinstance(default_min, list):
-            min_limit = [(k, v) for k, v in default_min if k in nvar]
+        if active:
+            benchmark_weight = self._bchmrk_weight.loc[nvar]
+            if isinstance(default_min, list):
+                default_min = pd.Series(default_min) + benchmark_weight
+            else:
+                default_min = default_min + benchmark_weight
+            default_min.loc[default_min < 0] = 0
+            min_limit = list(zip(default_min.index, default_min.values))
+            if isinstance(default_max, list):
+                default_max = pd.Series(default_max) + benchmark_weight
+            else:
+                default_max = default_max + benchmark_weight
+            default_max.loc[default_max < 0] = 0
+            default_max.loc[default_max > abs_max] = abs_max
+            max_limit = list(zip(default_max.index, default_max.values))
         else:
-            min_limit = list(zip(nvar, [default_min]*len(nvar)))
-        if isinstance(default_max, list):
-            max_limit = [(k, v) for k, v in default_max if k in nvar]
-        else:
-            max_limit = list(zip(nvar, [default_max]*len(nvar)))
+            if isinstance(default_min, list):
+                min_limit = [(k, v) for k, v in default_min if k in nvar]
+            else:
+                min_limit = list(zip(nvar, [default_min]*len(nvar)))
+            if isinstance(default_max, list):
+                max_limit = [(k, v) for k, v in default_max if k in nvar]
+            else:
+                max_limit = list(zip(nvar, [default_max]*len(nvar)))
         self._c.variables.set_lower_bounds(min_limit)
         self._c.variables.set_upper_bounds(max_limit)
 
@@ -925,11 +941,11 @@ class PortfolioOptimizer(object):
         return signal, stock_pool_valid.reset_index(level=1)['IDs']
 
     def optimize_weights(self):
-        print("正在优化...")
+        print("optimizing...")
         dates = self.signal.index.get_level_values(0).unique()
         optimal_assets = []
         for i, idate in enumerate(dates):
-            print("当前日期:%s, 总进度:%d/%d" % (idate.strftime("%Y-%m-%d"), i + 1, len(dates)))
+            print("current date is:%s, progress:%d/%d" % (idate.strftime("%Y-%m-%d"), i + 1, len(dates)))
             signal = self.signal.loc[idate]
             stock_pool = self.stock_pool.loc[idate].tolist()
             if 'TrackingError' in self.constraints and self.ds._name == 'xy':
@@ -942,12 +958,12 @@ class PortfolioOptimizer(object):
             optimizer.solve()
 
             if optimizer.optimal:
-                print("%s权重优化成功" % idate.strftime("%Y-%m-%d"))
+                print("%s succeed" % idate.strftime("%Y-%m-%d"))
                 opt_weight = optimizer.opt_rslt.loc[optimizer.opt_rslt['optimal_weight'] > 0.001, 'optimal_weight']
                 opt_weight = opt_weight / opt_weight.sum()
                 optimal_assets.append(opt_weight)
             else:
-                print("%s权重优化失败:%s" % (idate.strftime("%Y-%m-%d"), optimizer.solution_status))
+                print("%s failed:%s" % (idate.strftime("%Y-%m-%d"), optimizer.solution_status))
                 self.log[idate.strftime("%Y-%m-%d")] = optimizer.solution_status
                 if self.boostrap is not None:
                     constraints = copy.deepcopy(self.constraints)
@@ -963,7 +979,7 @@ class PortfolioOptimizer(object):
                             optimizer.add_constraint(k, **v)
                         optimizer.solve()
                         if optimizer.optimal:
-                            print("%s权重优化成功" % idate.strftime("%Y-%m-%d"))
+                            print("%s succeed" % idate.strftime("%Y-%m-%d"))
                             opt_weight = optimizer.opt_rslt.loc[
                                 optimizer.opt_rslt['optimal_weight'] > 0.001, 'optimal_weight']
                             break
@@ -976,7 +992,7 @@ class PortfolioOptimizer(object):
                     opt_weight = opt_weight / opt_weight.sum()
                     opt_weight.name = 'optimal_weight'
                     optimal_assets.append(opt_weight)
-        print("优化结束...")
+        print("finished...")
         self.result = pd.concat(optimal_assets).to_frame()
 
     def save_results(self, name, path=None):
