@@ -36,8 +36,14 @@ class StockUniverse(object):
         if self.algorithm is None:
             return sec.get_index_members(self.base, dates, start_date, end_date)
         else:
-            base = self.base.get(start_date, end_date, dates)
-            other = self.other.get(start_date, end_date, dates)
+            try:
+                base = self.base.get(start_date, end_date, dates)
+            except KeyError as e:
+                return self.other.get(start_date, end_date, dates)
+            try:
+                other = self.other.get(start_date, end_date, dates)
+            except KeyError as e:
+                return base
             return self.algorithm(base, other)
 
 

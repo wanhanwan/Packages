@@ -271,3 +271,11 @@ def get_available_names(name, used_names):
     while (name + str(i)) in used_names:
         i += 1
     return name + str(i)
+
+
+# 返回recource文件夹的绝对路径
+def get_resource_abs_path():
+    from pathlib import Path
+    curr_path = Path(__file__)
+    tar_path = curr_path.parents[1] / 'resource'
+    return tar_path

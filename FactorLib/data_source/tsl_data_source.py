@@ -1,4 +1,6 @@
 """Python调用天软的封装"""
+import sys
+sys.path.append(r"D:\programs\Analyse.NET")
 
 import pandas as pd
 import TSLPy3 as tsl
