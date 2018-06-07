@@ -1,7 +1,7 @@
 # coding: utf-8
-from FactorLib.data_source.base_data_source_h5 import sec, tc, data_source
-from fastcache import clru_cache
+from FactorLib.data_source.base_data_source_h5 import sec, data_source
 from QuantLib.stockFilter import _intersection, _difference, _union
+from  warnings import warn
 import re
 import os
 import pandas as pd
@@ -12,6 +12,18 @@ class StockUniverse(object):
         self.base = base_universe
         self.other = other
         self.algorithm = algorithm
+
+    def __repr__(self):
+        if self.algorithm is None:
+            return self.base
+
+        if self.algorithm is _intersection:
+            operator = '*'
+        elif self.algorithm is _difference:
+            operator = '-'
+        else:
+            operator = '+'
+        return "Universe(%s %s %s)"%(self.base, operator, self.other)
 
     def __add__(self, other):
         if isinstance(other, str):
@@ -39,10 +51,12 @@ class StockUniverse(object):
             try:
                 base = self.base.get(start_date, end_date, dates)
             except KeyError as e:
+                warn("%s not exist or dates out of range!"%self.base, UserWarning)
                 return self.other.get(start_date, end_date, dates)
             try:
                 other = self.other.get(start_date, end_date, dates)
             except KeyError as e:
+                warn("%s not exist or dates out of range!" % self.other, UserWarning)
                 return base
             return self.algorithm(base, other)
 
