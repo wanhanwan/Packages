@@ -6,6 +6,7 @@ from statsmodels.sandbox.rls import RLS
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 from .riskmodel_data_source import RiskDataSource
 from ..data_source.base_data_source_h5 import h5, tc, sec
+from ..data_source.stock_universe import from_formula
 from ..data_source.converter import IndustryConverter
 from ..utils.datetime_func import DateRange2Dates
 from ..data_source.tseries import move_dtindex
@@ -30,6 +31,7 @@ class BarraFactorReturn(object):
         args['忽略风格'] = []
         args['开始时间'] = '20100101'
         args['结束时间'] = pd.datetime.today().strftime('%Y%m%d')
+        args['股票池'] = '全A'
         self.args = args
 
     def _init_results(self):
@@ -56,8 +58,9 @@ class BarraFactorReturn(object):
         self.args['因子开始时间'] = tc.tradeDayOffset(self.args['开始时间'], -1)
         self.args['所有日期'] = tc.get_trade_days(self.args['因子开始时间'], self.args['结束时间'], retstr=None)
         estu = self.riskdb.load_factors(['Estu'], dates=self.args['所有日期'])
-        self.all_ids = estu.index.get_level_values(1).unique().tolist()
-        self.estu = estu[estu['Estu'] == 1]
+        stock_pool = from_formula(self.args['股票池']).get(dates=self.args['所有日期'])
+        self.estu = estu[estu['Estu'] == 1].reindex(stock_pool.index).dropna()
+        self.all_ids = estu.index.get_level_values('IDs').unique().tolist()
         self.estu_fw1d = move_dtindex(self.estu, 1, '1d')
 
         if self.args['行业因子'] == 'DEFAULT':
