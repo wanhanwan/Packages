@@ -193,3 +193,12 @@ def drop_false_growth(data, upper_limit=3.0, upper_type='v', use_data=None):
     to_drop = (filter_data.iloc[:, 0] > filter_data.iloc[:, 1]) & (merge['merge_acc'] == 1)
     return data[~data.index.isin(to_drop[to_drop == 1].index)]
 
+def drop_abnormal_growth(data, threshold=4):
+    """剔除净利润异常增长的股票
+    通常剔除归属母公司净利润增速炒超过4倍的股票
+    """
+    from FactorLib.data_source.wind_financial_data_api import incomesheet
+    all_dates = data.index.unique(level='date')
+    inc_rate = incomesheet.load_incr_tb(u'净利润(不含少数股东损益)', n=1, dates=list(all_dates.strftime('%Y%m%d')))
+    to_drop = inc_rate[inc_rate['inc_rate']>threshold]
+    return data[~data.index.isin(to_drop.index)]

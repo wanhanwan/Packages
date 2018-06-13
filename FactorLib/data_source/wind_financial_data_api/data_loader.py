@@ -30,6 +30,25 @@ def quarter2intdate(year, quarter):
     return year * 10000 + quarter * 3 * 100 + day
 
 
+def min_report_date(date):
+    """返回当下日期理论上最晚的报告期
+    计算原则：
+        11月-次年4月份对应上年三季报
+        5-8月份对应上年年报
+        9-10月对应当年半年报
+    """
+    year = date // 10000
+    month = date % 10000 // 100
+    if 1 <= month <= 4:
+        return (year - 1)*10000 + 930
+    elif 5<= month <= 8:
+        return (year - 1)*10000 + 1231
+    elif 9 <= month <=10:
+        return year*10000 + 630
+    else:
+        return year * 10000 + 930
+
+
 def incr_rate(old, new):
     """计算增长率
     遵循如下计算规则:
@@ -95,6 +114,10 @@ class DataLoader(object):
                 data = raw_data.query("ann_dt <= @date & IDs in @ids")
             else:
                 data = raw_data.query("ann_dt <= @date")
+
+            filter_date = min_report_date(date)
+            data = data.groupby('IDs').filter(lambda x: x['date'].max() >= filter_date)
+
             latest = data.groupby('IDs')[[field_name, 'date']].last()
             tmp = data.groupby(['IDs', 'date'])[field_name].last()
             last_year = self._last_nyear(tmp, latest['date'], quarter=4)
@@ -113,6 +136,10 @@ class DataLoader(object):
         r = []
         for date in dates:
             data = raw_data.query("ann_dt <= @date")
+
+            filter_date = min_report_date(date)
+            data = data.groupby('IDs').filter(lambda x: x['date'].max() >= filter_date)
+
             latest_periods = data.groupby('IDs')['date', 'quarter'].last()
             tmp = data.groupby(['IDs', 'date'])[field_name].last()
 
@@ -142,6 +169,10 @@ class DataLoader(object):
         r = []
         for date in dates:
             data = raw_data.query("ann_dt <= @date")
+
+            filter_date = min_report_date(date)
+            data = data.groupby('IDs').filter(lambda x: x['date'].max() >= filter_date)
+
             latest_periods = data.groupby('IDs')['date'].last()
             tmp = data.groupby(['IDs', 'date'])[field_name].last()
 
@@ -157,6 +188,10 @@ class DataLoader(object):
         r = []
         for date in dates:
             data = raw_data.query("ann_dt <= @date")
+
+            filter_date = min_report_date(date)
+            data = data.groupby('IDs').filter(lambda x: x['date'].max() >= filter_date)
+
             latest_periods = data.groupby('IDs')['date'].last()
             tmp = data.groupby(['IDs', 'date'])[field_name].last()
 
@@ -229,6 +264,10 @@ class DataLoader(object):
         r = []
         for date in dates:
             tmp = raw_data.query("ann_dt <= @date")
+
+            filter_date = min_report_date(date)
+            tmp = tmp.groupby('IDs').filter(lambda x: x['date'].max() >= filter_date)
+
             latest_period = tmp.groupby('IDs')[field_name].last()
             latest_period.index = pd.MultiIndex.from_product([[date], latest_period.index], names=['date', 'IDs'])
             r.append(latest_period)
@@ -248,6 +287,10 @@ class DataLoader(object):
         r = []
         for date in dates:
             data = raw_data.query("ann_dt <= @date")
+
+            filter_date = min_report_date(date)
+            data = data.groupby('IDs').filter(lambda x: x['date'].max() >= filter_date)
+
             new = raw_data.groupby('IDs')['date', field_name].last()
             tmp = data.groupby(['IDs', 'date'])[field_name].last()
             old = self._last_nperiod(tmp, new['date'], back_quarter=1)

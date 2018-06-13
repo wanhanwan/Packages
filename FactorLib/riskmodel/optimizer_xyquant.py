@@ -97,7 +97,7 @@ class Optimizer(object):
             else:
                 bchmrk_weight = data_source.sector.get_index_weight(
                     ids=self._benchmark, dates=[self._date]).reset_index(level='date', drop=True).iloc[:, 0]
-            bchmrk_weight = bchmrk_weight[bchmrk_weight.index.intersection(self.estu.index)]
+            # bchmrk_weight = bchmrk_weight[bchmrk_weight.index.intersection(self.estu.index)]
             bchmrk_weight = bchmrk_weight / bchmrk_weight.sum()
             self._bchmrk_weight = bchmrk_weight
 
@@ -224,7 +224,8 @@ class Optimizer(object):
         else:
             self.opt_rslt['previous_weight'] = self._asset.reindex(self._signal.index, fill_value=0.0).values
 
-    def _add_style_cons(self, style_dict, active=True, sense='E', std_qt=False, **kwargs):
+    def _add_style_cons(self, style_dict, active=True, sense='E', std_qt=False,
+                        limit_type='value', **kwargs):
         """
         设置风格限制
 
@@ -236,7 +237,11 @@ class Optimizer(object):
             单值传入与sense一致
         active: bool
             相对于基准的主动暴露，默认为True。
-
+        std_qt: bool
+            事先将风格因子分位数标准化。
+        limit_type: str
+            value or std value代表绝对值的偏离；std代表与基准偏离的标准差。
+        
         Examples:
         ==========
         >>> _add_style_cons({'Size':[0.0, 0.2]}, active=True)
@@ -253,6 +258,10 @@ class Optimizer(object):
             cons2 = pd.DataFrame(style_dict2).T.rename(columns={0: 'min', 1: 'max'})
             if active:
                 bchmk_style = self._prepare_benchmark_style(list(style_dict2), data=style_data)
+                if limit_type == 'std':
+                    std = self._prepare_benchmark_style_std(
+                        list(style_dict2), data=style_data)
+                    cons2 = cons2.mul(std, axis='index')
                 cons2 = cons2.add(bchmk_style, axis=0)
             portf_style = self._prepare_portfolio_style(list(style_dict2), data=style_data)
             if np.any(pd.isnull(portf_style)) or np.any(pd.isnull(cons2)):
@@ -289,6 +298,10 @@ class Optimizer(object):
             cons = pd.Series(style_dict)
             if active:
                 bchmk_style = self._prepare_benchmark_style(list(style_dict), data=style_data)
+                if limit_type == 'std':
+                    std = self._prepare_benchmark_style_std(
+                        list(style_dict2), data=style_data)
+                    cons = cons.mul(std, axis='index')
                 cons = cons + bchmk_style
             portf_style = self._prepare_portfolio_style(list(style_dict), data=style_data)
             if np.any(pd.isnull(portf_style)) or np.any(pd.isnull(cons)):
@@ -401,7 +414,8 @@ class Optimizer(object):
                 self._c.linear_constraints.add(lin_expr=lin_exprs, rhs=rhs_max, senses=['L']*len(cons2),
                                                names=[x+'2' for x in names])
 
-    def _add_stock_limit(self, default_min=0.0, default_max=1.0):
+    def _add_stock_limit(self, default_min=0.0, default_max=1.0, active=False,
+                         abs_max=0.07, multiple=None):
         """
         添加个股权重的上下限
 
@@ -411,20 +425,47 @@ class Optimizer(object):
             个股权重上限 。 float格式会广播到all_ids
             list的格式 : [(ID, min_limit)...]
         default_max : same as default_min
+        active : bool
+            是否相对偏离。选择相对偏离时，default_min和default_max就代表了相对基准指数
+            的超额权重。
+        abs_max : float
+            在选择相对偏离模式时，可以给个股设置一个绝对权重上限。
+            即个股权重上限是min(default_max+weight_in_benchmark, abs_max)
+        multiple : float
+            个股的权重上限是min(default_max+weight_in_benchmark, weight_in_benchmark*multiple)
         """
 
         # assert ((default_min < 0) or (default_max > 1))
         nvar = self._signal.index.tolist()
         if self._internal_limit is not None:
             nvar = list(set(nvar).difference(set(self._internal_limit.index.tolist())))
-        if isinstance(default_min, list):
-            min_limit = [(k, v) for k, v in default_min if k in nvar]
+        if active:
+            benchmark_weight = self._bchmrk_weight.loc[nvar]
+            if isinstance(default_min, list):
+                default_min = pd.Series(default_min) + benchmark_weight
+            else:
+                default_min = default_min + benchmark_weight
+            default_min.loc[default_min < 0] = 0
+            min_limit = list(zip(default_min.index, default_min.values))
+            if isinstance(default_max, list):
+                default_max = pd.Series(default_max) + benchmark_weight
+            else:
+                default_max = default_max + benchmark_weight
+            if multiple is not None:
+                temp_max = benchmark_weight * multiple
+                default_max = default_max.where(default_max < temp_max, temp_max)
+            default_max.loc[default_max < 0] = 0
+            default_max.loc[default_max > abs_max] = abs_max
+            max_limit = list(zip(default_max.index, default_max.values))
         else:
-            min_limit = list(zip(nvar, [default_min]*len(nvar)))
-        if isinstance(default_max, list):
-            max_limit = [(k, v) for k, v in default_max if k in nvar]
-        else:
-            max_limit = list(zip(nvar, [default_max]*len(nvar)))
+            if isinstance(default_min, list):
+                min_limit = [(k, v) for k, v in default_min if k in nvar]
+            else:
+                min_limit = list(zip(nvar, [default_min]*len(nvar)))
+            if isinstance(default_max, list):
+                max_limit = [(k, v) for k, v in default_max if k in nvar]
+            else:
+                max_limit = list(zip(nvar, [default_max]*len(nvar)))
         self._c.variables.set_lower_bounds(min_limit)
         self._c.variables.set_upper_bounds(max_limit)
 
@@ -508,6 +549,23 @@ class Optimizer(object):
         else:
             style_benchmark = style_data.mul(weight, axis='index').sum()
         return style_benchmark
+    
+    def _prepare_benchmark_style_std(self, styles, data=None, **kwargs):
+        """
+        基准风格因子的标准差
+        """
+        weight = self._bchmrk_weight / self._bchmrk_weight.sum()
+        members = weight.index.tolist()
+        if data is None:
+            style_data = self._rskds.load_style_factor(styles, ids=members, dates=[self._date])\
+                .reset_index(level='date', drop=True)
+            if kwargs.get('std_qt', False):
+                style_data = style_data.apply(lambda x: StandardByQT(x.to_frame(), x.name))
+        else:
+            style_data = data.reindex(columns=styles).reset_index(level='date', drop=True)
+        style_data = style_data.fillna(style_data.mean())
+        std = ((style_data - style_data.mean()) ** 2).mul(weight, axis='index').sum()
+        return np.sqrt(std)
 
     def _add_trckerr(self, target_err, **kwargs):
         if self._active:
@@ -568,6 +626,7 @@ class Optimizer(object):
         is_standard = user_conf.get('standard', False)
         is_active = kwargs.get('active', False)
         sense = kwargs.get('sense', 'E')
+        limit_type = kwargs.get('limit_type', 'value')
 
         if isinstance(factor_data, pd.Series):
             factor_data = factor_data.to_frame(factor_name)
@@ -605,6 +664,8 @@ class Optimizer(object):
             else:
                 factor_data2 = factor_data.loc[self._date, f].reindex(self._allids, fill_value=0.0)
             if is_active:
+                if limit_type == 'std':
+                    l *= self._prepare_benchmark_userexpo_std(factor_data2)
                 l += self._prepare_benchmark_userexpo(factor_data2)
             portfolio_factor = factor_data2.loc[self._allids]
             if np.any(np.isnan(portfolio_factor.values)):
@@ -623,6 +684,8 @@ class Optimizer(object):
             else:
                 factor_data2 = factor_data.loc[self._date, f].reindex(self._allids, fill_value=0.0)
             if is_active:
+                if limit_type == 'std':
+                    l *= self._prepare_benchmark_userexpo_std(factor_data2)
                 l += self._prepare_benchmark_userexpo(factor_data2)
             portfolio_factor = factor_data2.loc[self._allids]
             if np.any(np.isnan(portfolio_factor.values)):
@@ -642,6 +705,8 @@ class Optimizer(object):
             else:
                 factor_data2 = factor_data.loc[self._date, f].reindex(self._allids, fill_value=0.0)
             if is_active:
+                if limit_type == 'std':
+                    l *= self._prepare_benchmark_userexpo_std(factor_data2)
                 l += self._prepare_benchmark_userexpo(factor_data2)
             portfolio_factor = factor_data2.loc[self._allids]
             if np.any(np.isnan(portfolio_factor.values)):
@@ -660,6 +725,17 @@ class Optimizer(object):
         members = weight.index.tolist()
         userexpo_benchmark = data.loc[members].mul(weight, axis='index').sum() / weight.sum()
         return userexpo_benchmark
+    
+    def _prepare_benchmark_userexpo_std(self, data):
+        """计算基准指数的用户因子暴露的标准差"""
+        weight = self._bchmrk_weight / self._bchmrk_weight.sum()
+        members = weight.index.tolist()
+        userexpo_benchmark = data.reindex(members)
+        userexpo_benchmark = userexpo_benchmark.fillna(
+            userexpo_benchmark.mean())
+        std = ((userexpo_benchmark - userexpo_benchmark.mean())**2).mul(
+            weight, axis='index').sum()
+        return np.sqrt(std)
 
     def _load_portfolio_risk(self):
         """
@@ -925,11 +1001,11 @@ class PortfolioOptimizer(object):
         return signal, stock_pool_valid.reset_index(level=1)['IDs']
 
     def optimize_weights(self):
-        print("正在优化...")
+        print("optimizing...")
         dates = self.signal.index.get_level_values(0).unique()
         optimal_assets = []
         for i, idate in enumerate(dates):
-            print("当前日期:%s, 总进度:%d/%d" % (idate.strftime("%Y-%m-%d"), i + 1, len(dates)))
+            print("current date is:%s, progress:%d/%d" % (idate.strftime("%Y-%m-%d"), i + 1, len(dates)))
             signal = self.signal.loc[idate]
             stock_pool = self.stock_pool.loc[idate].tolist()
             if 'TrackingError' in self.constraints and self.ds._name == 'xy':
@@ -942,12 +1018,12 @@ class PortfolioOptimizer(object):
             optimizer.solve()
 
             if optimizer.optimal:
-                print("%s权重优化成功" % idate.strftime("%Y-%m-%d"))
+                print("%s succeed" % idate.strftime("%Y-%m-%d"))
                 opt_weight = optimizer.opt_rslt.loc[optimizer.opt_rslt['optimal_weight'] > 0.001, 'optimal_weight']
                 opt_weight = opt_weight / opt_weight.sum()
                 optimal_assets.append(opt_weight)
             else:
-                print("%s权重优化失败:%s" % (idate.strftime("%Y-%m-%d"), optimizer.solution_status))
+                print("%s failed:%s" % (idate.strftime("%Y-%m-%d"), optimizer.solution_status))
                 self.log[idate.strftime("%Y-%m-%d")] = optimizer.solution_status
                 if self.boostrap is not None:
                     constraints = copy.deepcopy(self.constraints)
@@ -963,7 +1039,7 @@ class PortfolioOptimizer(object):
                             optimizer.add_constraint(k, **v)
                         optimizer.solve()
                         if optimizer.optimal:
-                            print("%s权重优化成功" % idate.strftime("%Y-%m-%d"))
+                            print("%s succeed" % idate.strftime("%Y-%m-%d"))
                             opt_weight = optimizer.opt_rslt.loc[
                                 optimizer.opt_rslt['optimal_weight'] > 0.001, 'optimal_weight']
                             break
@@ -976,7 +1052,7 @@ class PortfolioOptimizer(object):
                     opt_weight = opt_weight / opt_weight.sum()
                     opt_weight.name = 'optimal_weight'
                     optimal_assets.append(opt_weight)
-        print("优化结束...")
+        print("finished...")
         self.result = pd.concat(optimal_assets).to_frame()
 
     def save_results(self, name, path=None):
