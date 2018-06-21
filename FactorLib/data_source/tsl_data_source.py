@@ -27,6 +27,7 @@ def CsQuery(field_dict, end_date, bk_name=_ashare, stock_list=None, condition="1
     ===========
     field_dict:
     """
+    field_dict.update({"'IDs'": 'DefaultStockID()'})
     if stock_list is None:
         stock_list = "''"
     else:
