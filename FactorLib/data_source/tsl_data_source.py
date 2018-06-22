@@ -7,7 +7,6 @@ import TSLPy3 as tsl
 import os
 from FactorLib.utils.tool_funcs import tradecode_to_tslcode, tslcode_to_tradecode
 from FactorLib.utils.datetime_func import DateRange2Dates
-from FactorLib.data_source.base_data_source_h5 import sec
 from FactorLib.utils.TSDataParser import *
 from functools import reduce, partial
 
