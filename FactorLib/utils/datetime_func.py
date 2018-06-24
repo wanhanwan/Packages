@@ -202,7 +202,7 @@ def DateRange2Dates(func):
         d = tc.get_trade_days(start, end, retstr=None)
         if dates is not None:
             dates = pd.DatetimeIndex(dates)
-            dates = list(set(dates).intersection(set(d)))
+            dates = list(dates[np.in1d(dates.date, d.date)])
             dates.sort()
         else:
             dates = d

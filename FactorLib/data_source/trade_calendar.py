@@ -219,6 +219,25 @@ class trade_calendar(object):
         return result
 
     @handle_retstr
+    def get_trade_time(self, start_time, end_time, freq='1H', **kwargs):
+        """
+        获得交易时间序列，支持秒、分钟、小时
+        时间格式: "YYYYMMDD HH:MM:SS"
+        """
+        from datetime import time
+        start_time = pd.to_datetime(start_time)
+        end_time = pd.to_datetime(end_time)
+        trade_days = self.get_trade_days(start_time.strftime("%Y%m%d"),
+                                         end_time.strftime("%Y%m%d"),
+                                         retstr=None)
+        raw = pd.date_range(start_time, end_time, freq=freq)
+        raw = raw[pd.DatetimeIndex(raw.date).isin(trade_days)]
+        time_of_raw = raw.time
+        raw = raw[((time_of_raw > time(9, 30)) & (time_of_raw <= time(11, 30))) |
+                  ((time_of_raw > time(13, 0)) & (time_of_raw <= time(15, 0)))]
+        return pd.DatetimeIndex(raw)
+
+    @handle_retstr
     def tradeDayOffset(self, today, n, freq='1d', incl_on_offset_today=False, **kwargs):
         """
         日期漂移
@@ -295,5 +314,5 @@ class trade_calendar(object):
 tc = trade_calendar()
 
 if __name__ == '__main__':
-    d = tc.tradeDayOffset('2017-08-18', 1, freq='1y', incl_on_offset_today=False)
+    d = tc.get_trade_time('20100101', '20100105', freq='1H')
     print(d)

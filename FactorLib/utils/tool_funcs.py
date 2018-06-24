@@ -82,6 +82,8 @@ def tradecode_to_uqercode(tradecode):
 
 @clru_cache()
 def tradecode_to_tslcode(code):
+    if code[:2].isalpha():
+        return code
     return 'SH'+code if code[0] == '6' else 'SZ'+code
 
 @clru_cache()

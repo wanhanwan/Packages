@@ -12,6 +12,7 @@ from functools import reduce, partial
 
 
 _ashare = "'上证A股;深证A股;创业板;中小企业板;暂停上市;终止上市'"
+_fund = "'上证基金;深证基金;开放式基金'"
 _condition = 'firstday()<=getsysparam(pn_date())'
 
 
@@ -20,7 +21,7 @@ def _gstr_from_func(func_name, func_args):
     return func_str
 
 
-def CsQuery(field_dict, end_date, bk_name=_ashare, stock_list=None, condition="1"):
+def CsQuery(field_dict, end_date, bk_name=_ashare, stock_list=None, condition="1", **kwargs):
     """对天软Query函数的封装
     Parameters:
     ===========
@@ -31,30 +32,98 @@ def CsQuery(field_dict, end_date, bk_name=_ashare, stock_list=None, condition="1
         stock_list = "''"
     else:
         stock_list = "'%s'" % ";".join(map(tradecode_to_tslcode, stock_list))
-    encode_date = tsl.EncodeDate(end_date.year, end_date.month, end_date.day)
+    if (end_date.hour == 0) and (end_date.minute == 0) and (end_date.second == 0):
+        encode_date = tsl.EncodeDate(end_date.year, end_date.month, end_date.day)
+    else:
+        encode_date = tsl.EncodeDateTime(end_date.year, end_date.month, end_date.day,
+                                         end_date.hour, end_date.minute, end_date.second, 0)
     func_name = "Query"
     func_args = [bk_name, stock_list, condition, "''"] + list(reduce(lambda x, y: x+y, field_dict.items()))
     script_str = _gstr_from_func(func_name, func_args)
-    data = tsl.RemoteExecute(script_str, {'CurrentDate': encode_date})
+    sysparams = {'CurrentDate': encode_date}
+    sysparams.update(kwargs)
+    data = tsl.RemoteExecute(script_str, sysparams)
     df = parse2DArray(data, column_decode=['IDs'])
     df['IDs'] = df['IDs'].apply(tslcode_to_tradecode)
     df['date'] = end_date
     return df.set_index(['date', 'IDs'])
 
 
+def TsQuery(field_dict, dates, stock, **kwargs):
+    """
+    天软时间序列函数
+    """
+    field_dict.update({"'date'": 'DateTimeToStr(sp_time())', "'IDs'": 'DefaultStockID()'})
+    stock = tradecode_to_tslcode(stock)
+    N = len(dates)
+    func_args = [str(N)] + list(reduce(lambda x, y: x+y, field_dict.items()))
+    func_name = "Nday"
+    script_str = _gstr_from_func(func_name, func_args)
+
+    end_date = max(dates)
+    if (end_date.hour == 0) and (end_date.minute == 0) and (end_date.second == 0):
+        encode_date = tsl.EncodeDate(end_date.year, end_date.month, end_date.day)
+    else:
+        encode_date = tsl.EncodeDateTime(end_date.year, end_date.month, end_date.day,
+                                         end_date.hour, end_date.minute, end_date.second, 0)
+    sysparams = {'CurrentDate': encode_date, 'StockID': stock}
+    sysparams.update(kwargs)
+    data = tsl.RemoteExecute(script_str, sysparams)
+    df = parse2DArray(data, column_decode=['IDs', 'date'])
+    df['IDs'] = df['IDs'].apply(tslcode_to_tradecode)
+    df['date'] = pd.DatetimeIndex(df['date'])
+    return df.set_index(['date', 'IDs'])
+
+
+def CsQueryMultiFields(field_dict, end_date, bk_name=_ashare, stock_list=None,
+                       condition="1", **kwargs):
+    """天软Query函数封装
+    与CsQuery()的不同是，此函数对每只股票提取的字段数量大于1。
+    """
+    field_dict.update({"'IDs'": 'DefaultStockID()'})
+    if stock_list is None:
+        stock_list = "''"
+    else:
+        stock_list = "'%s'" % ";".join(map(tradecode_to_tslcode, stock_list))
+    if (end_date.hour == 0) and (end_date.minute == 0) and (end_date.second == 0):
+        encode_date = tsl.EncodeDate(end_date.year, end_date.month, end_date.day)
+    else:
+        encode_date = tsl.EncodeDateTime(end_date.year, end_date.month, end_date.day,
+                                         end_date.hour, end_date.minute, end_date.second, 0)
+    func_name = "Query"
+    func_args = [bk_name, stock_list, condition, "''"] + list(reduce(lambda x, y: x + y, field_dict.items()))
+    script_str = _gstr_from_func(func_name, func_args)
+    sysparams = {'CurrentDate': encode_date}
+    sysparams.update(kwargs)
+    data = tsl.RemoteExecute(script_str, sysparams)
+    df = parseByStock(data)
+    return df
+
+
+
 @DateRange2Dates
 def PanelQuery(field_dict, start_date=None, end_date=None, dates=None,
-               bk_name=_ashare, stock_list=None, condition="1"):
+               bk_name=_ashare, stock_list=None, condition="1", **kwargs):
     """对天软Query函数的封装
     Parameters:
     ===========
     field_dict:
     """
-    field_dict.update({"'IDs'": 'DefaultStockID()'})
-    data = []
-    for date in dates:
-        idata = CsQuery(field_dict, date, bk_name=bk_name, stock_list=stock_list, condition=condition)
-        data.append(idata)
+    data = [None] * len(dates)
+    for i, date in enumerate(dates):
+        idata = CsQuery(field_dict, date, bk_name=bk_name, stock_list=stock_list, condition=condition,
+                        **kwargs)
+        data[i] = idata
+    return pd.concat(data).sort_index()
+
+
+@DateRange2Dates
+def PanelQueryByStocks(field_dict, stocks, start_date=None, end_date=None, dates=None,
+                       **kwargs):
+    data = [None] * len(stocks)
+    for i, s in enumerate(stocks):
+        idata = TsQuery(field_dict, dates, s, **kwargs)
+        data[i] = idata
     return pd.concat(data).sort_index()
 
 
@@ -177,8 +246,9 @@ class TSLDBOnline(object):
 
 
 if __name__ == '__main__':
-    field = {"'list_days'": 'amount()'}
+    field = {"'amt'": 'amount()'}
+    dates = pd.DatetimeIndex(['20180619', '20180622'])
     # data = PanelQuery(field, start_date='20180101', end_date='20180110')
     a = TSLDBOnline()
-    data = a.get_index_members('中证1000', dates=['20180116'])
+    data = a.get_index_members('中证红利', dates=list(dates))
     print(data)

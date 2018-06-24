@@ -31,10 +31,10 @@ def parseByStock(TSData, date_parse=None):
     table = pd.DataFrame()
     temp_table = []
     for idata in TSData[1]:
-        stockID = idata[0].decode('utf8')[2:]
+        stockID = idata[b'IDs'].decode('utf8')[2:]
         stockData = []
         iter_stock += 1
-        for itable in idata[1]:
+        for itable in idata[b'data']:
             new_dict = {k.decode('gbk'): v for k, v in itable.items()}
             new_data = pd.DataFrame(new_dict, index=pd.Index([stockID], name='IDs'))
             stockData.append(new_data)
@@ -49,6 +49,9 @@ def parseByStock(TSData, date_parse=None):
             table = pd.concat([table, _])
             temp_table = []
             iter_stock = 0
+    if temp_table:
+        _ = pd.concat(temp_table)
+        table = pd.concat([table, _])
     if date_parse:
         table[date_parse] = table[date_parse].applymap(_int2date)
     return table.sort_index()
