@@ -21,7 +21,18 @@ def _gstr_from_func(func_name, func_args):
     return func_str
 
 
-def CsQuery(field_dict, end_date, bk_name=_ashare, stock_list=None, condition="1", **kwargs):
+def encode_datetime(dt):
+    return tsl.EncodeDateTime(dt.year, dt.month, dt.day,
+                              dt.hour, dt.minute, dt.second, 0)
+
+
+def run_script(script, sysparams):
+    data = tsl.RemoteExecute(script, sysparams)
+    return data
+
+
+def CsQuery(field_dict, end_date, bk_name=_ashare, stock_list=None, condition="1",
+            code_transfer=True, **kwargs):
     """对天软Query函数的封装
     Parameters:
     ===========
@@ -31,7 +42,10 @@ def CsQuery(field_dict, end_date, bk_name=_ashare, stock_list=None, condition="1
     if stock_list is None:
         stock_list = "''"
     else:
-        stock_list = "'%s'" % ";".join(map(tradecode_to_tslcode, stock_list))
+        if code_transfer:
+            stock_list = "'%s'" % ";".join(map(tradecode_to_tslcode, stock_list))
+        else:
+            stock_list = "'%s'" % ";".join(stock_list)
     if (end_date.hour == 0) and (end_date.minute == 0) and (end_date.second == 0):
         encode_date = tsl.EncodeDate(end_date.year, end_date.month, end_date.day)
     else:
@@ -49,12 +63,13 @@ def CsQuery(field_dict, end_date, bk_name=_ashare, stock_list=None, condition="1
     return df.set_index(['date', 'IDs'])
 
 
-def TsQuery(field_dict, dates, stock, **kwargs):
+def TsQuery(field_dict, dates, stock, code_transfer=True, **kwargs):
     """
     天软时间序列函数
     """
     field_dict.update({"'date'": 'DateTimeToStr(sp_time())', "'IDs'": 'DefaultStockID()'})
-    stock = tradecode_to_tslcode(stock)
+    if code_transfer:
+        stock = tradecode_to_tslcode(stock)
     N = len(dates)
     func_args = [str(N)] + list(reduce(lambda x, y: x+y, field_dict.items()))
     func_name = "Nday"
@@ -76,7 +91,7 @@ def TsQuery(field_dict, dates, stock, **kwargs):
 
 
 def CsQueryMultiFields(field_dict, end_date, bk_name=_ashare, stock_list=None,
-                       condition="1", **kwargs):
+                       condition="1", code_transfer=True, **kwargs):
     """天软Query函数封装
     与CsQuery()的不同是，此函数对每只股票提取的字段数量大于1。
     """
@@ -84,7 +99,10 @@ def CsQueryMultiFields(field_dict, end_date, bk_name=_ashare, stock_list=None,
     if stock_list is None:
         stock_list = "''"
     else:
-        stock_list = "'%s'" % ";".join(map(tradecode_to_tslcode, stock_list))
+        if code_transfer:
+            stock_list = "'%s'" % ";".join(map(tradecode_to_tslcode, stock_list))
+        else:
+            stock_list = "'%s'" % ";".join(stock_list)
     if (end_date.hour == 0) and (end_date.minute == 0) and (end_date.second == 0):
         encode_date = tsl.EncodeDate(end_date.year, end_date.month, end_date.day)
     else:
@@ -103,7 +121,8 @@ def CsQueryMultiFields(field_dict, end_date, bk_name=_ashare, stock_list=None,
 
 @DateRange2Dates
 def PanelQuery(field_dict, start_date=None, end_date=None, dates=None,
-               bk_name=_ashare, stock_list=None, condition="1", **kwargs):
+               bk_name=_ashare, stock_list=None, condition="1",
+               code_transfer=True, **kwargs):
     """对天软Query函数的封装
     Parameters:
     ===========
@@ -112,17 +131,17 @@ def PanelQuery(field_dict, start_date=None, end_date=None, dates=None,
     data = [None] * len(dates)
     for i, date in enumerate(dates):
         idata = CsQuery(field_dict, date, bk_name=bk_name, stock_list=stock_list, condition=condition,
-                        **kwargs)
+                        code_transfer=code_transfer, **kwargs)
         data[i] = idata
     return pd.concat(data).sort_index()
 
 
 @DateRange2Dates
 def PanelQueryByStocks(field_dict, stocks, start_date=None, end_date=None, dates=None,
-                       **kwargs):
+                       code_transfer=True, **kwargs):
     data = [None] * len(stocks)
     for i, s in enumerate(stocks):
-        idata = TsQuery(field_dict, dates, s, **kwargs)
+        idata = TsQuery(field_dict, dates, s, code_transfer, **kwargs)
         data[i] = idata
     return pd.concat(data).sort_index()
 
@@ -242,6 +261,23 @@ class TSLDBOnline(object):
         data = pd.concat(r)
         data['sign'] = 1
         data['IDs'] = data['IDs'].str[2:]
+        return data.set_index(['date', 'IDs'])
+
+    @DateRange2Dates
+    def get_index_weight(self, idx, start_date=None, end_date=None, dates=None):
+        r = []
+        func = 'IndexWeightGet'
+        idx = "'%s'" % idx
+        for d in dates:
+            dd = d.strftime("%Y%m%d")
+            script_str = _gstr_from_func(func, [idx, dd])
+            data = tsl.RemoteExecute(script_str, {})
+            data = parse2DArray(data, ["IDs"])
+            r.append(data)
+        data = pd.concat(r)
+        data['IDs'] = data['IDs'].str[2:]
+        data['date'] = pd.DatetimeIndex(data['date'].astype('str'))
+        data['weight'] /= 100.0
         return data.set_index(['date', 'IDs'])
 
 
