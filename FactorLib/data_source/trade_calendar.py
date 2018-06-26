@@ -16,7 +16,6 @@ from pandas.tseries.offsets import (DateOffset,
                                     as_timestamp
                                     )
 from functools import wraps
-from collections import Iterable
 from datetime import time, timedelta
 
 
@@ -38,6 +37,7 @@ chn_holidays = _read_holidays()
 class CustomBusinessWeekEnd(DateOffset):
     _cacheable = False
     _prefix = 'CBWE'
+    _attributes = frozenset(['calendar', 'holidays'])
 
     def __init__(self, n=1, normalize=False, weekmask='Mon Tue Wed Thu Fri',
                  holidays=None, calendar=None, **kwds):
@@ -46,8 +46,9 @@ class CustomBusinessWeekEnd(DateOffset):
         self.kwds.update(kwds)
         self.offset = kwds.get('offset', timedelta(0))
         self.cbday = CustomBusinessDay(n=1, normalize=normalize, weekmask=weekmask, holidays=holidays,
-                                       calendar=calendar, **kwds)
-        self.kwds['calendar'] = self.cbday.calendar
+                                       calendar=calendar, offset=self.offset)
+        self.calendar = self.cbday.calendar
+        self.holidays = holidays
         self.w_offset = Week(weekday=4)
 
     @apply_wraps
@@ -79,6 +80,8 @@ class CustomBusinessWeekEnd(DateOffset):
 class CustomBusinessQuaterEnd(QuarterOffset):
     _cacheable = False
     _prefix = 'CBQE'
+    _attributes = frozenset(
+        {'holidays', 'calendar'} | set(QuarterOffset._attributes))
 
     def __init__(self, n=1, normalize=False, weekmask='Mon Tue Wed Thu Fri',
                  holidays=None, calendar=None, **kwds):
@@ -88,8 +91,10 @@ class CustomBusinessQuaterEnd(QuarterOffset):
         self.offset = kwds.get('offset', timedelta(0))
         self.startingMonth = kwds.get('startingMonth', 3)
         self.cbday = CustomBusinessDay(n=1, normalize=normalize, weekmask=weekmask, holidays=holidays,
-                                       calendar=calendar, **kwds)
-        self.kwds['calendar'] = self.cbday.calendar
+                                       calendar=calendar)
+        self.calendar = self.cbday.calendar
+        self.holidays = holidays
+        self.startingMonth = self.startingMonth
         self.q_offset = QuarterEnd(1)
 
     @apply_wraps
@@ -114,7 +119,7 @@ class CustomBusinessQuaterEnd(QuarterOffset):
             return False
         if not self.cbday.onOffset(dt):
             return False
-        return (dt + self.cbday).quater != dt.quater
+        return (dt + self.cbday).quarter != dt.quarter
 
 
 class CustomBusinessYearEnd(YearOffset):
@@ -161,6 +166,7 @@ class CustomBusinessYearEnd(YearOffset):
         if not self.cbday.onOffset(dt):
             return False
         return (dt + self.cbday).year != dt.year
+
 
 traderule_alias_mapping = {
     'd': CustomBusinessDay(holidays=chn_holidays),
