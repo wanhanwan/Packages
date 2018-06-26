@@ -133,7 +133,7 @@ def PanelQuery(field_dict, start_date=None, end_date=None, dates=None,
         idata = CsQuery(field_dict, date, bk_name=bk_name, stock_list=stock_list, condition=condition,
                         code_transfer=code_transfer, **kwargs)
         data[i] = idata
-    return pd.concat(data).sort_index()
+    return pd.concat(data).sort_index().reindex(dates, level='date')
 
 
 @DateRange2Dates
