@@ -8,7 +8,6 @@ from fastcache import clru_cache
 from scipy import linalg
 
 
-
 @clru_cache()
 def getExpWeight(window, half_life):
     """指数权重"""
@@ -24,6 +23,17 @@ def calCovariance(fj, fk, nlen, weight):
     Res = (fj-fjMean)*(fk-fkMean)
     TotalWeight = np.sum(weight[~np.isnan(Res)])
     return np.nansum((Res*weight).astype('float32'))/TotalWeight
+
+
+def calCovMatrix(mat1, mat2=None, weight=None):
+    """计算协方差矩阵
+    Patameters:
+    -----------
+    mat: np.array
+        每一列是一个变量
+    """
+    m = np.cov(mat1, mat2, rowvar=False, bias=True, aweights=weight)
+    return m
 
 
 def calCovMat(factor_returns, date_ind, predict_window, ac_widow, half_life,
@@ -46,7 +56,7 @@ def calCovMat(factor_returns, date_ind, predict_window, ac_widow, half_life,
             coef = np.zeros(N*2+1)
             for delta in np.arange(-N, N+1):
                 coef[delta+N] = N+1-np.abs(delta)
-                if delta<0:
+                if delta < 0:
                     s = max(0, date_ind-rollback_len+1)
                     if s == 0:
                         zeros = np.zeros(min(-delta, nret))
@@ -57,7 +67,7 @@ def calCovMat(factor_returns, date_ind, predict_window, ac_widow, half_life,
                         zeros = np.zeros(-delta-s)
                         iiret = np.hstack((zeros,factor_returns.iloc[:nret+delta+s, i].values))
                     tmp_cov = calCovariance(iiret, jret, nret, weight)
-                elif delta>0:
+                elif delta > 0:
                     s = max(0, date_ind-rollback_len+1)
                     if s == 0:
                         zeros = np.zeros(min(delta, nret))
@@ -85,6 +95,38 @@ def calCovMat(factor_returns, date_ind, predict_window, ac_widow, half_life,
         eigs[eigs < 0] = 0.0000001
         varmatrix = np.dot(y, np.dot(np.diag(eigs), np.linalg.inv(y)))
     return varmatrix
+
+
+def _newweyAdjust(ret_mat, k, n, weight):
+    """计算Newwey-West中的调整项"""
+    cov = np.diag(ret_mat.shape[1])
+    for i in range(1, k+1):
+        mat1 = ret_mat[k-i-1:n+k-i-1, :]
+        mat2 = ret_mat[k-1:n+k-1, :]
+        cov_i = calCovMatrix(mat1, mat2, weight)
+        cov += ((cov_i + cov_i.T) * (1-i/(1+k)))
+    return cov
+
+
+def calRiskByNewwey(ret_mat, date, predict_window, ac_window, half_life,
+                    rollback_len=360):
+    """使用Newwey-West调整计算协方差矩阵"""
+    ret = ret_mat[:date].iloc[-(rollback_len+ac_window):, :].values
+    weight1 = np.flipud(getExpWeight(rollback_len, half_life[0]))
+    weight2 = np.flipud(getExpWeight(rollback_len, half_life[1]))
+
+    cov = calCovMatrix(ret_mat[ac_window-1:, :], weight=weight1)
+    std = np.sqrt(np.diag(cov)).T.dot(np.sqrt(np.diag(cov)))
+
+    cov2 = calCovMatrix(ret_mat[ac_window - 1:, :], weight=weight2)
+    std2 = np.sqrt(np.diag(cov2)).T.dot(np.sqrt(np.diag(cov2)))
+
+    cov_newwey = cov + _newweyAdjust(ret, ac_window, rollback_len, weight1)
+    cov_newwey /= std
+    cov_newwey *= std2
+    cov_newwey *= predict_window
+
+    return cov_newwey
 
 
 def calSpecificCovMat(factor_returns, date_ind, predict_window, ac_widow, half_life,
@@ -186,11 +228,7 @@ def calStrucStd(gamma, ts_std, date, factor_data, industry_data, weight_data):
     x = np.vstack((ifactor_data, iindustry_data))
     x = sm.add_constant(x)
     result = sm.OLS(y, x[:, :-1]).fit()
-
-
-
-
-
+    return
 
 
 def volatility_regime_adjust(factor_returns, bf_old, matrix, predict_window):
