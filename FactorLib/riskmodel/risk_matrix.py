@@ -43,13 +43,13 @@ def _newweyAdjust(ret_mat, k, n, weight):
     return cov
 
 
-def calRiskByNewwey(ret_mat, date, predict_window, ac_window, half_life,
+def calRiskByNewwey(ret_mat, predict_window, ac_window, half_life,
                     rollback_len=360):
     """使用Newwey-West调整计算协方差矩阵
 
     Parameters:
     -----------
-    ret_mat : pd.DataFrame
+    ret_mat : 2D-Array
         收益率矩阵，每一列代表一个变量
     date : str or datetime
         截止日期
@@ -63,7 +63,7 @@ def calRiskByNewwey(ret_mat, date, predict_window, ac_window, half_life,
     rollback_len : int
         滚动窗口期
     """
-    ret = ret_mat[:date].iloc[-(rollback_len+ac_window):, :].values
+    ret = ret_mat[-(rollback_len+ac_window):, :]
     weight1 = np.flipud(getExpWeight(rollback_len, half_life[0]))
     weight2 = np.flipud(getExpWeight(rollback_len, half_life[1]))
 
@@ -82,9 +82,89 @@ def calRiskByNewwey(ret_mat, date, predict_window, ac_window, half_life,
 
     eig, vec = la.eig(cov_newwey)
     eig[eig < 0] = 1e-6
-    cov_newwey = vec.dot(np.diag(eig)).dot(la.inv(vec))
+    cov_newwey = vec.dot(np.diag(eig)).dot(vec.T)
 
     return cov_newwey
+
+
+@jit()
+def _monteCarlo(cov, m, k, d, u, predict_window, ac_window,
+                half_life, rollback_len=360):
+    """Monte Carlo Simulation when eigen-adjust
+
+    Parameters:
+    -----------
+    cov : 2D-array
+        原始的协方差矩阵
+    m : int
+        模拟的次数
+    k : int
+        因子数量
+    d : 1D-array
+        对cov正交分解后的特征向量
+    u : 2D-array
+        对cov正交分解后的特征矩阵
+    predict_window : int
+        向前预测天数。如果是月频，通常取21。
+        取值与Newwey-west函数的参数相同。
+    ac_window : int
+        假设自相关的周期频率。
+        取值与Newwey-west函数的参数相同。
+    half_life : list with size of two
+        第一个半衰期用于计算相关系数，第二个半衰期用于
+        计算协方差。
+        取值与Newwey-west函数的参数相同。
+    rollback_len : int
+        滚动窗口期。取值与Newwey-west函数的参数相同.
+    """
+    ret_len = rollback_len + ac_window
+    d_list = np.zeros((m, k))
+    d_list_e = np.zeros((m, k))
+    for i in range(m):
+        b_m = np.random.randn(k, ret_len) * np.sqrt(d)[:, None]  # K*T
+        f = u.dot(b_m)
+        fcov = calRiskByNewwey(f.T, predict_window, ac_window, half_life,
+                               rollback_len)
+        eig_m, u_m = la.eig(fcov)
+        d_m = u_m.T.dot(cov).dot(u_m)
+        d_list[i, :] = np.diag(d_m)
+        d_list_e[i, :] = eig_m
+    v = (d_list / d_list_e).mean(0)
+    v = (1.4 * (v - 1) + 1) ** 2
+    d *= v
+    return u.dot(np.diag(d)).dot(u.T)
+
+
+def eigenFactorAdjust(cov, m, predict_window, ac_window,
+                      half_life, rollback_len=360):
+    """Eigenfactor Risk Adjustment
+
+    Parameters:
+    -----------
+    cov : 2D-array
+        原始的协方差矩阵
+    m : int
+        模拟的次数
+    predict_window : int
+        向前预测天数。如果是月频，通常取21。
+        取值与Newwey-west函数的参数相同。
+    ac_window : int
+        假设自相关的周期频率。
+        取值与Newwey-west函数的参数相同。
+    half_life : list with size of two
+        第一个半衰期用于计算相关系数，第二个半衰期用于
+        计算协方差。
+        取值与Newwey-west函数的参数相同。
+    rollback_len : int
+        滚动窗口期。取值与Newwey-west函数的参数相同.
+    """
+    k = cov.shape[0]
+    eig, u = la.eig(cov)
+    return _monteCarlo(cov, m, k, eig, u,
+                       predict_window,
+                       ac_window,
+                       half_life,
+                       rollback_len)
 
 
 def calBlendingParam(factor_returns, date_ind, rollback_len=360):
