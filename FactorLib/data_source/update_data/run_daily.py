@@ -85,5 +85,5 @@ def dailyfactors(start, end):
     change_indexmembers()
     # merge_accquisition.update_raw_from_uqer(start, end, data_source=data_source)
     barra_factor_return.cal_barra_factor_return(start, end)
-    # dividends.get_dividends(start, end)
+    dividends.get_dividends(start, end)
     msci_china.save_msci_members(start_date=start, end_date=end, data_source=data_source)

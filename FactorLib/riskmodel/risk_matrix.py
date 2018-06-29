@@ -1,11 +1,10 @@
 import pandas as pd
 import numpy as np
-import statsmodels.api as sm
 from ..data_source.base_data_source_h5 import tc
-from ..data_source.trade_calendar import as_timestamp
 from ..data_source.tseries import move_dtindex
 from fastcache import clru_cache
-from scipy import linalg
+from numba import jit
+import numpy.linalg as la
 
 
 @clru_cache()
@@ -16,15 +15,6 @@ def getExpWeight(window, half_life):
     return exp_w / exp_w.sum()
 
 
-def calCovariance(fj, fk, nlen, weight):
-    """计算两列数据的协方差"""
-    fjMean = np.nanmean(fj)
-    fkMean = np.nanmean(fk)
-    Res = (fj-fjMean)*(fk-fkMean)
-    TotalWeight = np.sum(weight[~np.isnan(Res)])
-    return np.nansum((Res*weight).astype('float32'))/TotalWeight
-
-
 def calCovMatrix(mat1, mat2=None, weight=None):
     """计算协方差矩阵
     Patameters:
@@ -32,77 +22,22 @@ def calCovMatrix(mat1, mat2=None, weight=None):
     mat: np.array
         每一列是一个变量
     """
-    m = np.cov(mat1, mat2, rowvar=False, bias=True, aweights=weight)
+    if mat2 is None:
+        mat2 = mat1
+    mat1_demean = mat1 - mat1.mean(0)[None, :]
+    mat2_demean = mat2 - mat2.mean(0)[None, :]
+    mat2_demean *= weight[:, None]
+    m = np.dot(mat1_demean.T, mat2_demean)
     return m
 
 
-def calCovMat(factor_returns, date_ind, predict_window, ac_widow, half_life,
-              rollback_len=360):
-    if predict_window > ac_widow + 1:
-        N = ac_widow
-    else:
-        N = predict_window - 1
-    nfactor, factor_len = factor_returns.shape
-    varmatrix = np.zeros((factor_len, factor_len)) + np.nan
-    ret = factor_returns.iloc[max(0, date_ind-rollback_len+1):date_ind+1].values
-    nret = ret.shape[0]
-    weight = np.flipud(getExpWeight(nret, half_life[0]))
-    weight2 = np.flipud(getExpWeight(nret, half_life[1]))
-    for i in np.arange(factor_len):
-        for j in np.arange(i, factor_len):
-            iret = ret[:, i]
-            jret = ret[:, j]
-            var = np.zeros(N*2+1)
-            coef = np.zeros(N*2+1)
-            for delta in np.arange(-N, N+1):
-                coef[delta+N] = N+1-np.abs(delta)
-                if delta < 0:
-                    s = max(0, date_ind-rollback_len+1)
-                    if s == 0:
-                        zeros = np.zeros(min(-delta, nret))
-                        iiret = np.hstack((zeros, iret[:delta]))
-                    elif s >= -delta:
-                        iiret = factor_returns.iloc[s+delta:date_ind+delta+1, i].values
-                    else:
-                        zeros = np.zeros(-delta-s)
-                        iiret = np.hstack((zeros,factor_returns.iloc[:nret+delta+s, i].values))
-                    tmp_cov = calCovariance(iiret, jret, nret, weight)
-                elif delta > 0:
-                    s = max(0, date_ind-rollback_len+1)
-                    if s == 0:
-                        zeros = np.zeros(min(delta, nret))
-                        jjret = np.hstack((zeros, jret[:delta]))
-                    elif s >= delta:
-                        jjret = factor_returns.iloc[s-delta:date_ind-delta+1, j].values
-                    else:
-                        zeros = np.zeros(delta-s)
-                        jjret = np.hstack((zeros,factor_returns.iloc[:nret-delta+s, j].values))
-                    tmp_cov = calCovariance(iret, jjret, nret, weight)
-                else:
-                    tmp_cov = calCovariance(iret, jret, nret, weight)
-                iicov = calCovariance(iret,iret,nret,weight)
-                jjcov = calCovariance(jret, jret, nret, weight)
-                corrij = tmp_cov / (iicov * jjcov) ** .5
-                iicov2 = calCovariance(iret, iret, nret, weight2)
-                jjcov2 = calCovariance(jret, jret, nret, weight2)
-                var[delta+N] = iicov2 ** .5 * corrij * jjcov2 ** .5
-            varmatrix[i, j] = np.sum(var * coef)
-    varmatrix = np.triu(varmatrix, 0) + np.tril(varmatrix.T, -1)
-    if predict_window > ac_widow + 1:
-        varmatrix = varmatrix * predict_window / (N+1)
-    eigs, y = linalg.eig(varmatrix)
-    if (eigs < 0).any():
-        eigs[eigs < 0] = 0.0000001
-        varmatrix = np.dot(y, np.dot(np.diag(eigs), np.linalg.inv(y)))
-    return varmatrix
-
-
+@jit()
 def _newweyAdjust(ret_mat, k, n, weight):
     """计算Newwey-West中的调整项"""
-    cov = np.diag(ret_mat.shape[1])
+    cov = np.zeros((ret_mat.shape[1], ret_mat.shape[1]))
     for i in range(1, k+1):
-        mat1 = ret_mat[k-i-1:n+k-i-1, :]
-        mat2 = ret_mat[k-1:n+k-1, :]
+        mat1 = ret_mat[k-i:n+k-i, :]
+        mat2 = ret_mat[k:n+k, :]
         cov_i = calCovMatrix(mat1, mat2, weight)
         cov += ((cov_i + cov_i.T) * (1-i/(1+k)))
     return cov
@@ -110,80 +45,46 @@ def _newweyAdjust(ret_mat, k, n, weight):
 
 def calRiskByNewwey(ret_mat, date, predict_window, ac_window, half_life,
                     rollback_len=360):
-    """使用Newwey-West调整计算协方差矩阵"""
+    """使用Newwey-West调整计算协方差矩阵
+
+    Parameters:
+    -----------
+    ret_mat : pd.DataFrame
+        收益率矩阵，每一列代表一个变量
+    date : str or datetime
+        截止日期
+    predict_window : int
+        向前预测天数。如果是月频，通常取21。
+    ac_window : int
+        假设自相关的周期频率。
+    half_life : list with size of two
+        第一个半衰期用于计算相关系数，第二个半衰期用于
+        计算协方差
+    rollback_len : int
+        滚动窗口期
+    """
     ret = ret_mat[:date].iloc[-(rollback_len+ac_window):, :].values
     weight1 = np.flipud(getExpWeight(rollback_len, half_life[0]))
     weight2 = np.flipud(getExpWeight(rollback_len, half_life[1]))
 
-    cov = calCovMatrix(ret_mat[ac_window-1:, :], weight=weight1)
-    std = np.sqrt(np.diag(cov)).T.dot(np.sqrt(np.diag(cov)))
+    cov = calCovMatrix(ret[ac_window:, :], weight=weight1)
+    std = np.sqrt(np.diag(cov))[:, np.newaxis].dot(
+        np.sqrt(np.diag(cov))[np.newaxis, :])
 
-    cov2 = calCovMatrix(ret_mat[ac_window - 1:, :], weight=weight2)
-    std2 = np.sqrt(np.diag(cov2)).T.dot(np.sqrt(np.diag(cov2)))
+    cov2 = calCovMatrix(ret[ac_window:, :], weight=weight2)
+    std2 = np.sqrt(np.diag(cov2))[:, np.newaxis].dot(
+        np.sqrt(np.diag(cov2))[np.newaxis, :])
 
     cov_newwey = cov + _newweyAdjust(ret, ac_window, rollback_len, weight1)
     cov_newwey /= std
     cov_newwey *= std2
     cov_newwey *= predict_window
 
+    eig, vec = la.eig(cov_newwey)
+    eig[eig < 0] = 1e-6
+    cov_newwey = vec.dot(np.diag(eig)).dot(la.inv(vec))
+
     return cov_newwey
-
-
-def calSpecificCovMat(factor_returns, date_ind, predict_window, ac_widow, half_life,
-              rollback_len=360):
-    if predict_window > ac_widow + 1:
-        N = ac_widow
-    else:
-        N = predict_window - 1
-    nfactor, factor_len = factor_returns.shape
-    varmatrix = np.zeros(factor_len) + np.nan
-    ret = factor_returns.iloc[max(0, date_ind-rollback_len+1):date_ind+1].values
-    for i in np.arange(factor_len):
-        iret = ret[:, i]
-        if np.isnan(iret).sum() < 180:
-            varmatrix[i] = 0
-            continue
-        else:
-            iret = iret[~np.isnan(iret)]
-            nret = len(iret)
-            weight = np.flipud(getExpWeight(nret, half_life[0]))
-            weight2 = np.flipud(getExpWeight(nret, half_life[1]))
-        var = np.zeros(N*2+1)
-        coef = np.zeros(N*2+1)
-        for delta in np.arange(-N, N+1):
-            coef[delta+N] = N+1-np.abs(delta)
-            if delta<0:
-                s = max(0, date_ind-rollback_len+1)
-                if s == 0:
-                    zeros = np.zeros(min(-delta, nret))
-                    iiret = np.hstack((zeros, iret[:delta]))
-                elif s >= -delta:
-                    iiret = factor_returns.iloc[s+delta:date_ind+delta+1, i].values
-                else:
-                    zeros = np.zeros(-delta-s)
-                    iiret = np.hstack((zeros,factor_returns.iloc[:nret+delta+s, i].values))
-                tmp_cov = calCovariance(iiret, iret, nret, weight)
-            elif delta>0:
-                s = max(0, date_ind-rollback_len+1)
-                if s == 0:
-                    zeros = np.zeros(min(delta, nret))
-                    iiret = np.hstack((zeros, iret[:delta]))
-                elif s >= delta:
-                    iiret = factor_returns.iloc[s-delta:date_ind-delta+1, i].values
-                else:
-                    zeros = np.zeros(delta-s)
-                    iiret = np.hstack((zeros,factor_returns.iloc[:nret-delta+s, i].values))
-                tmp_cov = calCovariance(iret, iiret, nret, weight)
-            else:
-                tmp_cov = calCovariance(iret, iret, nret, weight)
-            iicov = calCovariance(iret,iret,nret,weight)
-            corrij = tmp_cov / iicov
-            iicov2 = calCovariance(iret, iret, nret, weight2)
-            var[delta+N] = iicov2 * corrij
-            varmatrix[i] = np.sum(var * coef)
-    if predict_window > ac_widow + 1:
-        varmatrix = varmatrix * predict_window / (N+1)
-    return pd.Series(varmatrix, index=factor_returns.columns)
 
 
 def calBlendingParam(factor_returns, date_ind, rollback_len=360):
@@ -206,29 +107,6 @@ def calBlendingParam(factor_returns, date_ind, rollback_len=360):
         zval = np.abs((std - robust_std) / robust_std)
         gamma[i] = min((1, h / origin_len + 0.1)) * min((1, max((0, np.exp(1 - zval)))))
     return pd.Series(gamma, index=factor_returns.columns)
-
-
-def calStrucStd(gamma, ts_std, date, factor_data, industry_data, weight_data):
-    """
-    建立特异性风险结构化模型
-    :param gamma: blending paramters
-    :param ts_std: time-series std
-    :param date: current date
-    :param factor_data: style factor data
-    :param industry_data: industry dummies
-    :param weight_data: regression weight
-    :return:
-    """
-    ids = gamma[gamma == 1].index.tolist()
-    ifactor_data = factor_data.loc[date].reindex(ids).values
-    iindustry_data = industry_data.loc[date].reindex(ids).values
-    iweight = weight_data.loc[date].reindex(ids).values
-    iweight = np.sqrt(iweight / iweight.sum())
-    y = np.log(ts_std[ids].values) * iweight
-    x = np.vstack((ifactor_data, iindustry_data))
-    x = sm.add_constant(x)
-    result = sm.OLS(y, x[:, :-1]).fit()
-    return
 
 
 def volatility_regime_adjust(factor_returns, bf_old, matrix, predict_window):
