@@ -1,10 +1,12 @@
-import pandas as pd
+import numpy.linalg as la
 import numpy as np
-from ..data_source.base_data_source_h5 import tc
-from ..data_source.tseries import move_dtindex
+import pandas as pd
 from fastcache import clru_cache
 from numba import jit
-import numpy.linalg as la
+
+from ..data_source.tseries import move_dtindex
+from ..data_source.base_data_source_h5 import tc
+from .riskmodel_data_source import RiskDataSource
 
 
 @clru_cache()
@@ -189,7 +191,16 @@ def calBlendingParam(factor_returns, date_ind, rollback_len=360):
     return pd.Series(gamma, index=factor_returns.columns)
 
 
-def volatility_regime_adjust(factor_returns, bf_old, matrix, predict_window):
+def _cal_volatility_bias(ret_df, vol_df):
+    """计算横截面上波动率偏差统计量B"""
+    sigma = np.sqrt(
+        vol_df.groupby('date').apply(lambda x: pd.Series(np.diag(x.values), index=x.columns))
+    )
+    b = ((ret_df.values / sigma)**2).mean(1) ** 0.5
+    return pd.Series(b, index=ret_df.index)
+
+
+def volatility_regime_adjust(cov, bias_series, half_life, rollback_len):
     """
     波动率截面调整. 采用全历史样本估计。
     
@@ -198,78 +209,91 @@ def volatility_regime_adjust(factor_returns, bf_old, matrix, predict_window):
     :param matrix: 待估算的因子标准差
     :param predict_window: 预测区间长度
     """
-    half_life = 90
-    # 把日频的因子收益率序列调整成与协方差矩阵齐频
-    ret_sample = factor_returns[::-1].rolling(window=predict_window, min_periods=predict_window).sum()[::-1]
-    ret_sample = move_dtindex(ret_sample.dropna(how='all'), -1)
-    if (ret_sample.index.max() > bf_old.index.max()) or (bf_old.empty):   # 若因子收益率序列的最大日期大于已有的bf序列，更新bf序列
-        new_bf = pd.Series(np.zeros(len(ret_sample.index[ret_sample.index > bf_old.index.max()])),
-                           index=ret_sample.index[ret_sample.index > bf_old.index.max()])
-        for idx in new_bf.index:
-            ret = ret_sample.loc[idx, 'factor_return'].values
-            sigma = np.diag(matrix[idx])
-            new_bf[idx] = np.nanmean((ret * sigma) ** 2)
-        bf_old = bf_old.append(new_bf)
-    # 计算new_matrix
-    new_matrix = {}
-    for k, v in matrix.items():
-        bf = bf_old.loc[:k]
-        weight = np.flipud(getExpWeight(len(bf), half_life))
-        lambda_f = np.sum(weight * bf**2)
-        new_matrix[k] = v * lambda_f
-    return new_matrix, bf_old
-    
+    exp_weight = getExpWeight(rollback_len, half_life)
+    lambda_f = exp_weight[None, :].dot((bias_series.values ** 2)[:, None])
+    return cov * lambda_f
+
 
 class RiskMatrixGenerator(object):
-    def __init__(self, model):
-        self._model = model
-        self._db = model.riskdb
-        self._ds = model.data_source
-
-    def get_factor_risk(self, start_date, end_date, **kwargs):
+    """风险矩阵生成器
+    在这里可以计算因子的协方差矩阵和股票发特质风险矩阵
+    """
+    def __init__(self, risk_ds):
         """
-        计算因子收益率的协方差矩阵
-        :param start_date: start date
-        :param end_date: str
-        :param kwargs: params to risk matrix function
-        :type self: barra_model.BarraModel
-        :type start_date: str
-        :type end_date: str
-        :return: risk_matrix
+        Parameters:
+        -----------
+        risk_ds : str
+            风险数据库名称
+        """
+        self.ds = RiskDataSource(risk_ds)
+
+    def get_fctrsk_before_voladj(self, start_date, end_date, **kwargs):
+        """
+        计算因子收益率的协方差矩阵(在volatility regime adjust之前)
+        协方差矩阵在因子收益率之后计算，每日更新
+
+        Parameters:
+        -----------
+        start_date : str
+            初始日期 YYYYmmdd
+        end_date : str
+            截止日期 YYYYmmdd
         """
         _default_startdate = '20100101'
-        factor_returns = self._db.load_returns(start=_default_startdate, end_date=end_date)
+        factor_returns = self.ds.load_returns(
+            start_date=_default_startdate, end_date=end_date)
+        factor_return_arr = np.asarray(factor_returns.values, dtype='float')
         dates = tc.get_trade_days(start_date, end_date, retstr=None)
-        try:
-            bf = self._db.load_others('bf')['bf']
-        except:
-            bf = pd.Series()
-        if not factor_returns.empty:
-            factors = factor_returns.columns
-            new_factor_matrix = {}
-            for date in dates:
-                date_ind = factor_returns.index.get_loc(date)
-                _matrix = calCovMat(factor_returns, date_ind, **kwargs)
-                new_factor_matrix[date] = pd.DataFrame(_matrix, index=factors, columns=factors)
-            new_matrix, bf = volatility_regime_adjust(factor_returns, bf, new_factor_matrix, kwargs['predict_window'])
+        len_dates = len(dates)
+        k_factors = factor_returns.shape[1]
+        cov_list = np.zeros((len_dates*k_factors, k_factors))
+        for i, d in enumerate(dates):
+            print("calculating... current date: %s"%d.strftime('%Y%m%d'))
+            date_ind = factor_returns.index.get_loc(d)
+            cov_raw = calRiskByNewwey(ret_mat=factor_return_arr[:date_ind],
+                                      predict_window=kwargs['predict_window'],
+                                      ac_window=kwargs['ac_window'],
+                                      half_life=kwargs['half_life'],
+                                      rollback_len=kwargs['rollback_len'])
+            cov = eigenFactorAdjust(cov_raw,
+                                    kwargs['m'],
+                                    kwargs['predict_window'],
+                                    ac_window=kwargs['ac_window'],
+                                    half_life=kwargs['half_life'],
+                                    rollback_len=kwargs['rollback_len'])
+            cov_list[i*k_factors: (i+1)*k_factors, :] = cov
+        idx = pd.MultiIndex.from_product([dates, factor_returns.columns],
+                                         names=['date', 'IDs'])
+        cov_df = pd.DataFrame(cov_list, columns=factor_returns.columns,
+                              index=idx)
+        return cov_df
+    
+    def save_fctrsk_before_voladj(self, cov_df):
+        """保存风险矩阵(波动率调整前)"""
+        name = 'factor_cov_before_voladj'
+        if self.ds.persist_helper.check_file_existence(name):
+            raw = self.ds.persist_helper.load_other(name)
+            new = raw.append(cov_df)
+            new = new[~new.index.duplicated(keep='last')]
         else:
-            new_matrix = {}
-        self._db.save_others('bf', bf=bf)
-        return new_matrix
+            new = cov_df
+        self.ds.persist_helper.save_other(name, new)
 
-    def get_specific_risk(self, start_date, end_date, strstd_stylefactor, **kwargs):
-        _default_startdate = '20010101'
-        resid_return = self._db.load_resid_factor(start_date=_default_startdate, end_date=end_date)
-        resid_return = resid_return['resid_return'].unstack()
+    def get_bias_stat_of_factor_risk(self, start_date, end_date, **kwargs):
+        """计算因子收益率协方差矩阵偏差统计量"""
+        _default_startdate = '20100101'
+        predict_window = kwargs['predict_window']
         dates = tc.get_trade_days(start_date, end_date, retstr=None)
-        sqrt_weight = self._model.getRegressWeight(dates=dates)
-        factor_data = self._model.getStyleFactorData(dates=dates)[strstd_stylefactor]
-        industry_dummy = self._model.getIndustryDummy(dates=dates)
-        if not resid_return.empty:
-            for date in dates:
-                date_ind  = resid_return.index.get_loc(date)
-                ts_std = calSpecificCovMat(resid_return, date_ind=date_ind, **kwargs)
-                gamma = calBlendingParam(resid_return, date_ind, kwargs['rollback_len'])
+        factor_returns = self.ds.load_returns(
+            start_date=_default_startdate, end_date=end_date)
+        factor_cov = self.ds.load_other('factor_cov_before_voladj')
 
+        start_date_ind = factor_returns.index.get_loc(dates[0])
+        end_date_ind = factor_returns.index.get_loc(dates[-1])
+        real_ret = factor_returns.iloc[start_date_ind-predict_window:end_date_ind+1, :].rolling(
+            window=predict_window, min_periods=predict_window).sum().shift(-predict_window).dropna()
 
-
+        factor_cov = factor_cov.reindex(real_ret.index, level='date')
+        b_series = _cal_volatility_bias(real_ret, factor_cov)
+        b_series.index = pd.DatetimeIndex(dates, name='date')
+        return b_series

@@ -708,7 +708,7 @@ class RiskDataSource(object):
             self.h5_db.save_factor(kwargs['factor_data'], '/factorData/')
         return
 
-    def load_others(self, name):
+    def load_other(self, name):
         """
         使用.pkl文件，加载其他数据
 
@@ -717,12 +717,12 @@ class RiskDataSource(object):
         obj = self.persist_helper.load(name)
         return obj
 
-    def save_other(self, name, **kwargs):
+    def save_other(self, name, df):
         """
         使用.pkl文件，序列化对象
         """
         name = 'others/' + name
-        self.persist_helper.dump(kwargs, name)
+        self.persist_helper.dump(df, name)
         return
 
 
