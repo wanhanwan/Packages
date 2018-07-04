@@ -1,11 +1,13 @@
 import numpy.linalg as la
+import statsmodels.api as sm
 import numpy as np
 import pandas as pd
 from fastcache import clru_cache
 from numba import jit
+from statsmodels.sandbox.rls import RLS
 
 from ..data_source.tseries import move_dtindex
-from ..data_source.base_data_source_h5 import tc
+from ..data_source.base_data_source_h5 import tc, data_source, h5
 from .riskmodel_data_source import RiskDataSource
 
 
@@ -172,23 +174,23 @@ def eigenFactorAdjust(cov, m, predict_window, ac_window,
 def _calBlendingParam(ret_mat, date_ind, rollback_len=360):
     """计算协调参数gamma"""
     len_ret, len_stock = ret_mat.shape
-    gamma = np.zeros((len_ret-date_ind), len_stock)
-    for i in range(date_ind, len_ret):
-        imat = ret_mat[i-rollback_len:i, :]
+    gamma = np.zeros(((len_ret-date_ind), len_stock))
+    for ii, i in enumerate(range(date_ind, len_ret)):
+        imat = ret_mat[i+1-rollback_len:i+1, :]
         robust_std = 1.0 / 1.35 * (np.percentile(imat, 75, axis=0) -
                                    np.percentile(imat, 25, axis=0))
-        imat = np.where(imat[imat > 10 * robust_std[:, None]],
+        imat = np.where(imat > 10 * robust_std[None, :],
                         10*np.tile(robust_std[None, :], (rollback_len, 1)),
                         imat)
-        imat = np.where(imat[imat < -10 * robust_std[:, None]],
+        imat = np.where(imat < -10 * robust_std[None, :],
                         -10*np.tile(robust_std[None, :], (rollback_len, 1)),
                         imat)
         # imat[imat > 10 * robust_std] = 10 * robust_std
         # imat[imat < -10 * robust_std] = -10 * robust_std
         std = np.std(imat, axis=0)
         zval = np.abs((std - robust_std) / robust_std)
-        gamma[i, :] = min(1.0, max(.0, rollback_len / 120 - 0.5)) * \
-                      np.where(np.exp(1.0-zval) > 1.0, 1.0, np.exp(1-zval))
+        gamma[ii, :] = min(1.0, max(.0, rollback_len / 120 - 0.5)) * \
+                      np.where(np.exp(1.0-zval) > 1.0, np.ones(len(zval)), np.exp(1-zval))
     return gamma
 
 
@@ -219,6 +221,28 @@ def _volatility_regime_adjust(cov, bias_series, half_life, rollback_len):
     exp_weight = getExpWeight(rollback_len, half_life)
     lambda_f = exp_weight[None, :].dot((bias_series ** 2)[:, None])
     return cov * lambda_f
+
+
+def _getResgressWeight(dates, percentile=0.95, idx=None):
+    """计算回归权重, 流通市值的平方根"""
+    weight = h5.load_factor('float_mkt_value', '/stocks/',
+                            dates=list(dates), idx=idx)
+    weight = np.sqrt(weight).astype('float32')
+    weight_sum_perdate = weight.groupby(level='date').sum()
+    weight = weight / weight_sum_perdate
+    quantile_weight_perdate = weight.groupby(level='date').quantile(percentile)
+    weight, quantile_weight_perdate = weight.align(quantile_weight_perdate, axis=0, level=0)
+    weight.loc[quantile_weight_perdate.iloc[:, 0] < weight.iloc[:, 0]] = quantile_weight_perdate
+    return weight
+
+
+def _getIndustryMarketValue(industry_dummy):
+    """计算行业市值"""
+    float_mkt_mv = h5.load_factor('float_mkt_value', '/stocks/', idx=industry_dummy)
+    industry_mv = pd.DataFrame(industry_dummy.values * float_mkt_mv.values, index=industry_dummy.index,
+                               columns=industry_dummy.columns)
+    industry_mv = industry_mv.sum(level='date').stack()
+    return industry_mv
 
 
 class RiskMatrixGenerator(object):
@@ -357,7 +381,12 @@ class RiskMatrixGenerator(object):
 
     @staticmethod
     def get_nwadj_spec_risk(resid_ret, start_date, end_date, **kwargs):
-        """Newey-West Adjusted Specific Risk"""
+        """Newey-West Adjusted Specific Risk
+
+        Note:
+            由于模型假设特质性风险存在两两不相关性，所以只返回一个对角阵,
+            协方差假设为零。
+        """
         # _default_startdate = '20100101'
         # resid_ret = self.ds.load_resid_factor(
         #     start_date=_default_startdate, end_date=end_date)
@@ -365,7 +394,7 @@ class RiskMatrixGenerator(object):
         dates = tc.get_trade_days(start_date, end_date, retstr=None)
         len_dates = len(dates)
         k_factors = resid_ret.shape[1]
-        cov_list = np.zeros((len_dates * k_factors, k_factors))
+        cov_list = np.zeros((len_dates, k_factors))
 
         for i, d in enumerate(dates):
             print("calculating... current date: %s"%d.strftime('%Y%m%d'))
@@ -375,11 +404,9 @@ class RiskMatrixGenerator(object):
                                       ac_window=kwargs['ac_window'],
                                       half_life=kwargs['half_life'],
                                       rollback_len=kwargs['rollback_len'])
-            cov_list[i * k_factors: (i + 1) * k_factors, :] = cov_raw
-        idx = pd.MultiIndex.from_product([dates, resid_ret.columns],
-                                         names=['date', 'IDs'])
+            cov_list[i, :] = np.diag(cov_raw)
         cov_df = pd.DataFrame(cov_list, columns=resid_ret.columns,
-                              index=idx)
+                              index=dates)
         return cov_df
 
     @staticmethod
@@ -387,14 +414,8 @@ class RiskMatrixGenerator(object):
         """计算blending coefficient"""
         resid_ret_arr = np.asarray(resid_ret.values, dtype='float')
         dates = tc.get_trade_days(start_date, end_date, retstr=None)
-        n_stock = resid_ret.shape[1]
-
-        coeff = np.zeros((len(dates), n_stock))
-        for i, d in enumerate(dates):
-            print("calculating... current date: %s"%d.strftime('%Y%m%d'))
-            date_ind = resid_ret.index.get_loc(d) + 1
-            icoeff = _calBlendingParam(resid_ret_arr, date_ind, kwargs['rollback_len'])
-            coeff[i, :] = icoeff
+        date_ind = resid_ret.index.get_loc(dates[0])
+        coeff = _calBlendingParam(resid_ret_arr, date_ind, kwargs['rollback_len'])
         gamma = pd.DataFrame(coeff, columns=resid_ret.columns,
                              index=dates)
         return gamma
@@ -402,9 +423,77 @@ class RiskMatrixGenerator(object):
     def structual_risk_model(self, start_date, end_date, **kwargs):
         """特异性结构化风险模型"""
         _dufault_st = max(tc.tradeDayOffset(start_date, -300), '20100101')
+        dates = tc.get_trade_days(start_date, end_date, retstr=None)
+
+        # 准备数据
         resid_ret = self.ds.load_resid_factor(start_date=_dufault_st,
                                               end_date=end_date)
+        resid_ret = resid_ret.groupby('IDs').filter(
+            lambda j: len(j.loc[:dates[0]]) > kwargs['rollback_len']+kwargs['ac_window'])
         resid_ret = resid_ret.iloc[:, 0].unstack().fillna(0.0)
+        # indu_names = IndustryConverter.all_values(kwargs['行业因子'])
+        style_factors = self.ds.load_style_factor(kwargs['风格因子'],
+                                                  start_date=start_date,
+                                                  end_date=end_date)
+        indu_factors = data_source.sector.get_industry_dummy(ids=None,
+                                                             start_date=start_date,
+                                                             end_date=end_date,
+                                                             industry=kwargs['行业因子'])
+        # 权重是流通市值平方根
+        weight = _getResgressWeight(dates).iloc[:, 0]
+        # Newey-West covriance matrix
+        sigma_ts = self.get_nwadj_spec_risk(resid_ret, start_date, end_date, **kwargs)
+        sigma_ts = sigma_ts.stack()
+        # moving average of abs(resid_ret)
+        abs_resid_ma = np.abs(resid_ret).rolling(kwargs['rollback_len']).mean()
+        abs_resid_ma = abs_resid_ma.stack().to_frame('abs_resid')
+        # blending coefficients
+        gamma = self.get_blending_coefficient(resid_ret, start_date, end_date, **kwargs).stack()
+        stocks_regress = gamma[gamma == 1.0]
+        # total cap of each industry
+        indu_cap = _getIndustryMarketValue(indu_factors)
+
+        indep = style_factors.join(abs_resid_ma, how='inner')
+        indep = indep.groupby('date').transform(lambda z: z.fillna(z.mean()))
+        indep = indep.join(indu_factors.fillna(0), how='inner')
+        n_indu = indu_factors.shape[1]
+        gamma = gamma.reindex(indep.index, fill_value=0.0)
+        sigma_ts = sigma_ts.reindex(indep.index, fill_value=0.0)
+        weight = weight.reindex(indep.index, fill_value=0.0)
+
+        sigma = pd.Series(index=indep.index)
+        for i, d in enumerate(dates):
+            stocks = stocks_regress.loc[[d]]
+            w = weight.reindex(stocks.index).values
+            w /= w.sum()
+            y = np.log(sigma_ts.reindex(stocks.index).values)
+            y *= w
+            x = indep.reindex(stocks.index).values
+            x = sm.add_constant(x)
+            x *= w[:, None]
+            cons = np.zeros(x.shape[1])
+            cons[-n_indu:] = indu_cap.loc[d].values
+
+            result = RLS(y, x, cons).fit()
+            p = result.params
+            e = np.nansum((y / (y-result.resid)) * w)
+
+            tmp = indep.loc[d].values.dot(p[1:, None]) + p[0]
+            sigma_str = np.exp(tmp.squeeze()) * e
+
+            igamma = gamma.loc[d].values
+            sigma_u = (igamma * sigma_ts.loc[d].values) + (1-igamma) * sigma_str
+            sigma.loc[d] = sigma_u
+        return sigma
+
+
+
+
+
+
+
+
+
 
 
 
