@@ -169,26 +169,27 @@ def eigenFactorAdjust(cov, m, predict_window, ac_window,
                        rollback_len)
 
 
-def calBlendingParam(factor_returns, date_ind, rollback_len=360):
-    nfactor = factor_returns.shape[1]
-    ret = factor_returns.iloc[max(0, date_ind-rollback_len+1):date_ind+1].values
-    gamma = np.zeros(nfactor)
-    for i in np.arange(nfactor):
-        iret = ret[:, i]
-        if np.isnan(iret).sum() < 180:
-            gamma[i] = 0
-            continue
-        else:
-            origin_len = len(iret)
-            iret = iret[~np.isnan(iret)]
-            h = len(iret)
-        robust_std = 1 / 1.35 * (np.percentile(iret, 75) - np.percentile(iret, 25))
-        iret[iret > 10 * robust_std] = 10 * robust_std
-        iret[iret < -10 * robust_std] = -10 * robust_std
-        std = np.std(iret)
+def _calBlendingParam(ret_mat, date_ind, rollback_len=360):
+    """计算协调参数gamma"""
+    len_ret, len_stock = ret_mat.shape
+    gamma = np.zeros((len_ret-date_ind), len_stock)
+    for i in range(date_ind, len_ret):
+        imat = ret_mat[i-rollback_len:i, :]
+        robust_std = 1.0 / 1.35 * (np.percentile(imat, 75, axis=0) -
+                                   np.percentile(imat, 25, axis=0))
+        imat = np.where(imat[imat > 10 * robust_std[:, None]],
+                        10*np.tile(robust_std[None, :], (rollback_len, 1)),
+                        imat)
+        imat = np.where(imat[imat < -10 * robust_std[:, None]],
+                        -10*np.tile(robust_std[None, :], (rollback_len, 1)),
+                        imat)
+        # imat[imat > 10 * robust_std] = 10 * robust_std
+        # imat[imat < -10 * robust_std] = -10 * robust_std
+        std = np.std(imat, axis=0)
         zval = np.abs((std - robust_std) / robust_std)
-        gamma[i] = min((1, h / origin_len + 0.1)) * min((1, max((0, np.exp(1 - zval)))))
-    return pd.Series(gamma, index=factor_returns.columns)
+        gamma[i, :] = min(1.0, max(.0, rollback_len / 120 - 0.5)) * \
+                      np.where(np.exp(1.0-zval) > 1.0, 1.0, np.exp(1-zval))
+    return gamma
 
 
 def _cal_volatility_bias(ret_df, vol_df):
@@ -320,6 +321,7 @@ class RiskMatrixGenerator(object):
         self._save_middle_df(bias, name)
 
     def get_fctrsk_after_voladj(self, start_date, end_date, **kwargs):
+        """volatility regime adjust"""
         half_life = kwargs['half_life']
         rollback_len = kwargs['rollback_len']
 
@@ -340,17 +342,69 @@ class RiskMatrixGenerator(object):
                                          names=['date', 'IDs'])
         return pd.DataFrame(rslt, index=idx, columns=factor_cov.columns)
 
-    def get_factor_risk(self, start_date, end_date, **kwargs):
+    def save_factor_risk(self, start_date, end_date, **kwargs):
+        cov_raw = self.get_fctrsk_before_voladj(start_date, end_date, **kwargs)
+        self.save_fctrsk_before_voladj(cov_raw)
 
+        bias = self.get_bias_stat_of_factor_risk(start_date, end_date, **kwargs)
+        self.save_bias_stat_of_factor_risk(bias)
 
+        cov_new = self.get_fctrsk_after_voladj(start_date, end_date, **kwargs)
+        cov_dict = {x: cov_new.loc[x] for x in cov_new.index.unique(level='date')}
 
+        self.ds.save_data(factor_riskmatrix=cov_dict)
+        return 1
 
+    @staticmethod
+    def get_nwadj_spec_risk(resid_ret, start_date, end_date, **kwargs):
+        """Newey-West Adjusted Specific Risk"""
+        # _default_startdate = '20100101'
+        # resid_ret = self.ds.load_resid_factor(
+        #     start_date=_default_startdate, end_date=end_date)
+        resid_ret_arr = np.asarray(resid_ret.values, dtype='float')
+        dates = tc.get_trade_days(start_date, end_date, retstr=None)
+        len_dates = len(dates)
+        k_factors = resid_ret.shape[1]
+        cov_list = np.zeros((len_dates * k_factors, k_factors))
 
+        for i, d in enumerate(dates):
+            print("calculating... current date: %s"%d.strftime('%Y%m%d'))
+            date_ind = resid_ret.index.get_loc(d)
+            cov_raw = calRiskByNewwey(ret_mat=resid_ret_arr[:date_ind],
+                                      predict_window=kwargs['predict_window'],
+                                      ac_window=kwargs['ac_window'],
+                                      half_life=kwargs['half_life'],
+                                      rollback_len=kwargs['rollback_len'])
+            cov_list[i * k_factors: (i + 1) * k_factors, :] = cov_raw
+        idx = pd.MultiIndex.from_product([dates, resid_ret.columns],
+                                         names=['date', 'IDs'])
+        cov_df = pd.DataFrame(cov_list, columns=resid_ret.columns,
+                              index=idx)
+        return cov_df
 
+    @staticmethod
+    def get_blending_coefficient(resid_ret, start_date, end_date, **kwargs):
+        """计算blending coefficient"""
+        resid_ret_arr = np.asarray(resid_ret.values, dtype='float')
+        dates = tc.get_trade_days(start_date, end_date, retstr=None)
+        n_stock = resid_ret.shape[1]
 
+        coeff = np.zeros((len(dates), n_stock))
+        for i, d in enumerate(dates):
+            print("calculating... current date: %s"%d.strftime('%Y%m%d'))
+            date_ind = resid_ret.index.get_loc(d) + 1
+            icoeff = _calBlendingParam(resid_ret_arr, date_ind, kwargs['rollback_len'])
+            coeff[i, :] = icoeff
+        gamma = pd.DataFrame(coeff, columns=resid_ret.columns,
+                             index=dates)
+        return gamma
 
-
-
+    def structual_risk_model(self, start_date, end_date, **kwargs):
+        """特异性结构化风险模型"""
+        _dufault_st = max(tc.tradeDayOffset(start_date, -300), '20100101')
+        resid_ret = self.ds.load_resid_factor(start_date=_dufault_st,
+                                              end_date=end_date)
+        resid_ret = resid_ret.iloc[:, 0].unstack().fillna(0.0)
 
 
 

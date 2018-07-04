@@ -439,6 +439,7 @@ class Optimizer(object):
         nvar = self._signal.index.tolist()
         if self._internal_limit is not None:
             nvar = list(set(nvar).difference(set(self._internal_limit.index.tolist())))
+        nvar = [x.encode('utf-8') for x in nvar]
         if active:
             benchmark_weight = self._bchmrk_weight.loc[nvar]
             if isinstance(default_min, list):
