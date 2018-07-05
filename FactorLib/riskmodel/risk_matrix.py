@@ -5,6 +5,8 @@ import pandas as pd
 from fastcache import clru_cache
 from numba import jit
 from statsmodels.sandbox.rls import RLS
+from alphalens.utils import quantize_factor
+
 
 from ..data_source.tseries import move_dtindex
 from ..data_source.base_data_source_h5 import tc, data_source, h5
@@ -462,7 +464,7 @@ class RiskMatrixGenerator(object):
         weight = weight.reindex(indep.index, fill_value=0.0)
 
         sigma = pd.Series(index=indep.index)
-        for i, d in enumerate(dates):
+        for d in dates:
             stocks = stocks_regress.loc[[d]]
             w = weight.reindex(stocks.index).values
             w /= w.sum()
@@ -484,7 +486,41 @@ class RiskMatrixGenerator(object):
             igamma = gamma.loc[d].values
             sigma_u = (igamma * sigma_ts.loc[d].values) + (1-igamma) * sigma_str
             sigma.loc[d] = sigma_u
+        sigma = self.bayesian_shrink(sigma, **kwargs)
         return sigma
+    
+    def bayesian_shrink(self, sigma_series, **kwargs):
+        """把特异性风险矩阵进行贝叶斯压缩
+
+        把股票按照市值大小分成N组，用每组市值加权的特质风险对
+        个股风险进行压缩。
+        """
+        n_groups = kwargs['n_groups']
+        q = 0.1
+        mkt_cap = data_source.load_factor('float_mkt_value',
+                                          '/stocks/',
+                                          idx=sigma_series)
+        mkt_cap.fillna(0.0, inplace=True)
+        # 按市值分组
+        mkt_group = quantize_factor(mkt_cap, quantiles=n_groups)
+
+        mkt_cap = mkt_cap.groupby(mkt_group).transform(lambda x: x/x.sum())
+        sigma_avg = (sigma_series * mkt_cap).groupby('date').sum()
+        sigma_demean = sigma_series.sub(sigma_avg, axis='index').abs()
+        delta_sigma = (sigma_demean ** 2).group('date').mean()
+        v = q * sigma_demean / ((q*sigma_demean).add(delta_sigma, axis='index'))
+
+        sigma_adj1 = v.mul(sigma_avg, axis='index')
+        sigma_adj2 = (1.0 - v).mul(sigma_series, axis='index')
+        return sigma_adj2.add(sigma_adj1, axis='index')
+    
+    def save_specrsk_before_voladj(self, sigma):
+        """保存波动率调整之前的特质风险"""
+        name = 'specrisk_before_voladj'
+        self._save_middle_df(sigma, name)
+    
+    def get_bias_stat_of_spec_risk(self, start_date, end_date):
+        """计算特质风险截面偏差统计量"""
 
 
 
