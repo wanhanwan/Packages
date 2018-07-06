@@ -28,7 +28,7 @@ def _read_est_dict():
 
 def _drop_invalid_stocks(data, field_name='IDs'):
     """去掉非法股票"""
-    invalid_ids = [x for x in data[field_name].unique() if x[0] not in ['6', '0', '3'] or not x.isdigit()]
+    invalid_ids = [x for x in data[field_name].unique() if x[0] not in ['6', '0', '3'] or not x[:6].isdigit()]
     return data.query("%s not in @invalid_ids" % field_name)
 
 
@@ -222,7 +222,8 @@ class WindDB(BaseDB):
         ip_address=WIND_IP, db_type=WIND_DBTYPE, port=WIND_PORT):
         super(WindDB, self).__init__(user_name, pass_word, db_name, ip_address, db_type, port)
 
-    def load_factors(self, factors, table, _in=None, _between=None, _equal=None, **kwargs):
+    def load_factors(self, factors, table, _in=None, _between=None, _equal=None,
+                     trade_code=True, **kwargs):
         """提取某张表的数据"""
 
         def _query_iterator(data):
@@ -233,7 +234,8 @@ class WindDB(BaseDB):
             if idata.empty:
                 return idata
             idata = idata.rename(columns=table_index)
-            idata['IDs'] = idata['IDs'].str[:6]
+            if trade_code:
+                idata['IDs'] = idata['IDs'].str[:6]
             return _drop_invalid_stocks(idata)
 
         wind_table_name = WindDB.data_dict.wind_table_name(table)
@@ -298,14 +300,17 @@ class WindFinanceDB(WindDB):
             for c in columns:
                 yield c, data[columns2 + [c]]
 
-    def save_data(self, data, table_id, if_exists='append'):
+    def save_data(self, data, table_id, if_exists='append', save_format='h5'):
         tar_pth = os.path.join(LOCAL_FINDB_PATH, table_id)
         ensure_dir_exists(tar_pth)
         for c, d in self.gen_dataframe(data):
             if d.empty:
                 continue
             if if_exists == 'replace':
-                self.save_factor(d, tar_pth, c, if_exists='replace')
+                if save_format == 'csv':
+                    d.to_csv(tar_pth+'/%s.csv'%c)
+                else:
+                    self.save_factor(d, tar_pth, c, if_exists='replace')
                 if_exists = 'append'
             else:
                 self.save_factor(d, tar_pth, c, if_exists='append')
@@ -348,6 +353,16 @@ class WindFinanceDB(WindDB):
             wind_id = self.table_id
         data_pth = os.path.join(LOCAL_FINDB_PATH, self.table_id, wind_id+'.h5')
         data = pd.read_hdf(data_pth, "data")
+        return data
+
+    @clru_cache()
+    def load_csv(self, file_name):
+        try:
+            wind_id = self.data_dict.wind_factor_ids(self.table_name, file_name)
+        except KeyError:
+            wind_id = self.table_id
+        data_pth = os.path.join(LOCAL_FINDB_PATH, self.table_id, wind_id+'.h5')
+        data = pd.read_csv(data_pth)
         return data
 
     @handle_ids
@@ -1006,14 +1021,125 @@ class WindAshareDesc(WindFinanceDB):
         return data
 
 
+class MutualFundDesc(WindFinanceDB):
+    """共同基金基本资料"""
+    table_name = u'中国共同基金基本资料'
+    table_id = 'chinamutualfunddescription'
+
+    def download_data(self, factors, _in=None, _between=None, _equal=None, **kwargs):
+        """取数据"""
+        def _reconstruct(raw):
+            raw.dropna(subset=['issue_dt'], inplace=True)
+            raw['IDs'] = raw['IDs'].astype('int32')
+            raw['issue_dt'] = raw['issue_dt'].astype('int32')
+            return raw
+
+        def _wrapper(idata):
+            for i in idata:
+                i = _reconstruct(i)
+                yield i
+        
+        data = self.load_factors(factors, self.table_name, _in, _between, _equal, **kwargs)
+        if isinstance(data, Iterator):
+            return _wrapper(data)
+        if data.empty:
+            return data
+        data = _reconstruct(data)
+        return data
+
+    def save_data(self, data, table_id=None, if_exists='replace'):
+        super(MutualFundDesc, self).save_data(
+            data, self.table_id, if_exists, save_format='csv')
+
+    @property
+    def all_data(self):
+        data = self.load_csv(self.table_id)
+        return data
+
+class MutualFundSector(WindFinanceDB):
+    """共同基金基本资料"""
+    table_name = u'中国Wind基金分类'
+    table_id = 'ChinaMutualFundSector'
+
+    def download_data(self, factors, _in=None, _between=None, _equal=None, **kwargs):
+        """取数据"""
+        def _reconstruct(raw):
+            raw.dropna(subset=['in_date','sector'], inplace=True)
+            raw = raw[raw['sector'].str[:6]=='200101']
+            # print(raw)
+            raw['sector'] = raw['sector'].str[7:10].astype('int32')
+            raw = raw[raw['sector']<=204]
+            raw['in_date'] = raw['in_date'].astype('int32')
+            raw['cur_sign'] = raw['cur_sign'].astype('int32')
+            # raw['IDs'] = raw['IDs'].astype('int32')
+            raw.fillna({'out_date': 21000000}, inplace=True)
+            raw['out_date'] = raw['out_date'].astype('int32')
+            return raw
+
+        def _wrapper(idata):
+            for i in idata:
+                i = _reconstruct(i)
+                yield i
+        
+        data = self.load_factors(factors, self.table_name, _in, _between, _equal,
+                                 trade_code=False, **kwargs)
+        if isinstance(data, Iterator):
+            return _wrapper(data)
+        if data.empty:
+            return data
+        data = _reconstruct(data)
+        return data
+
+    def save_data(self, data, table_id=None, if_exists='append'):
+        super(MutualFundSector, self).save_data(
+            data, self.table_id, if_exists)
+
+    @property
+    def all_data(self):
+        data = self.load_h5(self.table_id)
+        return data
+
+
+class MutualFundNav(WindFinanceDB):
+    """共同基金基本资料"""
+    table_name = u'中国共同基金净值'
+    table_id = 'ChinaMutualFundNav'
+
+    def download_data(self, factors, _in=None, _between=None, _equal=None, **kwargs):
+        """取数据"""
+        def _reconstruct(raw):
+            raw['date'] = raw['date'].astype('int32')
+            return raw
+
+        def _wrapper(idata):
+            for i in idata:
+                i = _reconstruct(i)
+                yield i
+        
+        data = self.load_factors(factors, self.table_name, _in, _between, _equal,
+                                 trade_code=False, **kwargs)
+        if isinstance(data, Iterator):
+            return _wrapper(data)
+        if data.empty:
+            return data
+        data = _reconstruct(data)
+        return data
+
+    def save_data(self, data, table_id=None, if_exists='append'):
+        super(MutualFundNav, self).save_data(
+            data, self.table_id, if_exists)
+
+    @property
+    def all_data(self):
+        data = self.load_h5(self.table_id)
+        return data
+
 if __name__ == '__main__':
     # from FactorLib.data_source.stock_universe import StockUniverse
     from datetime import datetime
-    wind = WindConsensusDB()
+    wind = MutualFundNav()
     wind.connectdb()
-    data = wind.download_data([u'预告净利润变动幅度下限(%)', u'预告净利润变动幅度上限(%)', u'预告净利润下限(万元)',
-                               u'预告净利润上限(万元)'],
-                              _between={u'报告期': ('20061231', '20180331')}, chunksize=10000)
+    data = wind.download_data([u'单位净值',u'累计净值',u'复权单位净值'], chunksize=100000)
     wind.save_data(data)
     # u = StockUniverse('000905')
     # ttm = wind.load_latest_period('净利润(不含少数股东损益)', ids=u, start='20170101', end='20171231')
