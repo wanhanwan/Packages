@@ -1,4 +1,5 @@
 # coding: utf-8
+import platform
 
 # Wind数据库
 WIND_USER = 'Filedb'
@@ -9,4 +10,7 @@ WIND_DBNAME = 'cibfund'
 WIND_DBTYPE = 'oracle'
 
 # 本地财务数据库
-LOCAL_FINDB_PATH = 'D:/data/finance'
+if platform.platform().startswith('Windows'):
+	LOCAL_FINDB_PATH = 'D:/data/finance'
+else:
+	LOCAL_FINDB_PATH = '/Users/wanshuai/Data/finance'
