@@ -67,8 +67,16 @@ def get_fund_by_sector(sector, date, field=None):
 
 
 def get_fund_description(sec_ids):
-	"""基金基本信息"""
-	
+	"""基金基本信息
+	基本信息包括：
+	基金简称、基金代码、成立日期、是否指数基金、前端代码、后端代码
+	"""
+	if sec_ids:
+		data = fund_desc.all_data.query("IDs in @sec_ids")
+	else:
+		data = fund_desc.all_data
+	data['issue_dt'] = pd.to_datetime(data['issue_dt'].astype('str'))
+	return data.set_index('IDs')
 
 
 @DateRange2Dates
