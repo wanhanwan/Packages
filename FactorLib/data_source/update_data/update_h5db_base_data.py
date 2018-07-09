@@ -207,11 +207,11 @@ def update_trade_status(start, end):
 
 
 def update_industry_index_prices(start, end):
-    from ...const import CS_INDUSTRY_CODES
+    from FactorLib.const import CS_INDUSTRY_CODES
     fields = ['open', 'high', 'low', 'close', 'pct_chg', 'volume']
     data = _load_wsd_data(CS_INDUSTRY_CODES, fields, start, end).astype('float32')
     data['volume'] /= 100
-    data.rename({'volume': 'vol', 'pct_chg': 'daily_returns_%'}, inplace=True)
+    data.rename(columns={'volume': 'vol', 'pct_chg': 'daily_returns_%'}, inplace=True)
     h5.save_factor(data, '/indexprices/')
 
 
@@ -228,4 +228,4 @@ def update_slfdef_index(start, end):
         h5.save_factor(stocklist, '/indexes/')
 
 if __name__ == '__main__':
-    update_industry_name('20171111', '20171203')
+    update_industry_index_prices('20180508', '20180708')

@@ -1030,8 +1030,8 @@ class MutualFundDesc(WindFinanceDB):
     def download_data(self, factors, _in=None, _between=None, _equal=None, **kwargs):
         """取数据"""
         def _reconstruct(raw):
-            raw.dropna(subset=['issue_dt'], inplace=True)
-            # raw['IDs'] = raw['IDs'].astype('int32')
+            raw.dropna(subset=['issue_dt','setup_dt'], inplace=True)
+            raw['setup_dt'] = raw['setup_dt'].astype('int32')
             raw['issue_dt'] = raw['issue_dt'].astype('int32')
             return raw
 
@@ -1169,9 +1169,9 @@ class WindStockRatingConsus(WindFinanceDB):
 if __name__ == '__main__':
     # from FactorLib.data_source.stock_universe import StockUniverse
     from datetime import datetime
-    wind = WindStockRatingConsus()
+    wind = MutualFundDesc()
     wind.connectdb()
-    data = wind.download_data([u'综合评级'], chunksize=100000)
+    data = wind.download_data([], chunksize=100000)
     wind.save_data(data)
     # u = StockUniverse('000905')
     # ttm = wind.load_latest_period('净利润(不含少数股东损益)', ids=u, start='20170101', end='20171231')
