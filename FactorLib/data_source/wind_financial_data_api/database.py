@@ -1137,9 +1137,9 @@ class MutualFundNav(WindFinanceDB):
 if __name__ == '__main__':
     # from FactorLib.data_source.stock_universe import StockUniverse
     from datetime import datetime
-    wind = MutualFundNav()
+    wind = MutualFundDesc()
     wind.connectdb()
-    data = wind.download_data([u'单位净值',u'累计净值',u'复权单位净值'], chunksize=100000)
+    data = wind.download_data([], chunksize=100000)
     wind.save_data(data)
     # u = StockUniverse('000905')
     # ttm = wind.load_latest_period('净利润(不含少数股东损益)', ids=u, start='20170101', end='20171231')
