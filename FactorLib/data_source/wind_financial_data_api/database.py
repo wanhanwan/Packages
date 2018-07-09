@@ -1134,12 +1134,44 @@ class MutualFundNav(WindFinanceDB):
             data, self.table_id, if_exists)
 
 
+class WindStockRatingConsus(WindFinanceDB):
+    """共同基金基本资料"""
+    table_name = u'中国A股投资评级汇总'
+    table_id = 'stockratingconsus'
+    statement_type_map = {'263001000': 30, '263002000':90, '263003000':180}
+
+    def download_data(self, factors, _in=None, _between=None, _equal=None, **kwargs):
+        """取数据"""
+        def _reconstruct(raw):
+            raw[['date','IDs']] = raw[['date','IDs']].astype('int32')
+            raw['cycle'] = raw['cycle'].map(self.statement_type_map)
+            return raw
+
+        def _wrapper(idata):
+            for i in idata:
+                i = _reconstruct(i)
+                yield i
+        
+        data = self.load_factors(factors, self.table_name, _in, _between, _equal,
+                                 **kwargs)
+        if isinstance(data, Iterator):
+            return _wrapper(data)
+        if data.empty:
+            return data
+        data = _reconstruct(data)
+        return data
+
+    def save_data(self, data, table_id=None, if_exists='append'):
+        super(WindStockRatingConsus, self).save_data(
+            data, self.table_id, if_exists)
+
+
 if __name__ == '__main__':
     # from FactorLib.data_source.stock_universe import StockUniverse
     from datetime import datetime
-    wind = MutualFundDesc()
+    wind = WindStockRatingConsus()
     wind.connectdb()
-    data = wind.download_data([], chunksize=100000)
+    data = wind.download_data([u'综合评级'], chunksize=100000)
     wind.save_data(data)
     # u = StockUniverse('000905')
     # ttm = wind.load_latest_period('净利润(不含少数股东损益)', ids=u, start='20170101', end='20171231')
