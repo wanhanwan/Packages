@@ -2,6 +2,7 @@
 from pandas import datetime as pdDateTime
 from FactorLib.data_source.trade_calendar import tc
 from collections import Iterable
+from functools import wraps
 import pandas as pd
 import numpy as np
 
@@ -195,6 +196,7 @@ def DateRange2Dates(func):
     把func中的时间参数(start_date, end_date, dates)都转成dates。
 
     """
+    @wraps(func)
     def wrapper(*args, **kwargs):
         start = kwargs.get('start_date')
         end = kwargs.get('end_date')
