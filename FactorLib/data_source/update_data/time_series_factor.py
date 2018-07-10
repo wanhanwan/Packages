@@ -1,5 +1,6 @@
 """计算时间序列因子"""
 import pandas as pd
+from FactorLib.data_source.base_data_source_h5 import tc
 from itertools import product
 from WindPy import *
 
@@ -21,6 +22,7 @@ def _get_rebalance_dates(dates):
     else:
         year_end = int(year_end_date)
     rebalabce_dates = [str(x) + '0630' for x in range(year_start, year_end + 1)]
+    rebalabce_dates = tc.get_latest_trade_days(rebalabce_dates)
     return rebalabce_dates
 
 

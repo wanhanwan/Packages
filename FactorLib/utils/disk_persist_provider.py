@@ -17,4 +17,9 @@ class DiskPersistProvider(object):
     def load(self, name):
         df = pd.read_pickle(os.path.join(self.path, name+'.pkl'))
         return df
+    
+    def check_file_existence(self, name):
+        return os.path.isfile(
+            os.path.join(self.path, name+'.pkl')
+        )
 

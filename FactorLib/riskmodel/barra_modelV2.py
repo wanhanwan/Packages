@@ -1,4 +1,3 @@
-import os.path as path
 import pandas as pd
 import numpy as np
 import statsmodels.api as sm
@@ -171,7 +170,8 @@ class BarraFactorReturn(object):
     def getIndustryMarketValue(self, industry_dummy):
         """计算行业市值"""
         float_mkt_mv = h5.load_factor('float_mkt_value', '/stocks/', idx=industry_dummy)
-        industry_mv = pd.DataFrame(industry_dummy.values * float_mkt_mv.values, index=industry_dummy.index, columns=industry_dummy.columns)
+        industry_mv = pd.DataFrame(industry_dummy.values * float_mkt_mv.values, index=industry_dummy.index,
+                                   columns=industry_dummy.columns)
         industry_mv = industry_mv.sum(level=0).stack()
         return industry_mv
 
