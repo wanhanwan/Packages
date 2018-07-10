@@ -210,7 +210,8 @@ def handle_retstr(func):
 class trade_calendar(object):
 
     @handle_retstr
-    def get_trade_days(self, start_date=None, end_date=None, freq='1d', **kwargs):
+    def get_trade_days(self, start_date=None, end_date=None, freq='1d',
+                       reverse=False, **kwargs):
         """
         获得日期序列，支持日历日和交易日。
 
@@ -221,7 +222,13 @@ class trade_calendar(object):
         """
         start_date, end_date = _validate_date_range(start_date, end_date)
         offset = _to_offset(freq)
-        result = pd.date_range(start_date, end_date, freq=offset)
+        if reverse:
+            n = int(freq[:-1])
+            offset_unit = _to_offset('1%s'%freq[-1])
+            raw = pd.date_range(start_date, end_date, freq=offset_unit)
+            result =  raw[::-n].sort_values()
+        else:
+            result = pd.date_range(start_date, end_date, freq=offset)
         return result
 
     @handle_retstr
