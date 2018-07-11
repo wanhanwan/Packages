@@ -236,7 +236,8 @@ class WindDB(BaseDB):
             idata = idata.rename(columns=table_index)
             if trade_code:
                 idata['IDs'] = idata['IDs'].str[:6]
-            return _drop_invalid_stocks(idata)
+                return _drop_invalid_stocks(idata)
+            return idata
 
         wind_table_name = WindDB.data_dict.wind_table_name(table)
         wind_factor_ids = list(set(WindDB.data_dict.wind_factor_ids(table, factors) +
@@ -872,11 +873,12 @@ class WindAindexMembers(WindFinanceDB):
         def _wrapper(idata):
             for i in idata:
                 i.dropna(subset=['in_date'], inplace=True)
-                i['IDs'] = i['IDs'].astype('int32')
+                # i['IDs'] = i['IDs'].astype('int32')
                 i['out_date'] = i['out_date'].fillna('22000000').astype('int32')
                 i['in_date'] = i['in_date'].astype('int32')
                 yield i
-        data = self.load_factors(factors, self.table_name, _in, _between, _equal, **kwargs)
+        data = self.load_factors(factors, self.table_name, _in, _between, _equal,
+                                trade_code=False, **kwargs)
         if isinstance(data, Iterator):
             return _wrapper(data)
         if data.empty:
@@ -1108,10 +1110,17 @@ class MutualFundNav(WindFinanceDB):
     """共同基金基本资料"""
     table_name = u'中国共同基金净值'
     table_id = 'ChinaMutualFundNav'
+    all_funds = MutualFundSector().all_data['IDs'].unique()
+    suffix = {'.SZ':1,'.OF':2,'.SH':3}
+    rsuffix = {y:x for x, y in suffix.items()}
 
     def download_data(self, factors, _in=None, _between=None, _equal=None, **kwargs):
         """取数据"""
         def _reconstruct(raw):
+            all_funds = self.all_funds
+            raw = raw.query("IDs in @all_funds")
+            raw['IDs'] = raw['IDs'].str[-3:].map(self.suffix)*1000000 + \
+                raw['IDs'].str[:6].astype('int32')
             raw['date'] = raw['date'].astype('int32')
             return raw
 
@@ -1132,6 +1141,15 @@ class MutualFundNav(WindFinanceDB):
     def save_data(self, data, table_id=None, if_exists='append'):
         super(MutualFundNav, self).save_data(
             data, self.table_id, if_exists)
+
+    @clru_cache()
+    def load_h5(self, field_name):
+        data = super(MutualFundNav, self).load_h5(field_name)
+        # print(data)
+        suffixes = (data['IDs'] // 1000000).map(self.rsuffix)
+        IDs = data['IDs'].astype('str').str[1:].str.cat(suffixes)
+        data['IDs'] = IDs
+        return data
 
 
 class WindStockRatingConsus(WindFinanceDB):
@@ -1169,7 +1187,7 @@ class WindStockRatingConsus(WindFinanceDB):
 if __name__ == '__main__':
     # from FactorLib.data_source.stock_universe import StockUniverse
     from datetime import datetime
-    wind = MutualFundDesc()
+    wind = WindAindexMembersWind()
     wind.connectdb()
     data = wind.download_data([], chunksize=100000)
     wind.save_data(data)
