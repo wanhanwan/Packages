@@ -40,6 +40,10 @@ SW_LEVEL_2_DICT, CS_LEVEL_2_DICT, divrsfd_finan_sw, divrsfd_finan_cs = read_indu
 
 class Converter(object):
     def __init__(self, rules):
+        """初始化
+        每条规则下mapping代表代码(带有前缀或后缀)-名称，
+        unmapping代表名称-代码(带有前缀或后缀)
+        """
         self._rules = rules
         self.unmapping = {}
         for name, rule in self._rules.items():
