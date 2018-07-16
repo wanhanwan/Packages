@@ -508,7 +508,7 @@ class WindConsensusDB(WindFinanceDB):
 
     @handle_ids
     def load_fy1(self, factor_name, start=None, end=None, dates=None, ids=None, stat_type=90):
-        from .est_data_loader import load_fy1
+        from .est_data_loader import load_fy
         wind_id = self.data_dict.wind_factor_ids(self.table_name, factor_name)
         if start is not None and end is not None:
             dates = np.asarray(tc.get_trade_days(start, end, retstr='%Y%m%d')).astype('int')
@@ -884,7 +884,7 @@ class WindAindexMembers(WindFinanceDB):
         if data.empty:
             return data
         data.dropna(subset=['in_date'], inplace=True)
-        data['IDs'] = data['IDs'].astype('int32')
+        # data['IDs'] = data['IDs'].astype('int32')
         data['out_date'] = data['out_date'].fillna('22000000').astype('int32')
         data['in_date'] = data['in_date'].astype('int32')
         return data
