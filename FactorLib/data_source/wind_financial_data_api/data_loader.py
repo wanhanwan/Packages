@@ -266,7 +266,8 @@ class DataLoader(object):
             tmp = raw_data.query("ann_dt <= @date")
 
             filter_date = min_report_date(date)
-            tmp = tmp.groupby('IDs').filter(lambda x: x['date'].max() >= filter_date)
+            if 'date' in tmp.columns:
+                tmp = tmp.groupby('IDs').filter(lambda x: x['date'].max() >= filter_date)
 
             latest_period = tmp.groupby('IDs')[field_name].last()
             latest_period.index = pd.MultiIndex.from_product([[date], latest_period.index], names=['date', 'IDs'])
