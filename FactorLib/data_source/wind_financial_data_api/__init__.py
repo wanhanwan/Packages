@@ -1,6 +1,7 @@
 from .database import (WindIncomeSheet,
                        WindConsensusDB,
                        WindBalanceSheet,
+                       WindFinancialIndicator,
                        WindSQIncomeSheet,
                        WindProfitExpress,
                        WindProfitNotice,
@@ -37,10 +38,11 @@ chinamutualfunddescription = MutualFundDesc()
 ChinaMutualFundSector = MutualFundSector()
 ChinaMutualFundNav = MutualFundNav()
 stockratingconsus = WindStockRatingConsus()
+financialindicator = WindFinancialIndicator()
 
 __all__ = ['incomesheet', 'sqincomesheet', 'consensussheet', 'balancesheet', 'profitexpress', 'profitnotice',
            'asharecapitalization', 'aindexmembers', 'aindexmemberswind', 'windchangecode', 'windearningest',
            'windissuingdate', 'winddescription', 'cashflow', 'chinamutualfunddescription', 'ChinaMutualFundSector',
-           'ChinaMutualFundNav', 'stockratingconsus']
+           'ChinaMutualFundNav', 'stockratingconsus','financialindicator']
 
 __all__ += ['div', 'avg', 'period_backward']

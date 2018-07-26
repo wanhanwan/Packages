@@ -677,6 +677,25 @@ class WindCashFlow(WindIncomeSheet):
     table_id = 'cashflow'
 
 
+class WindFinancialIndicator(WindIncomeSheet):
+    table_name = u'中国A股财务指标'
+    table_id = 'financialindicator'
+    statement_type_map = {'10000': 1}
+
+    def download_data(self, factors, _in=None, _between=None, _equal=None, **kwargs):
+        """取数据"""
+        data = self.load_factors(factors, self.table_name, _in, _between, _equal, **kwargs)
+        if not isinstance(data, Iterator):
+            data['stat_type'] = '10000'
+            return self.add_quarter_year(data)
+        return self._wrap_add_quarter_year(data)
+
+    def _wrap_add_quarter_year(self, data):
+        for idata in data:
+            idata['stat_type'] = '10000'
+            yield self.add_quarter_year(idata)
+
+
 class WindSQIncomeSheet(WindIncomeSheet):
     table_id = 'sq_income'
     statement_type_map = {'408002000': 1, '408003000': 2}
@@ -1187,9 +1206,9 @@ class WindStockRatingConsus(WindFinanceDB):
 if __name__ == '__main__':
     # from FactorLib.data_source.stock_universe import StockUniverse
     from datetime import datetime
-    wind = WindAindexMembersWind()
+    wind = WindBalanceSheet()
     wind.connectdb()
-    data = wind.download_data([], chunksize=100000)
+    data = wind.download_data([u'负债合计'], chunksize=100000)
     wind.save_data(data)
     # u = StockUniverse('000905')
     # ttm = wind.load_latest_period('净利润(不含少数股东损益)', ids=u, start='20170101', end='20171231')

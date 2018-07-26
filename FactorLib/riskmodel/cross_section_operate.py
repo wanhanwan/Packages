@@ -1,4 +1,9 @@
-from QuantLib.utils import DropOutlier, NonLinearSize, Standard, Orthogonalize, Fillna_Barra, Join_Factors
+from QuantLib.utils import (DropOutlier,
+                            NonLinearSize,
+                            Standard,
+                            Orthogonalize,
+                            Fillna_Barra,
+                            Join_Factors)
 import pandas as pd
 
 

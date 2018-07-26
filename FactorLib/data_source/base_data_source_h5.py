@@ -386,22 +386,25 @@ class sector(object):
             index_members = self.h5DB.load_factor('_%s' % ids, '/indexes/', dates=dates)
             index_members = index_members[index_members['_%s' % ids] == 1.0]
             return index_members[index_members.index.isin(all_stocks.index)]
-        elif ids in USER_INDEX_DICT:
+        if ids in USER_INDEX_DICT:
             try:
                 index_members = self.h5DB.load_factor('%s' % ids, '/indexes/', dates=dates)
             except FileNotFoundError:
                 index_members = self.h5DB.load_factor('_%s' % ids, '/indexes/', dates=dates)
             index_members = index_members[index_members['%s' % ids] == 1.0]
             return index_members[index_members.index.isin(all_stocks.index)]
-        else:
-            for industry_name, rule in IndustryConverter._rules.items():
-                if ids in IndustryConverter.all_ids(industry_name):
-                    temp = self.h5DB.load_factor(industry_name, '/indexes/', dates=dates)
-                    index_members = temp[temp[industry_name] == rule.name2id_func(ids)]
-                    return index_members[index_members.index.isin(all_stocks.index)]
-                else:
-                    continue
-        raise KeyError("找不到指数ID对应成分股！")
+        for industry_name, rule in IndustryConverter._rules.items():
+            if ids in IndustryConverter.all_ids(industry_name):
+                temp = self.h5DB.load_factor(industry_name, '/indexes/', dates=dates)
+                index_members = temp[temp[industry_name] == rule.name2id_func(ids)]
+                return index_members[index_members.index.isin(all_stocks.index)]
+            else:
+                continue
+        try:
+            index_members = self.h5DB.load_factor('%s' % ids, '/indexes/', dates=dates)
+            return index_members[index_members.index.isin(all_stocks.index)]
+        except:
+            raise KeyError("找不到指数ID对应成分股！")
 
     def get_stock_industry_info(self, ids, industry='中信一级', start_date=None, end_date=None, dates=None, idx=None):
         """股票行业信息"""

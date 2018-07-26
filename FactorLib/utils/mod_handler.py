@@ -120,4 +120,6 @@ class FactorStoreModHandler(object):
             save_details_to_excel(factor, factor_path, self._env)
             if factor.stock_list:
                 save_stock_list(factor, factor_path, self._env)
-        save_summary_to_excel(self._env._factors, self._env._config.extra.result_file_dir, self._env)
+        for imethod in self._env._config.mod.grouping_manage.func:
+            save_summary_to_excel(self._env._factors, self._env._config.extra.result_file_dir, self._env,
+                method=imethod)

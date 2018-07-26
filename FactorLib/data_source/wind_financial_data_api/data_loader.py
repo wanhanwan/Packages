@@ -30,7 +30,7 @@ def quarter2intdate(year, quarter):
     return year * 10000 + quarter * 3 * 100 + day
 
 
-def min_report_date(date):
+def min_report_date(date, quarter=None):
     """返回当下日期理论上最晚的报告期
     计算原则：
         11月-次年4月份对应上年三季报
@@ -40,13 +40,24 @@ def min_report_date(date):
     year = date // 10000
     month = date % 10000 // 100
     if 1 <= month <= 4:
-        return (year - 1)*10000 + 930
+        new_d = (year - 1)*10000 + 930
     elif 5<= month <= 8:
-        return (year - 1)*10000 + 1231
+        new_d = (year - 1)*10000 + 1231
     elif 9 <= month <=10:
-        return year*10000 + 630
+        new_d = year*10000 + 630
     else:
-        return year * 10000 + 930
+        new_d = year * 10000 + 930
+    if quarter:
+        cur_q = new_d % 10000 // 100 / 3
+        if quarter == cur_q:
+            return new_d
+        elif quarter > cur_q:
+            return period_backward(np.array([new_d]), quarter=quarter)[0]
+        else:
+            return period_backward(np.array([new_d]),
+                                   back_nquarter=cur_q-quarter)[0]
+    else:
+        return new_d
 
 
 def incr_rate(old, new):
@@ -169,9 +180,9 @@ class DataLoader(object):
         r = []
         for date in dates:
             data = raw_data.query("ann_dt <= @date")
-
-            filter_date = min_report_date(date)
-            data = data.groupby('IDs').filter(lambda x: x['date'].max() >= filter_date)
+            if 'date' in data.columns:
+                filter_date = min_report_date(date, quarter=quarter)
+                data = data.groupby('IDs').filter(lambda x: x['date'].max() >= filter_date)
 
             latest_periods = data.groupby('IDs')['date'].last()
             tmp = data.groupby(['IDs', 'date'])[field_name].last()
