@@ -179,26 +179,26 @@ factor_list_others = [FamaFrenchFactor_IVR, RVFactor_RV, SpreadBiasFactor_Spread
 lrj = [CGO, PB_LRJ, PE_GL, SPE_CAP]
 
 # BARRA因子
-BETA = ('BETA', '/barra/descriptors/', 1)
-BLEV = ('BLEV', '/barra/descriptors/', 1)
-BTOP = ('BTOP', '/barra/descriptors/', 1)
-CETOP = ('CETOP', '/barra/descriptors/', 1)
-CMRA = ('CMRA', '/barra/descriptors/', 1)
-DASTD = ('DASTD', '/barra/descriptors/', 1)
-DTOA = ('DTOA', '/barra/descriptors/', 1)
-EGRLF = ('EGRLF', '/barra/descriptors/', 1)
-EGRO = ('EGRO', '/barra/descriptors/', 1)
-EGRSF = ('EGRSF', '/barra/descriptors/', 1)
-EPFWD = ('EPFWD', '/barra/descriptors/', 1)
-ETOP = ('ETOP', '/barra/descriptors/', 1)
-HSIGMA = ('HSIGMA', '/barra/descriptors/', 1)
-LNCAP = ('LNCAP', '/barra/descriptors/', 1)
-MLEV = ('MLEV', '/barra/descriptors/', 1)
-RSTR = ('RSTR', '/barra/descriptors/', 1)
-SGRO = ('SGRO', '/barra/descriptors/', 1)
-STOA = ('STOA', '/barra/descriptors/', 1)
-STOQ = ('STOQ', '/barra/descriptors/', 1)
-STOM = ('STOM', '/barra/descriptors/', 1)
+beta = ('beta', '/barra/descriptors/', 1)
+blev = ('blev', '/barra/descriptors/', 1)
+btop = ('btop', '/barra/descriptors/', 1)
+cetop = ('cetop', '/barra/descriptors/', 1)
+cmra = ('cmra', '/barra/descriptors/', 1)
+dastd = ('dastd', '/barra/descriptors/', 1)
+dtoa = ('dtoa', '/barra/descriptors/', 1)
+egrlf = ('egrlf', '/barra/descriptors/', 1)
+egro = ('egro', '/barra/descriptors/', 1)
+egrsf = ('egrsf', '/barra/descriptors/', 1)
+epfwd = ('epfwd', '/barra/descriptors/', 1)
+etop = ('etop', '/barra/descriptors/', 1)
+hisgma = ('hisgma', '/barra/descriptors/', 1)
+lncap = ('lncap', '/barra/descriptors/', 1)
+mlev = ('mlev', '/barra/descriptors/', 1)
+rstr = ('rstr', '/barra/descriptors/', 1)
+sgro = ('sgro', '/barra/descriptors/', 1)
+stoa = ('stoa', '/barra/descriptors/', 1)
+stoq = ('stoq', '/barra/descriptors/', 1)
+stom = ('stom', '/barra/descriptors/', 1)
 
 
 
@@ -210,10 +210,10 @@ sw_level_2 = ('sw_level_2', '/indexes/', 1)
 wind_level_1 = ('wind_level_1', '/indexes/', 1)
 
 
-BARRA = [BETA, BLEV, BTOP, CETOP, CMRA,
-         DASTD, DTOA, EGRLF, EGRO, EGRSF,
-         EPFWD, ETOP, HSIGMA, LNCAP, MLEV,
-         RSTR, SGRO, STOA, STOQ, STOM]
+BARRA = [beta, blev, btop, cetop, cmra,
+         dastd, dtoa, egrlf, egro, egrsf,
+         epfwd, etop, hisgma, lncap, mlev,
+         rstr, sgro, stoa, stoq, stom]
 
 
 def get_factors(factors):
