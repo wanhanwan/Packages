@@ -10,8 +10,11 @@ import numpy as np
 import xarray as xr
 import os
 from os import path
+from multiprocess import Lock
 from .converter import parse_nc_encoding
 from .helpers import handle_ids
+
+lock = Lock()
 
 
 class NCDB(object):
@@ -48,21 +51,21 @@ class NCDB(object):
     # 列出单个文件的因子名称
     def list_file_factors(self, file_name, file_dir):
         file_path = self.abs_factor_path(file_dir, file_name)
-        with xr.open_dataset(file_path, "data", engine="netcdf4") as file:
+        with xr.open_dataset(file_path, engine="netcdf4") as file:
             t = list(file.data_vars)
             t.sort()
-            return t
+        return t
 
     # 列出文件的日期
     def list_file_dates(self, file_name, file_dir):
         file_path = self.abs_factor_path(file_dir, file_name)
-        with xr.open_dataset(file_path, "data") as file:
+        with xr.open_dataset(file_path, engine='netcdf4') as file:
             return file.indexes['date']
 
     # 列出文件的IDs
     def list_file_ids(self, file_name, file_dir):
         file_path = self.abs_factor_path(file_dir, file_name)
-        with xr.open_dataset(file_path, "data", engine="netcdf4") as file:
+        with xr.open_dataset(file_path, engine="netcdf4") as file:
             return file.indexes['IDs']
 
     # 重命名文件
@@ -73,8 +76,10 @@ class NCDB(object):
 
     # 新建因子文件夹
     def create_factor_dir(self, factor_dir):
-        if not path.isdir(self.data_path + factor_dir):
-            os.makedirs(self.data_path + factor_dir)
+        factor_dir = factor_dir.strip('/\\')
+        tar_dir = path.join(self.data_path, factor_dir)
+        if not path.isdir(tar_dir):
+            os.makedirs(tar_dir)
 
     # 因子的时间区间
     def get_date_range(self, file_name, file_path):
@@ -94,10 +99,8 @@ class NCDB(object):
             dates终将把每个元素转换成int格式
         ids: list or array-like
             ids终将把每个元素转换成string格式
-        df: bool
-            是否已DataFrame格式返回. True by default.
         ret: str
-            数据返回的格式，选项包括df,ndarray,xarray
+            数据返回的格式，选项包括df,xarray,panel
         """
 
         if factor_names is not None:
@@ -105,38 +108,49 @@ class NCDB(object):
             factor_names_drop = [x for x in all_names if x not in factor_names]
         else:
             factor_names_drop = None
-        if idx is None:
+        if idx is not None:
+            dates = idx.index.unique(level='date')
+            ids = idx.index.unique(level='IDs')
+        else:
             if dates is None:
                 dates = self.list_file_dates(file_name, file_dir)
             else:
                 dates = pd.DatetimeIndex(dates)
             if ids is None:
                 ids = self.list_file_ids(file_name, file_dir)
-            idx1 = pd.MultiIndex.from_product([dates, ids], names=['date', 'IDs'])
-        else:
-            idx1 = idx.index
         file_path = self.abs_factor_path(file_dir, file_name)
-        file = xr.open_dataset(file_path, "data", engine="netcdf4", drop_variables=factor_names_drop, autoclose=True)
-        factor_data = file.sel(date=idx1.get_level_values('date').unique(), IDs=idx1.get_level_values('IDs').unique())
-        if ret == 'ndarry':
-            length = len(ids)
-            width = len(dates)
-            height = len(factor_names)
-            return np.array(dates), np.array(ids).astype('uint32'), factor_data.values.reshape((width, length, height))
-        elif ret == 'xarray':
+
+        try:
+            lock.acquire()
+            with xr.open_dataset(file_path, engine="netcdf4",
+                                 drop_variables=factor_names_drop,
+                                 autoclose=True) as file:
+                factor_data = file.sel(date=dates, IDs=ids)
+            lock.release()
+        except Exception as e:
+            lock.release()
+            raise e
+
+        if ret == 'xarray':
             return factor_data
-        factor_data = factor_data.to_dataframe()
+        elif ret == 'panel':
+            return factor_data.to_dataframe().to_panel()
+        else:
+            factor_data = factor_data.to_dataframe()
         if reset_index:
             return factor_data.dropna(how='all').reset_index()
         else:
             df = factor_data.dropna(how='all')
             if df.index.names[0] == 'IDs':
                 df.index = df.index.swaplevel('IDs', 'date')
+            if idx is None:
                 df.sort_index(inplace=True)
+            else:
+                df = df.reindex(idx.index)
             return df
 
-    def save_factor(self, factor_data, file_name, file_dir, if_exists='append', dtypes=None,
-                    append_type='combine_first'):
+    def save_factor(self, factor_data, file_name, file_dir,
+                    if_exists='append'):
         """往数据库中写数据
         数据格式：DataFrame(index=[date,IDs],columns=data)
         """
@@ -149,39 +163,28 @@ class NCDB(object):
                 factor_data.set_index('date', append=True, inplace=True)
         if isinstance(factor_data.columns, pd.MultiIndex):
             factor_data = factor_data.stack()
-        # factor_data.sort_index(inplace=True)
-        new_dtypes = dict(date=parse_nc_encoding(np.datetime64), IDs=parse_nc_encoding(np.object))
-        dtypes = {} if dtypes is None else dtypes
-        for k, v in factor_data.dtypes.iteritems():
-            if str(k) in dtypes:
-                new_dtypes[str(k)] = dtypes[str(k)]
-            else:
-                new_dtypes[str(k)] = parse_nc_encoding(v)
 
         self.create_factor_dir(file_dir)
         new_dset = factor_data.to_xarray()
         file_path = self.abs_factor_path(file_dir, file_name)
-        if not self.check_file_exists(file_name, file_dir):
-            new_dset.to_netcdf(file_path, "w", engine="netcdf4", encoding=new_dtypes, group="data")
-        elif if_exists == 'append':
-            factors = self.list_file_factors(file_name, file_dir)
-            with xr.open_dataset(file_path, "data", engine="netcdf4") as file:
-                for factor in factors:
-                    old_dtype = file[factor].encoding
-                    new_dtypes[factor] = {k: v for k, v in old_dtype.items() if k
-                                          in ['_FillValue', 'dtype', 'scale_factor', 'units', 'zlib', 'complevel']}
-                new_data = new_dset.combine_first(file)
-            available_name = self.get_available_factor_name(file_name, file_dir)
-            new_data.to_netcdf(self.abs_factor_path(file_dir, available_name),
-                               "w", engine="netcdf4", encoding=new_dtypes, group="data")
-            self.delete_factor(file_name, file_dir)
-            self.rename_factor(available_name, file_name, file_dir)
-        elif if_exists == 'replace':
-            self.delete_factor(file_name, file_dir)
-            new_dset.to_netcdf(file_path, "w", engine="netcdf4", encoding=new_dtypes, group="data")
-        else:
+
+        lock.acquire()
+        try:
+            if not self.check_file_exists(file_name, file_dir):
+                new_dset.to_netcdf(file_path, "w", engine="netcdf4")
+            elif if_exists == 'append':
+                with xr.open_dataset(file_path, engine="netcdf4") as file:
+                    new_data = new_dset.combine_first(file)
+                new_data.to_netcdf(file_path, "w", engine="netcdf4")
+            elif if_exists == 'replace':
+                new_dset.to_netcdf(file_path, "w", engine="netcdf4")
+            else:
+                raise KeyError("please make sure if_exists is valide")
+        except Exception as e:
             self._update_info()
-            raise KeyError("please make sure if_exists is valide")
+            lock.release()
+            raise e
+        lock.release()
         self._update_info()
 
     def save_as_dummy(self, factor_data, file_name, file_dir, if_exists='append'):
@@ -214,7 +217,7 @@ class NCDB(object):
         """添加因子属性
         """
         file_path = self.abs_factor_path(file_dir, file_name)
-        with xr.open_dataset(file_path, "data", engine="netcdf4") as file:
+        with xr.open_dataset(file_path, engine="netcdf4") as file:
             for k, v in attr_dict.items():
                 file[k].attrs.update(**v)
             available_name = self.get_available_factor_name(file_name, file_dir)
@@ -224,7 +227,7 @@ class NCDB(object):
 
     def add_file_attr(self, file_name, file_dir, attr_dict):
         file_path = self.abs_factor_path(file_dir, file_name)
-        with xr.open_dataset(file_path, "data", engine="netcdf4") as file:
+        with xr.open_dataset(file_path, engine="netcdf4") as file:
             new_dset = file.assign_attrs(**attr_dict)
             available_name = self.get_available_factor_name(file_name, file_dir)
             new_dset.to_netcdf(self.abs_factor_path(file_dir, available_name), "w", engine="netcdf4", group="data")
@@ -233,12 +236,12 @@ class NCDB(object):
 
     def load_factor_attr(self, file_name, file_dir, factor, key):
         file_path = self.abs_factor_path(file_dir, file_name)
-        with xr.open_dataset(file_path, "data", engine="netcdf4") as file:
+        with xr.open_dataset(file_path, engine="netcdf4") as file:
             return file[factor].attrs.get(key, None)
 
     def load_file_attr(self, file_name, file_dir, key):
         file_path = self.abs_factor_path(file_dir, file_name)
-        with xr.open_dataset(file_path, "data", engine="netcdf4") as file:
+        with xr.open_dataset(file_path, engine="netcdf4") as file:
             return file.attrs.get(key, None)
 
     # -------------------------工具函数-------------------------------------------
