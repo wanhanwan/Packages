@@ -14,7 +14,6 @@ from ..utils.tool_funcs import (financial_data_reindex, parse_industry,
 from .converter import IndustryConverter
 from .csv_db import CsvDB
 from .h5db import H5DB
-from .helpers import handle_ids
 from .ncdb import NCDB
 from .trade_calendar import tc
 from .tseries import resample_func, resample_returns
@@ -536,6 +535,10 @@ class sector(object):
 h5 = H5DB(H5_PATH)
 ncdb = NCDB(NC_PATH)
 riskDB = H5DB(RISKMODEL_PATH)
+<<<<<<< HEAD
 sec = sector(h5, tc, nc=ncdb)
+=======
+sec = sector(h5, tc, ncdb)
+>>>>>>> 5bc60a30424c43137c9334cf304800b1a16a6e8e
 data_source = base_data_source(sec)
 csv = CsvDB()
