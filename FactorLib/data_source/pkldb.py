@@ -6,10 +6,10 @@
 import pandas as pd
 import pickle
 import os
-
 from os import path
 from multiprocess import Lock
 from .helpers import handle_ids
+from ..utils.tool_funcs import ensure_dir_exists
 
 lock = Lock()
 
@@ -40,8 +40,13 @@ class PickleDB(object):
     def dump_file(self, obj, path):
         try:
             lock.acquire()
-            with open(path, 'wb') as f:
-                pickle.dump(obj, f, protocol=-1)
+            if isinstance(obj, (pd.Panel, pd.DataFrame,
+                                pd.Series)):
+                obj.to_pickle(path, protocol=-1)
+            else:
+                with open(path, 'wb') as f:
+                    pickle.dump(obj, f,
+                        protocol=pickle.HIGHEST_PROTOCOL)
             lock.release()
         except Exception as e:
             lock.release()
@@ -112,7 +117,7 @@ class PickleDB(object):
         if factor_names is not None:
             data = data[factor_names]
 
-        if (idx is None) and (ids is None) and (date is None):
+        if (idx is None) and (ids is None) and (dates is None):
             return data
 
         if idx is None:
@@ -130,6 +135,7 @@ class PickleDB(object):
     
     def save_factor(self, data, file_name, file_dir, if_exists='append'):
         file_path = self.abs_factor_path(file_dir, file_name)
+        ensure_dir_exists(os.path.dirname(file_path))
         if (not self.check_file_exists(file_name, file_dir)) or (if_exists=='replace'):
             self.dump_file(data, file_path)
         else:
@@ -139,6 +145,7 @@ class PickleDB(object):
 
     # -------------------------工具函数-------------------------------------------
     def abs_factor_path(self, factor_path, factor_name):
+        factor_path = factor_path.strip('/\\')
         return path.join(self.data_path, factor_path, factor_name + '.pkl')
 
     def get_available_factor_name(self, factor_name, factor_path):
