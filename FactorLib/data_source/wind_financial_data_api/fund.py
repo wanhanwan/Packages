@@ -107,8 +107,8 @@ def get_fund_nav(sec_ids=None, start_date=None, end_date=None,
     if field is None:
         field = ['单位净值', '复权单位净值', '累计净值']
     field_ids = fund_nav.data_dict.wind_factor_ids(fund_nav.table_name, field)
-    max_date = dates.max().strftime("%Y%m%d")
-    dates_int = dates.strftime("%Y%m%d").astype('int32')
+    max_date = max(dates).strftime("%Y%m%d")
+    dates_int = pd.DatetimeIndex(dates).strftime("%Y%m%d").astype('int32')
     if sector:
         sec_ids = get_fund_by_sector(sector, date=max_date, field='IDs').values
     idx = pd.MultiIndex.from_product([dates_int, sec_ids], names=['date', 'IDs'])

@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 from ..const import SW_INDUSTRY_DICT, MARKET_INDEX_DICT, USER_INDEX_DICT
 from .h5db import H5DB
-from .h5db2 import H5DB2
 from .ncdb import NCDB
 from .csv_db import CsvDB
 from .trade_calendar import tc
@@ -533,9 +532,8 @@ class sector(object):
 
 
 h5 = H5DB(H5_PATH)
-hdf5 = H5DB2(HDF5_PATH)
 ncdb = NCDB(NC_PATH)
 riskDB = H5DB(RISKMODEL_PATH)
-sec = sector(h5, tc, hdf5, ncdb)
+sec = sector(h5, tc, ncdb)
 data_source = base_data_source(sec)
 csv = CsvDB()
