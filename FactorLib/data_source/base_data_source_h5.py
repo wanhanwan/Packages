@@ -535,10 +535,6 @@ class sector(object):
 h5 = H5DB(H5_PATH)
 ncdb = NCDB(NC_PATH)
 riskDB = H5DB(RISKMODEL_PATH)
-<<<<<<< HEAD
 sec = sector(h5, tc, nc=ncdb)
-=======
-sec = sector(h5, tc, ncdb)
->>>>>>> 5bc60a30424c43137c9334cf304800b1a16a6e8e
 data_source = base_data_source(sec)
 csv = CsvDB()
