@@ -1,14 +1,15 @@
 # coding : utf-8
 """公募基金数据库""" 
-from .database import MutualFundDesc, MutualFundNav, MutualFundSector
+from .database import MutualFundDesc, MutualFundNav, MutualFundSector, MutualFundStockPortfolio
 from ...utils.datetime_func import DateRange2Dates
+from ...utils.tool_funcs import intcode_to_tradecode
 import pandas as pd
-import numpy as np
 
 
 fund_desc = MutualFundDesc()
 fund_nav = MutualFundNav()
 fund_sector = MutualFundSector()
+fund_pos = MutualFundStockPortfolio()
 _all_fundsectors = {'普通股票型基金': 101, '被动指数型基金': 102,
                     '增强指数型基金': 103, '偏股混合型基金': 201,
                     '平衡混合型基金': 202, '偏债混合型基金': 203,
@@ -120,6 +121,52 @@ def get_fund_nav(sec_ids=None, start_date=None, end_date=None,
     return rslt
 
 
+def get_fund_stock_pos(sec_ids=None, start_date=None, end_date=None, dates=None,
+                       sector=None, field=None):
+    """获取基金重仓股
+
+    Parameters:
+    -----------
+    sec_ids : list of str
+        基金代码，例如000001.OF
+    start_date : str or datetime
+        start trade date
+    end_date : str or datetime
+        end trade date
+    dates : list of date
+    sector : str
+        fund sector
+        see _all_fund_sectors and _buildin_fund_sectors
+        for more details
+    field : list of str
+        columns to return. Options include 持有股票市值(元), 持有股票数量(股),
+        持有股票市值占基金净值比例(%), 积极投资持有股票市值(元),积极投资持有股数(股),
+        积极投资持有股票市值占净资产比例(%),指数投资持有股票市值(元)，指数投资持有股数(股),
+        指数投资持有股票市值占净资产比例(%),占股票市值比,占流通股本比。
+    """
+    if field is None:
+        field = """持有股票市值(元), 持有股票数量(股),
+                 持有股票市值占基金净值比例(%), 积极投资持有股票市值(元), 积极投资持有股数(股),
+                 积极投资持有股票市值占净资产比例(%), 指数投资持有股票市值(元)，指数投资持有股数(股),
+                 指数投资持有股票市值占净资产比例(%), 占股票市值比, 占流通股本比"""\
+            .replace(' ', '').split(',')
+    field_ids = fund_pos.data_dict.wind_factor_ids(fund_pos.table_name, field)
+    if dates is None:
+        dates = pd.date_range(start_date, end_date, freq='1Q')
+    else:
+        dates = pd.DatetimeIndex(dates)
+    max_date = max(dates).strftime("%Y%m%d")
+    dates_int = dates.strftime("%Y%m%d").astype('int32')
+    if sector:
+        sec_ids = get_fund_by_sector(sector, date=max_date, field='IDs').values
+    rslt = pd.DataFrame()
+    for i_field_id, i_field in zip(field_ids, field):
+        data = fund_pos.query(i_field, "IDs in @sec_ids & date in @dates_int",
+                              sec_ids=sec_ids, dates_int=dates_int)
+        rslt[i_field_id] = data.set_index(['IDs', 'date', 'stock_id'])[i_field_id]
+    rslt.index = rslt.index.set_levels([intcode_to_tradecode(x) for x in rslt.index.levels[2]],
+                                       level='stock_id')
+    return rslt
 
 
 

@@ -1157,7 +1157,7 @@ class MutualFundNav(WindFinanceDB):
         data = _reconstruct(data)
         return data
 
-    def save_data(self, data, table_id=None, if_exists='append'):
+    def save_data(self, data, table_id=None, if_exists='append', **kwargs):
         super(MutualFundNav, self).save_data(
             data, self.table_id, if_exists)
 
@@ -1172,7 +1172,7 @@ class MutualFundNav(WindFinanceDB):
 
 
 class WindStockRatingConsus(WindFinanceDB):
-    """共同基金基本资料"""
+    """中国A股投资评级汇总"""
     table_name = u'中国A股投资评级汇总'
     table_id = 'stockratingconsus'
     statement_type_map = {'263001000': 30, '263002000':90, '263003000':180}
@@ -1198,17 +1198,79 @@ class WindStockRatingConsus(WindFinanceDB):
         data = _reconstruct(data)
         return data
 
-    def save_data(self, data, table_id=None, if_exists='append'):
+    def save_data(self, data, table_id=None, if_exists='append', **kwargs):
         super(WindStockRatingConsus, self).save_data(
             data, self.table_id, if_exists)
+
+
+class MutualFundStockPortfolio(WindFinanceDB):
+    """共同基金股票持仓明细"""
+    table_name = u"中国共同基金股票持仓明细"
+    table_id = 'mutualfundstockpos'
+    all_funds = MutualFundSector().all_data['IDs'].unique()
+    suffix = {'.SZ':1,'.OF':2,'.SH':3}
+    rsuffix = {y:x for x, y in suffix.items()}
+
+    def download_data(self, factors, _in=None, _between=None, _equal=None, **kwargs):
+        """取数据"""
+        def _reconstruct(raw):
+            all_funds = [x for x in self.all_funds if x[0].isdigit()]
+            raw = raw.query("IDs in @all_funds")
+            raw = _drop_invalid_stocks(raw, field_name='stock_id')
+            raw['IDs'] = raw['IDs'].str[-3:].map(self.suffix)*1000000 + \
+                raw['IDs'].str[:6].astype('int32')
+            raw['date'] = raw['date'].astype('int32')
+            raw['ann_dt'] = raw['ann_dt'].astype('int32')
+            raw['stock_id'] = raw['stock_id'].str[:6].astype('int32')
+            return raw
+
+        def _wrapper(idata):
+            for i in idata:
+                i = _reconstruct(i)
+                yield i
+
+        data = self.load_factors(factors, self.table_name, _in, _between, _equal,
+                                 trade_code=False, **kwargs)
+        if isinstance(data, Iterator):
+            return _wrapper(data)
+        if data.empty:
+            return data
+        data = _reconstruct(data)
+        return data
+
+    def save_data(self, data, table_id=None, if_exists='append', **kwargs):
+        super(MutualFundStockPortfolio, self).save_data(
+            data, self.table_id, if_exists)
+
+    @clru_cache()
+    def load_h5(self, field_name):
+        data = super(MutualFundStockPortfolio, self).load_h5(field_name)
+        return data
+
+    def query(self, field_name, query_str=None, **kwargs):
+        data = self.load_h5(field_name)
+        if query_str:
+            if 'sec_ids' in kwargs:
+                kwargs['sec_ids'] = [
+                    self.suffix[x[-3:]]*1000000 +
+                    int(x[:6]) for x in kwargs['sec_ids'] if x[0].isdigit()]
+            data = data.query(query_str, local_dict=kwargs)
+        suffixes = (data['IDs'] // 1000000).map(self.rsuffix)
+        IDs = data['IDs'].astype('str').str[1:].str.cat(suffixes)
+        data['IDs'] = IDs
+        return data
 
 
 if __name__ == '__main__':
     # from FactorLib.data_source.stock_universe import StockUniverse
     from datetime import datetime
-    wind = WindBalanceSheet()
+    wind = MutualFundStockPortfolio()
     wind.connectdb()
-    data = wind.download_data([u'负债合计'], chunksize=100000)
+    data = wind.download_data(
+        [u'持有股票市值占基金净值比例(%)', u'积极投资持有股票市值(元)',
+        u'积极投资持有股数(股)', u'积极投资持有股票市值占净资产比例(%)',
+         u'指数投资持有股票市值(元)', u'指数投资持有股数(股)', u'指数投资持有股票市值占净资产比例(%)',
+         u'占股票市值比', u'占流通股本比'], chunksize=100000)
     wind.save_data(data)
     # u = StockUniverse('000905')
     # ttm = wind.load_latest_period('净利润(不含少数股东损益)', ids=u, start='20170101', end='20171231')
