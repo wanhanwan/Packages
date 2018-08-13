@@ -180,6 +180,7 @@ class H5DB(object):
                 multiplier = attr['multiplier']
                 fill_value = attr['fill_value']
             data = (data.fillna(fill_value) * multiplier).astype('int')
+            ensure_dir_exists(os.path.dirname(file_path))
             with pd.HDFStore(file_path, complib='blosc', complevel=9, mode='a') as store:
                 try:
                     df = store.select(group)

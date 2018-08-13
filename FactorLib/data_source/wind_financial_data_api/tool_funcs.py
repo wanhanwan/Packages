@@ -88,3 +88,6 @@ def load_newest(field_name, year, quarter, dates, ids=None):
     """包含业绩快报和正式财报的数据"""
     table_name, field_dict = _get_mapping(field_name)
     table_name, table_id = table_name.split('_')
+    return
+
+__all__ = ['get_latest_report', 'get_go_market_days']

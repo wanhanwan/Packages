@@ -1,21 +1,22 @@
 # coding: utf-8
 import os
-from fastcache import clru_cache
-from datetime import timedelta, datetime
+from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
-from ..const import SW_INDUSTRY_DICT, MARKET_INDEX_DICT, USER_INDEX_DICT
+from fastcache import clru_cache
+from PkgConstVars import *
+
+from ..const import MARKET_INDEX_DICT, SW_INDUSTRY_DICT, USER_INDEX_DICT
+from ..utils.datetime_func import DateRange2Dates, DateStr2Datetime
+from ..utils.tool_funcs import (financial_data_reindex, parse_industry,
+                                windcode_to_tradecode)
+from .converter import IndustryConverter
+from .csv_db import CsvDB
 from .h5db import H5DB
 from .ncdb import NCDB
-from .csv_db import CsvDB
 from .trade_calendar import tc
 from .tseries import resample_func, resample_returns
-from ..utils.datetime_func import DateStr2Datetime, DateRange2Dates
-from ..utils.tool_funcs import parse_industry, financial_data_reindex, windcode_to_tradecode
-from .converter import IndustryConverter
-from .helpers import handle_ids
-from PkgConstVars import *
 
 
 class base_data_source(object):
@@ -534,6 +535,6 @@ class sector(object):
 h5 = H5DB(H5_PATH)
 ncdb = NCDB(NC_PATH)
 riskDB = H5DB(RISKMODEL_PATH)
-sec = sector(h5, tc, ncdb)
+sec = sector(h5, tc, nc=ncdb)
 data_source = base_data_source(sec)
 csv = CsvDB()

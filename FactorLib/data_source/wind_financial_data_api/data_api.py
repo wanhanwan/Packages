@@ -35,3 +35,6 @@ def load_dividends(ids=None, dates=None, start_date=None, end_date=None, idx=Non
     rslt = dividends_indexed.groupby('IDs')['dividend'].apply(search_data, dates=dates)
     rslt.index.names = ['IDs', 'date']
     return _reconstruct(rslt.reset_index())
+
+
+__all__ = ['load_dividends']
