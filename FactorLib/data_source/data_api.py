@@ -1,3 +1,4 @@
+# coding: utf-8
 import numpy as np
 from .base_data_source_h5 import sec, tc, data_source
 from .wind_financial_data_api.data_api import load_dividends

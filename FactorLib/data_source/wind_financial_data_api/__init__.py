@@ -17,7 +17,8 @@ from .database import (WindIncomeSheet,
                        MutualFundNav,
                        MutualFundSector,
                        WindStockRatingConsus,
-                       MutualFundStockPortfolio
+                       MutualFundStockPortfolio,
+                       WindST
                        )
 from .data_loader import div, avg, period_backward
 
@@ -41,6 +42,7 @@ ChinaMutualFundNav = MutualFundNav()
 chinamutualfundstockpos = MutualFundStockPortfolio()
 stockratingconsus = WindStockRatingConsus()
 financialindicator = WindFinancialIndicator()
+asharest = WindST()
 
 from .tool_funcs import *
 from .data_api import *

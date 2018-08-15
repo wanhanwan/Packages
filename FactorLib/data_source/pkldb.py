@@ -136,11 +136,11 @@ class PickleDB(object):
     def save_factor(self, data, file_name, file_dir, if_exists='append'):
         file_path = self.abs_factor_path(file_dir, file_name)
         ensure_dir_exists(os.path.dirname(file_path))
-        if (not self.check_file_exists(file_name, file_dir)) or (if_exists=='replace'):
+        if (not self.check_file_exists(file_name, file_dir)) or (if_exists == 'replace'):
             self.dump_file(data, file_path)
         else:
             old = self.load_file(file_path)
-            new = data.append(~old[old.index.isin(data.index)]).sort_index()
+            new = data.append(old[~old.index.isin(data.index)]).sort_index()
             self.dump_file(new, file_path)
 
     # -------------------------工具函数-------------------------------------------

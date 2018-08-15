@@ -4,7 +4,7 @@ from fastcache import clru_cache
 from FactorLib.data_source.wind_financial_data_api.params import *
 from FactorLib.data_source.wind_financial_data_api.data_loader import DataLoader, quarter2intdate, period_backward, avg
 from FactorLib.data_source.base_data_source_h5 import ncdb, tc
-from FactorLib.utils.tool_funcs import ensure_dir_exists
+from FactorLib.utils.tool_funcs import ensure_dir_exists, intcode_to_tradecode
 from FactorLib.data_source.helpers import handle_ids
 from FactorLib.utils.datetime_func import DateRange2Dates
 from pathlib import Path
@@ -457,6 +457,14 @@ class WindFinanceDB(WindDB):
         old = self.load_last_nyear(factor_name, back_nyear, start, end, dates, ids, quarter)
         return avg(old, new)
 
+    @property
+    def all_data(self):
+        try:
+            data = self.load_h5(self.table_id)
+        except FileNotFoundError as e:
+            data = self.load_csv(self.table_id)
+        return data
+
 
 class WindConsensusDB(WindFinanceDB):
     """Wind中国A股一致预期汇总数据库
@@ -610,7 +618,7 @@ class WindEarningEst(WindFinanceDB):
         else:
             return _wrap_add_quarter_year(data)
 
-    def save_data(self, data, table_id=None, if_exists='append'):
+    def save_data(self, data, table_id=None, if_exists='append', **kwargs):
         super(WindEarningEst, self).save_data(data, self.table_id, if_exists)
 
 
@@ -637,7 +645,7 @@ class WindIncomeSheet(WindFinanceDB):
             return self.add_quarter_year(data)
         return self._wrap_add_quarter_year(data)
 
-    def save_data(self, data, table_id=None, if_exists='append'):
+    def save_data(self, data, table_id=None, if_exists='append', **kwargs):
         super(WindIncomeSheet, self).save_data(data, self.table_id, if_exists)
 
     @handle_ids
@@ -768,7 +776,7 @@ class WindBalanceSheet(WindFinanceDB):
         new = self.data_loader.sq_avg(data, wind_id, dates, ids)
         return _reconstruct(new)
 
-    def save_data(self, data, table_id=None, if_exists='append'):
+    def save_data(self, data, table_id=None, if_exists='append', **kwargs):
         super(WindBalanceSheet, self).save_data(data, self.table_id, if_exists)
 
 
@@ -793,7 +801,7 @@ class WindProfitExpress(WindFinanceDB):
             return self.add_quarter_year(data)
         return self._wrap_add_quarter_year(data)
 
-    def save_data(self, data, table_id=None, if_exists='append'):
+    def save_data(self, data, table_id=None, if_exists='append', **kwargs):
         super(WindProfitExpress, self).save_data(data, self.table_id, if_exists)
 
 
@@ -828,7 +836,7 @@ class WindProfitNotice(WindFinanceDB):
             return self.add_quarter_year(data)
         return self._wrap_add_quarter_year(data)
 
-    def save_data(self, data, table_id=None, if_exists='append'):
+    def save_data(self, data, table_id=None, if_exists='append', **kwargs):
         super(WindProfitNotice, self).save_data(data, self.table_id, if_exists)
 
 
@@ -878,7 +886,7 @@ class WindAshareCapitalization(WindFinanceDB):
         r = data.mean(axis=1)
         return r.to_frame(wind_id)
 
-    def save_data(self, data, table_id=None, if_exists='append'):
+    def save_data(self, data, table_id=None, if_exists='append', **kwargs):
         super(WindAshareCapitalization, self).save_data(data, self.table_id, if_exists)
 
 
@@ -908,7 +916,7 @@ class WindAindexMembers(WindFinanceDB):
         data['in_date'] = data['in_date'].astype('int32')
         return data
 
-    def save_data(self, data, table_id=None, if_exists='append'):
+    def save_data(self, data, table_id=None, if_exists='append', **kwargs):
         super(WindAindexMembers, self).save_data(data, self.table_id, if_exists)
 
     @DateRange2Dates
@@ -958,7 +966,7 @@ class WindChangeWindcode(WindFinanceDB):
         data = _reconstruct(data)
         return data
 
-    def save_data(self, data, table_id=None, if_exists='append'):
+    def save_data(self, data, table_id=None, if_exists='append', **kwargs):
         super(WindChangeWindcode, self).save_data(data, self.table_id, if_exists)
 
     @property
@@ -995,7 +1003,7 @@ class WindIssuingDate(WindFinanceDB):
         data = _reconstruct(data)
         return data
 
-    def save_data(self, data, table_id=None, if_exists='append'):
+    def save_data(self, data, table_id=None, if_exists='append', **kwargs):
         super(WindIssuingDate, self).save_data(data, self.table_id, if_exists)
 
     @property
@@ -1034,7 +1042,7 @@ class WindAshareDesc(WindFinanceDB):
         data = _reconstruct(data)
         return data
 
-    def save_data(self, data, table_id=None, if_exists='append'):
+    def save_data(self, data, table_id=None, if_exists='append', **kwargs):
         super(WindAshareDesc, self).save_data(data, self.table_id, if_exists)
 
     @property
@@ -1070,7 +1078,7 @@ class MutualFundDesc(WindFinanceDB):
         data = _reconstruct(data)
         return data
 
-    def save_data(self, data, table_id=None, if_exists='replace'):
+    def save_data(self, data, table_id=None, if_exists='replace', **kwargs):
         super(MutualFundDesc, self).save_data(
             data, self.table_id, if_exists, save_format='csv', index=False)
 
@@ -1080,6 +1088,7 @@ class MutualFundDesc(WindFinanceDB):
         data['backend_ids'] = data['backend_ids'].fillna(0.0).apply(
             lambda x: str(int(x)).zfill(6))
         return data
+
 
 class MutualFundSector(WindFinanceDB):
     """共同基金基本资料"""
@@ -1115,7 +1124,7 @@ class MutualFundSector(WindFinanceDB):
         data = _reconstruct(data)
         return data
 
-    def save_data(self, data, table_id=None, if_exists='append'):
+    def save_data(self, data, table_id=None, if_exists='append', **kwargs):
         super(MutualFundSector, self).save_data(
             data, self.table_id, if_exists)
 
@@ -1175,7 +1184,7 @@ class WindStockRatingConsus(WindFinanceDB):
     """中国A股投资评级汇总"""
     table_name = u'中国A股投资评级汇总'
     table_id = 'stockratingconsus'
-    statement_type_map = {'263001000': 30, '263002000':90, '263003000':180}
+    statement_type_map = {'263001000': 30, '263002000': 90, '263003000': 180}
 
     def download_data(self, factors, _in=None, _between=None, _equal=None, **kwargs):
         """取数据"""
@@ -1261,16 +1270,75 @@ class MutualFundStockPortfolio(WindFinanceDB):
         return data
 
 
+class WindST(WindFinanceDB):
+    """ASHARE ST
+    特别处理类型包括：
+        1: 特别处理
+        2: 暂停上市
+        3: 特别转让服务(PT)
+        4: 退市整理
+        5: 创业板暂停上市风险警示
+        6: 退市
+    """
+    table_id = 'asharest'
+    table_name = u'中国A股特别处理'
+    statement_type_map = {'S': 1, 'Z': 2, 'P': 3,
+                          'L': 4, 'X': 5, 'T': 6}
+    name_type_map = {'特别处理': 1, '暂停上市': 2, '特别转让服务': 3,
+                     '退市整理': 4, '创业板暂停上市风险警示': 5, '退市': 6}
+
+    def download_data(self, factors, _in=None, _between=None, _equal=None, **kwargs):
+        """取数据"""
+
+        def _reconstruct(raw):
+            raw['IDs'] = raw['IDs'].astype('int32')
+            raw['remove_dt'] = raw['remove_dt'].fillna('21000000')
+            raw['remove_dt'] = raw['remove_dt'].astype('int32')
+            raw['stat_type'] = raw['stat_type'].map(self.statement_type_map)
+            raw['entry_dt'] = raw['entry_dt'].astype('int32')
+            return raw
+
+        def _wrapper(idata):
+            for i in idata:
+                i = _reconstruct(i)
+                yield i
+
+        data = self.load_factors(factors, self.table_name, _in, _between, _equal,
+                                 trade_code=True, **kwargs)
+        if isinstance(data, Iterator):
+            return _wrapper(data)
+        if data.empty:
+            return data
+        data = _reconstruct(data)
+        return data
+
+    def save_data(self, data, table_id=None, if_exists='append', **kwargs):
+        super(WindST, self).save_data(
+            data, self.table_id, if_exists)
+
+    def get_type_stocks(self, dates, stock_type='特别处理'):
+        """获取某种类型的股票"""
+        type_int = self.name_type_map[stock_type]
+        dates_int = pd.DatetimeIndex(dates).strftime("%Y%m%d").astype('int').values
+        rawdata = self.all_data.query("stat_type==@type_int")
+        entried = dates_int[:, None] >= rawdata['entry_dt'].values
+        removed = dates_int[:, None] < rawdata['remove_dt'].values
+        in_type = (entried & removed).astype('int')
+        rslt = pd.DataFrame(in_type,
+                            columns=rawdata.IDs.apply(intcode_to_tradecode).values,
+                            index=pd.DatetimeIndex(dates, name='date'))
+        rslt = rslt.stack().sort_index()
+        rslt = rslt[rslt == 1]
+        rslt.index.names = ['date', 'IDs']
+        return rslt
+
+
 if __name__ == '__main__':
     # from FactorLib.data_source.stock_universe import StockUniverse
     from datetime import datetime
-    wind = MutualFundStockPortfolio()
+    wind = WindST()
     wind.connectdb()
-    data = wind.download_data(
-        [u'持有股票市值占基金净值比例(%)', u'积极投资持有股票市值(元)',
-        u'积极投资持有股数(股)', u'积极投资持有股票市值占净资产比例(%)',
-         u'指数投资持有股票市值(元)', u'指数投资持有股数(股)', u'指数投资持有股票市值占净资产比例(%)',
-         u'占股票市值比', u'占流通股本比'], chunksize=100000)
+    data = wind.download_data(None)
     wind.save_data(data)
     # u = StockUniverse('000905')
     # ttm = wind.load_latest_period('净利润(不含少数股东损益)', ids=u, start='20170101', end='20171231')

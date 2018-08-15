@@ -60,34 +60,11 @@ def get_latest_report(start_date=None, end_date=None, dates=None, ids=None, quar
     return rslt
 
 
-def get_go_market_days(date, ids=None, unit='d'):
-    """已经上市天数"""
-    divider = {'d': 1, 'm': 30, 'y': 365}
-    if not isinstance(date, list):
-        dates = [date]
-    else:
-        dates = date
-    r = []
-    dates = pd.DatetimeIndex(dates).strftime("%Y%m%d")
-    for date in dates:
-        date_int = int(date)
-        date_dt = pd.to_datetime(date)
-        data = winddescription.all_data.query('delistdate > @date_int')
-        go_mkt_days = (date_dt - pd.to_datetime(data['listdate'].astype('str').values)) / pd.to_timedelta(divider[unit], 'd')
-        data['go_market_days'] = go_mkt_days
-        data['date'] = date_int
-        if ids is not None:
-            ids = np.asarray(ids).astype('int32')
-            data = data[data['IDs'].isin(ids)]
-        r.append(data[['IDs', 'date', 'go_market_days']])
-    r = pd.concat(r)
-    return _reconstruct(r.set_index(['date', 'IDs'])).sort_index()
-
-
 def load_newest(field_name, year, quarter, dates, ids=None):
     """包含业绩快报和正式财报的数据"""
     table_name, field_dict = _get_mapping(field_name)
     table_name, table_id = table_name.split('_')
     return
 
-__all__ = ['get_latest_report', 'get_go_market_days']
+
+__all__ = ['get_latest_report']

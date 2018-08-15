@@ -1,3 +1,4 @@
+# coding: utf-8
 import numpy as np
 from ..base_data_source_h5 import tc
 from .params import LOCAL_FINDB_PATH
