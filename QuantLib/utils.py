@@ -1,10 +1,9 @@
 # coding=utf-8
 import pandas as pd
 import numpy as np
-import statsmodels.api as sm
 from scipy.stats import norm, rankdata
 from FactorLib.riskmodel.riskmodel_data_source import RiskDataSource
-from FactorLib.data_source.base_data_source_h5 import data_source
+
 
 def __DropOutlierFixedRate__(data, **kwargs):
     """以固定比率截断一部分异常值

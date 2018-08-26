@@ -10,21 +10,20 @@ from multiprocessing import Lock
 from ..utils.datetime_func import Datetime2DateStr, DateStr2Datetime
 from ..utils.tool_funcs import ensure_dir_exists
 from ..utils.disk_persist_provider import DiskPersistProvider
-from filemanager import zip_dir, unzip_file
-from .helpers import handle_ids
+from .helpers import handle_ids, FIFODict
 
 lock = Lock()
 warnings.simplefilter('ignore', category=FutureWarning)
 
 
 class H5DB(object):
-    def __init__(self, data_path):
+    def __init__(self, data_path, max_cached_files=30):
         self.data_path = data_path
         self.feather_data_path = os.path.abspath(data_path+'/../feather')
         self.csv_data_path = os.path.abspath(data_path+'/../csv')
-        self.snapshots_path = os.path.abspath(data_path+'/../snapshots')
         self.data_dict = None
-        self._update_info()
+        self.cached_data = FIFODict(max_cached_files)
+        # self._update_info()
     
     def _update_info(self):
         factor_list = []
@@ -36,21 +35,108 @@ class H5DB(object):
                     factor_list.append([relpath, file[:-3]])
         self.data_dict = pd.DataFrame(
             factor_list, columns=['path', 'name'])
+
+    def _read_h5file(self, file_path, key):
+        if file_path in self.cached_data:
+            return self.cached_data[file_path]
+
+        lock.acquire()
+        try:
+            data = pd.read_hdf(file_path, key)
+            self.cached_data[file_path] = data
+            lock.release()
+            return self.cached_data[file_path]
+        except Exception as e:
+            lock.release()
+            raise e
+
+    def _save_h5file(self, data, file_path, key,
+                     complib='blosc', complevel=9,
+                     **kwargs):
+        try:
+            lock.acquire()
+            data.to_hdf(file_path, key=key, complib=complib,
+                        complevel=complevel, **kwargs)
+            if file_path in self.cached_data:
+                self.cached_data.update(file_path=data)
+            lock.release()
+        except Exception as e:
+            lock.release()
+            raise e
+
+    def _read_pklfile(self, file_path):
+        if file_path in self.cached_data:
+            return self.cached_data[file_path]
+        lock.acquire()
+        try:
+            d = pd.read_pickle(file_path)
+            self.cached_data[file_path] = d
+            lock.release()
+        except Exception as e:
+            lock.release()
+            raise e
+        return d
+
+    def _save_pklfile(self, data, file_dir, name, protocol=-1):
+        dumper = DiskPersistProvider(
+            os.path.join(self.data_path, file_dir.strip('/')))
+        file_path = os.path.join(
+            self.data_path, file_dir.strip('/'), name+'.pkl'
+        )
+        lock.acquire()
+        try:
+            dumper.dump(data, name, protocol)
+            if file_path in self.cached_data:
+                self.cached_data[file_path] = data
+        except Exception as e:
+            lock.release()
+            raise e
+        lock.release()
+
+    def _read_feather(self, file_path):
+        if file_path in self.cached_data:
+            return self.cached_data[file_path]
+        lock.acquire()
+        try:
+            d = pd.read_feather(file_path)
+            self.cached_data[file_path] = d
+            lock.release()
+        except Exception as e:
+            lock.release()
+            raise e
+        return d
+
+    def _save_feather(self, data, file_path):
+        lock.acquire()
+        try:
+            data.to_feather(file_path)
+            if file_path in self.cached_data:
+                self.cached_data.update(file_path=data)
+        except Exception as e:
+            lock.release()
+            raise e
+        lock.release()
+
+    def _delete_cached_factor(self, file_path):
+        if file_path in self.cached_data:
+            del self.cached_data[file_path]
     
     def set_data_path(self, path):
         self.data_path = path
-        self._update_info()
+        # self._update_info()
     
     # ---------------------------因子管理---------------------------------------
     # 查看因子是否存在
     def check_factor_exists(self, factor_name, factor_dir='/'):
-        return factor_name in self.data_dict[self.data_dict['path']==factor_dir]['name'].values
+        file_path = self.abs_factor_path(factor_dir, factor_name)
+        return os.path.isfile(file_path)
 
     # 删除因子
     def delete_factor(self, factor_name, factor_dir='/'):
         factor_path = self.abs_factor_path(factor_dir, factor_name)
         try:
             os.remove(factor_path)
+            self._delete_cached_factor(factor_path)
         except Exception as e:
             print(e)
             pass
@@ -58,15 +144,22 @@ class H5DB(object):
     
     # 列出因子名称
     def list_factors(self, factor_dir):
-        factors = self.data_dict[self.data_dict.path == factor_dir]['name']
-        return factors.tolist()
+        dir_path = os.path.join(self.data_path, factor_dir)
+        factors = [x for x in os.listdir(dir_path) if x.endswith('.h5')]
+        return factors
     
     # 重命名因子
     def rename_factor(self, old_name, new_name, factor_dir):
         factor_path = self.abs_factor_path(factor_dir, old_name)
-        factor_data = pd.read_hdf(factor_path, old_name).to_frame().rename(columns={old_name: new_name}).to_panel()
         temp_factor_path = self.abs_factor_path(factor_dir, new_name)
-        factor_data.to_hdf(temp_factor_path, new_name, complevel=9, complib='blosc')
+        if factor_path in self.cached_data:
+            factor_data = self.cached_data.pop(factor_path)
+            self.cached_data[temp_factor_path] = factor_data
+        else:
+            factor_data = self._read_h5file(factor_path, old_name). \
+                to_frame().rename(columns={old_name: new_name}).to_panel()
+            del self.cached_data[factor_path]
+        self._save_h5file(factor_data, temp_factor_path, factor_data.columns[0])
         self.delete_factor(old_name, factor_dir)
 
     # 新建因子文件夹
@@ -79,8 +172,9 @@ class H5DB(object):
         try:
             max_date = self.read_h5file_attr(factor_name, factor_path, 'max_date')
             min_date = self.read_h5file_attr(factor_name, factor_path, 'min_date')
-        except:
-            panel = pd.read_hdf(self.abs_factor_path(factor_path, factor_name))
+        except Exception:
+            panel = self._read_h5file(
+                self.abs_factor_path(factor_path, factor_name), key='data')
             if isinstance(panel, pd.Panel):
                 min_date = Datetime2DateStr(panel.major_axis.min())
                 max_date = Datetime2DateStr(panel.major_axis.max())
@@ -93,7 +187,7 @@ class H5DB(object):
     def read_h5file_attr(self, factor_name, factor_path, attr_name):
         attr_file_path = self.abs_factor_attr_path(factor_path, factor_name)
         if os.path.isfile(attr_file_path):
-            return pd.read_pickle(attr_file_path)[attr_name]
+            return self._read_pklfile(attr_file_path)[attr_name]
         else:
             raise FileNotFoundError('找不到因子属性文件!')
 
@@ -104,7 +198,7 @@ class H5DB(object):
             dates = idx.index.get_level_values('date').unique()
             return self.load_factor(factor_name, factor_dir=factor_dir, dates=dates).reindex(idx.index, copy=False)
         factor_path = self.abs_factor_path(factor_dir, factor_name)
-        panel = pd.read_hdf(factor_path, factor_name)
+        panel = self._read_h5file(factor_path, factor_name)
         if (ids is not None) and (not isinstance(ids, list)):
             ids = [ids]
         if dates is None and ids is None:
@@ -132,38 +226,36 @@ class H5DB(object):
         """读取h5File"""
         attr_file_path = self.data_path + path + file_name + '_attr.pkl'
         file_path = self.abs_factor_path(path, file_name)
-        try:
-            lock.acquire()
-            try:
-                attr = pd.read_pickle(attr_file_path)
-                fill_value = attr['fill_value']
-                multiplier = attr['multiplier']
-            except FileNotFoundError as e:
-                fill_value = kwargs.get('fill_value', 100)
-                multiplier = kwargs.get('multiplier', 100)
 
-            data = pd.read_hdf(file_path, group)
-            all_dates = data.index.get_level_values('date').unique()
-            all_ids = data.index.get_level_values('IDs').unique()
-            if idx is not None:
-                data = data.reindex(idx.index)
+        # 读取meta data
+        try:
+            attr = self._read_pklfile(attr_file_path)
+            multiplier = attr['multiplier']
+        except FileNotFoundError:
+            multiplier = kwargs.get('multiplier', 100)
+
+        data = self._read_h5file(file_path, group)
+        all_dates = data.index.get_level_values('date').unique()
+        all_ids = data.index.get_level_values('IDs').unique()
+        if idx is not None:
+            data = data.reindex(idx.index)
+        else:
+            if dates is not None:
+                dates = pd.DatetimeIndex(dates).intersection(all_dates)
             else:
-                if dates is not None:
-                    dates = pd.DatetimeIndex(dates).intersection(all_dates)
-                else:
-                    dates = all_dates
-                    # data = data.loc[pd.DatetimeIndex(dates).values].copy()
-                if ids is not None:
-                    # data = data.loc[pd.IndexSlice[:, list(ids)], :]
-                    ids = np.intersect1d(ids, all_ids)
-                else:
-                    ids = all_ids
-                idx = pd.MultiIndex.from_product([dates, ids], names=['date', 'IDs'])
-                data = data.reindex(idx)
-            data /= multiplier
-            data.replace(fill_value, np.nan, inplace=True)
-        finally:
-            lock.release()
+                dates = all_dates
+                # data = data.loc[pd.DatetimeIndex(dates).values].copy()
+            if ids is not None:
+                # data = data.loc[pd.IndexSlice[:, list(ids)], :]
+                ids = np.intersect1d(ids, all_ids)
+            else:
+                ids = all_ids
+            idx = pd.MultiIndex.from_product([dates, ids], names=['date', 'IDs'])
+            data = data.reindex(idx)
+        data /= multiplier
+
+        if callable(factor_names):
+            return data[[x for x in data.columns if factor_names(x)]]
         if factor_names is not None:
             return data[factor_names]
         return data
@@ -173,65 +265,60 @@ class H5DB(object):
         """保存多列的DataFrame"""
         file_path = self.abs_factor_path(path, name)
         attr_file_path = self.data_path + path + name + '_attr.pkl'
-        try:
-            lock.acquire()
-            if os.path.isfile(attr_file_path):
-                attr = pd.read_pickle(attr_file_path)
-                multiplier = attr['multiplier']
-                fill_value = attr['fill_value']
-            data = (data.fillna(fill_value) * multiplier).astype('int')
-            ensure_dir_exists(os.path.dirname(file_path))
-            with pd.HDFStore(file_path, complib='blosc', complevel=9, mode='a') as store:
-                try:
-                    df = store.select(group)
-                    store.remove(group)
-                except KeyError as e:
-                    df = pd.DataFrame()
+
+        if os.path.isfile(attr_file_path):
+            attr = self._read_pklfile
+            multiplier = attr['multiplier']
+            fill_value = attr['fill_value']
+
+        data *= multiplier
+        ensure_dir_exists(os.path.dirname(file_path))
+        if not self.check_factor_exists(name, path):
+            self._save_h5file(data, file_path, group)
+            new_df = data
+        else:
+            df = self._read_h5file(file_path, group)
             new_df = df.append(data)
             new_df = new_df[~new_df.index.duplicated(keep='last')].sort_index()
-            ensure_dir_exists(self.data_path+path)
-            new_df.to_hdf(file_path, group, complib='blosc', complevel=9, mode='w')
-            persist_provider = DiskPersistProvider(self.data_path+path)
-            persist_provider.dump({'multiplier': multiplier, 'fill_value': fill_value,
-                                   'factors': new_df.columns.tolist(),
-                                   'max_date': new_df.index.get_level_values('date').max(),
-                                   'min_date': new_df.index.get_level_values('date').min()},
-                                  name=name+'_attr', protocol=2)
-        finally:
-            lock.release()
-    
+            self._save_h5file(data, file_path, group)
+        attr = {'multiplier': multiplier,
+                'fill_value': fill_value,
+                'factors': new_df.columns.tolist(),
+                'max_date': new_df.index.get_level_values('date').max(),
+                'min_date': new_df.index.get_level_values('date').min()
+                }
+        self._save_pklfile(attr, path, name+'_attr', protocol=2)
+
     def read_h5file(self, file_name, path, group='data'):
         file_path = self.abs_factor_path(path, file_name)
-        return pd.read_hdf(file_path, group)
+        return self._read_h5file(file_path, key=group)
 
     def save_h5file(self, data, name, path, group='data', mode='a'):
         file_path = self.abs_factor_path(path, name)
         if self.check_factor_exists(name, path) and mode != 'w':
-            with pd.HDFStore(file_path, complib='blosc', complevel=9) as store:
-                try:
-                    df = store.select(group)
-                    store.remove(group)
-                except KeyError as e:
-                    df = pd.DataFrame()
-                store[group] = df.append(data).drop_duplicates()
-        else:
-            data.to_hdf(file_path, group, complib='blosc', complevel=9, mode='w')
+            df = self.read_h5file(name, path, group=group)
+            data = df.append(data).drop_duplicates()
+        self._save_h5file(data, file_path, group)
 
     def list_h5file_factors(self, file_name, file_pth):
         """"提取h5File的所有列名"""
         attr_file_path = self.data_path + file_pth + file_name + '_attr.pkl'
         file_path = self.abs_factor_path(file_pth, file_name)
-        try:
+        if os.path.isfile(attr_file_path):
             attr = pd.read_pickle(attr_file_path)
             return attr['factors']
+        attr_file_path = self.data_path + file_pth + file_name + '_mapping.pkl'
+        try:
+            attr = pd.read_pickle(attr_file_path)
+            return attr
         except FileNotFoundError:
-            df = pd.read_hdf(file_path, "data", mode="r")
+            df = self._read_h5file(file_path, "data")
             return df.columns.tolist()
 
     def load_latest_period(self, factor_name, factor_dir=None, ids=None, idx=None):
         max_date = self.get_date_range(factor_name, factor_dir)[1]
-        return self.load_factor(factor_name, factor_dir, dates=[max_date], ids=ids, idx=idx).reset_index(level=0,
-                                                                                                         drop=True)
+        return self.load_factor(
+            factor_name, factor_dir, dates=[max_date], ids=ids, idx=idx).reset_index(level=0, drop=True)
 
     def load_factors(self, factor_names_dict, dates=None, ids=None):
         _l = []
@@ -245,40 +332,33 @@ class H5DB(object):
         """往数据库中写数据
         数据格式：DataFrame(index=[date,IDs],columns=data)
         """
-        try:
-            lock.acquire()
-            if factor_data.index.nlevels == 1:
-                if isinstance(factor_data.index, pd.DatetimeIndex):
-                    factor_data['IDs'] = '111111'
-                    factor_data.set_index('IDs', append=True, inplace=True)
-                else:
-                    factor_data['date'] = DateStr2Datetime('19000101')
-                    factor_data.set_index('date', append=True, inplace=True)
+        if factor_data.index.nlevels == 1:
+            if isinstance(factor_data.index, pd.DatetimeIndex):
+                factor_data['IDs'] = '111111'
+                factor_data.set_index('IDs', append=True, inplace=True)
+            else:
+                factor_data['date'] = DateStr2Datetime('19000101')
+                factor_data.set_index('date', append=True, inplace=True)
 
-            self.create_factor_dir(factor_dir)
-            for column in factor_data.columns:
-                factor_path = self.abs_factor_path(factor_dir, column)
-                if not self.check_factor_exists(column, factor_dir):
-                    factor_data[[column]].dropna().to_panel().to_hdf(factor_path, column, complevel=9, complib='blosc')
-                elif if_exists == 'append':
-                    old_panel = pd.read_hdf(factor_path, column)
-                    new_frame = old_panel.to_frame().append(factor_data[[column]].dropna())
-                    new_panel = new_frame[~new_frame.index.duplicated(keep='last')].to_panel()
-                    available_name = self.get_available_factor_name(column, factor_dir)
-                    new_panel.to_hdf(
-                        self.abs_factor_path(factor_dir, available_name), available_name, complevel=9, complib='blosc')
-                    self.delete_factor(column, factor_dir)
-                    self.rename_factor(available_name, column, factor_dir)
-                elif if_exists == 'replace':
-                    self.delete_factor(column, factor_dir)
-                    factor_data[[column]].dropna().to_panel().to_hdf(factor_path, column, complevel=9, complib='blosc')
-                else:
-                    self._update_info()
-                    raise KeyError("please make sure if_exists is valide")
-            self._update_info()
-            lock.release()
-        except Exception as e:
-            lock.release()
+        self.create_factor_dir(factor_dir)
+        for column in factor_data.columns:
+            factor_path = self.abs_factor_path(factor_dir, column)
+            if not self.check_factor_exists(column, factor_dir):
+                self._save_h5file(factor_data[[column]].dropna().to_panel(),
+                                  factor_path, column)
+            elif if_exists == 'append':
+                old_panel = self._read_h5file(factor_path, column)
+                new_frame = old_panel.to_frame().append(factor_data[[column]].dropna())
+                new_panel = new_frame[~new_frame.index.duplicated(keep='last')].to_panel()
+                available_name = self.get_available_factor_name(column, factor_dir)
+                self._save_h5file(new_panel,
+                                  self.abs_factor_path(factor_dir, available_name), available_name)
+                self.rename_factor(available_name, column, factor_dir)
+            elif if_exists == 'replace':
+                self._save_h5file(factor_data[[column]].dropna().to_panel(),
+                                  factor_path, column)
+            else:
+                raise KeyError("please make sure if_exists is valide")
 
     def save_as_dummy(self, factor_data, factor_dir, indu_name=None, if_exists='append'):
         """往数据库中存入哑变量数据
@@ -293,14 +373,10 @@ class H5DB(object):
         else:
             assert isinstance(factor_data, pd.DataFrame) and indu_name is not None
         factor_data = factor_data.drop('T00018', axis=0, level='IDs').fillna(0)
-        factor_data = factor_data.loc[(factor_data!=0).any(axis=1)]
+        factor_data = factor_data.loc[(factor_data != 0).any(axis=1)]
         file_pth = self.abs_factor_path(factor_dir, indu_name)
         if self.check_factor_exists(indu_name, factor_dir):
-            try:
-                lock.acquire()
-                mapping = pd.read_pickle(file_pth.replace('.h5', '_mapping.pkl'))
-            finally:
-                lock.release()
+            mapping = self._read_pklfile(file_pth.replace('.h5', '_mapping.pkl'))
             factor_data = factor_data.reindex(columns=mapping)
             new_saver = pd.DataFrame(np.argmax(factor_data.values, axis=1), columns=[indu_name],
                                      index=factor_data.index)
@@ -309,23 +385,12 @@ class H5DB(object):
                                      index=factor_data.index)
             mapping = factor_data.columns.values.tolist()
         self.save_factor(new_saver, factor_dir, if_exists=if_exists)
-        diskprovider = DiskPersistProvider(self.data_path+factor_dir)
-        try:
-            lock.acquire()
-            diskprovider.dump(mapping, indu_name+'_mapping', protocol=2)
-        finally:
-            lock.release()
+        self._save_pklfile(mapping, factor_dir, indu_name+'_mapping', protocol=2)
 
     def load_as_dummy(self, factor_name, factor_dir, dates=None, ids=None, idx=None):
         """读取行业哑变量"""
-        file_pth = self.abs_factor_path(factor_dir, factor_name)
         mapping_pth = self.data_path + factor_dir + factor_name + '_mapping.pkl'
-        try:
-            lock.acquire()
-            # mapping = pd.read_hdf(file_pth, "mapping", mode='r')
-            mapping = pd.read_pickle(mapping_pth)
-        finally:
-            lock.release()
+        mapping = self._read_pklfile(mapping_pth)
         data = self.load_factor(factor_name, factor_dir, dates=dates, ids=ids, idx=idx).dropna()
         dummy = np.zeros((len(data), len(mapping)))
         dummy[np.arange(len(data)), data[factor_name].values.astype('int')] = 1
@@ -341,9 +406,9 @@ class H5DB(object):
             factor_name = [factor_name]
         for f in factor_name:
             data = self.load_factor(f, factor_dir).reset_index()
-            data.to_feather(self.feather_data_path+factor_dir+f+'.feather')
+            self._save_feather(data, target_dir+f+'.feather')
 
-    def to_csv(self,factor_name, factor_dir):
+    def to_csv(self, factor_name, factor_dir):
         target_dir = self.csv_data_path + factor_dir
         ensure_dir_exists(target_dir)
         if factor_name is None:
@@ -361,65 +426,7 @@ class H5DB(object):
         if drop_right:
             self.delete_factor(right_name, right_dir)
 
-    def import_factor(self, factor_name, factor_dir, src_file):
-        fanme = os.path.split(src_file)[1].replace('.h5', '')
-        data = pd.read_hdf(src_file, fanme).to_frame().rename(columns={fanme: factor_name})
-        self.save_factor(data, factor_dir)
-
-    def snapshot(self, dates, zipname=None, mail=False):
-        """获取数据库快照并保存"""
-        self._update_info()
-        dates = list(dates)
-        date_now = max(dates).strftime("%Y%m%d")
-        if os.path.isdir(os.path.join(self.snapshots_path, date_now)):
-            shutil.rmtree(os.path.join(self.snapshots_path, date_now), True)
-        os.mkdir(os.path.join(self.snapshots_path, date_now))
-        target_path = os.path.join(self.snapshots_path, date_now)
-        for d in self.data_dict['path'].unique():
-            os.makedirs(target_path + d)
-        for idx, row in self.data_dict.iterrows():
-            file_path = self.abs_factor_path(row['path'], row['name'])
-            data = pd.read_hdf(file_path, row['name']).to_frame().reset_index()
-            snapshot = data[data['date'].isin(dates)]
-            if snapshot.empty:
-                snapshot = data[data['date']==data['date'].max()]
-            snapshot.to_csv(target_path+row['path']+row['name']+'.csv', index=False)
-        if zipname is not None:
-            zip_dir(target_path, os.path.join(self.snapshots_path, '%s_%s.zip'%(date_now, zipname)))
-        if mail:
-            from mailing.mailmanager import mymail
-            mymail.connect()
-            mymail.login()
-            content = "hello everyone, this is factor data on %s"%date_now
-            attachment = os.path.join(self.snapshots_path, '%s_%s.zip'%(date_now, zipname))
-            try:
-                mymail.send_mail("base factor data on %s"%date_now, content, {attachment})
-            except:
-                mymail.connect()
-                mymail.send_mail("base factor data on %s" % date_now, content, {attachment})
-            mymail.quit()
-
-    def read_snapshot(self, name):
-        snapshotzip = self.snapshots_path+"/%s"%name
-        unzip_file(snapshotzip, snapshotzip.replace('.zip',''))
-        snapshotdir = snapshotzip.replace('.zip','')
-        for dirpath, subdirs, filenames in os.walk(snapshotdir):
-            factor_dir = '/%s/'%os.path.relpath(dirpath, snapshotdir).replace('\\','/')
-            for file in filenames:
-                print(file)
-                if file.endswith(".csv"):
-                    try:
-                        data = pd.read_csv(os.path.join(dirpath, file), converters={'IDs':str}, parse_dates=['date'])
-                    except:
-                        data = pd.read_csv(os.path.join(dirpath, file), converters={'IDs':str}, encoding="GBK", parse_dates=['date'])
-                    data['IDs'] = data['IDs'].str.zfill(6)
-                    data.set_index(['date', 'IDs'], inplace=True)
-                    if data.columns.isin(['list_date', 'backdoordate']).any():
-                        data = data.astype('str')
-                    self.save_factor(data, factor_dir)
-
-
-    #-------------------------工具函数-------------------------------------------
+    # -------------------------工具函数-------------------------------------------
     def abs_factor_path(self, factor_path, factor_name):
         return self.data_path + os.path.join(factor_path, factor_name+'.h5')
 

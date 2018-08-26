@@ -1,7 +1,7 @@
 # coding: utf-8
 from FactorLib.data_source.base_data_source_h5 import sec, data_source
 from QuantLib.stockFilter import _intersection, _difference, _union
-from  warnings import warn
+from warnings import warn
 import re
 import os
 import pandas as pd
@@ -78,8 +78,10 @@ class StockDummy(object):
             drop_first=False):
         """获取哑变量数据"""
         # dates = tc.get_trade_days(start_date, end_date) if dates is None else dates
-        dummy = data_source.sector.get_industry_dummy(ids=universe, start_date=start_date, end_date=end_date,
-                                                      idx=idx, industry=self.name, drop_first=drop_first)
+        dummy = data_source.sector.get_industry_dummy(ids=universe, start_date=start_date,
+                                                      end_date=end_date, dates=dates,
+                                                      idx=idx, industry=self.name,
+                                                      drop_first=drop_first)
         return dummy
 
     def get_stocks_of_single_field(self, field_name, start_date=None, end_date=None,
