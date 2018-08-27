@@ -159,7 +159,7 @@ class H5DB(object):
             factor_data = self._read_h5file(factor_path, old_name). \
                 to_frame().rename(columns={old_name: new_name}).to_panel()
             del self.cached_data[factor_path]
-        self._save_h5file(factor_data, temp_factor_path, factor_data.columns[0])
+        self._save_h5file(factor_data, temp_factor_path, new_name)
         self.delete_factor(old_name, factor_dir)
 
     # 新建因子文件夹
@@ -267,7 +267,7 @@ class H5DB(object):
         attr_file_path = self.data_path + path + name + '_attr.pkl'
 
         if os.path.isfile(attr_file_path):
-            attr = self._read_pklfile
+            attr = self._read_pklfile(attr_file_path)
             multiplier = attr['multiplier']
             fill_value = attr['fill_value']
 
