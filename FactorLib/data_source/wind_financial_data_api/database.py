@@ -110,6 +110,9 @@ class BaseDB(object):
         self.db_engine = create_engine(self.create_conn_string(
             self.user_name, self.password, self.db_name, self.ip_address, self.port, self.db_type))
         self.db_inspector = sa.inspect(self.db_engine)
+    
+    def disconnectdb(self):
+        self.db_engine.dispose()
 
     @staticmethod
     def create_conn_string(user_name, pass_word, db_name, ip_address, port, db_type):
@@ -1333,12 +1336,68 @@ class WindST(WindFinanceDB):
         return rslt
 
 
+class AshareAudit(WindFinanceDB):
+    """中国A股审计意见"""
+    table_id = 'ashareauditopinion'
+    table_name = u'中国A股审计意见'
+    statement_type_map = {405001000: '标准无保留意见', 405002000: '带强调事项的无保留意见',
+                          405010000: '基本不保留意见', 405004000: '否定意见',
+                          405005000: '无法表示意见'}
+    
+    def download_data(self, factors, _in=None, _between=None, _equal=None, **kwargs):
+        """取数据"""
+
+        def _reconstruct(raw):
+            raw.dropna(inplace=True)
+            raw['IDs'] = raw['IDs'].astype('int32')
+            raw['quarter'] = pd.to_datetime(raw['date']).dt.quarter
+            raw['year'] = pd.to_datetime(raw['date']).dt.year
+            raw['date'] = raw['date'].astype('int32')
+            raw['ann_dt'] = raw['ann_dt'].astype('int32')
+            raw['s_stmnote_audit_category'] = raw['s_stmnote_audit_category'].astype(
+                'int32')
+            raw = raw.sort_values(['IDs', 'date', 'ann_dt']).astype('int32')
+            return raw
+
+        def _wrapper(idata):
+            for i in idata:
+                i = _reconstruct(i)
+                yield i
+
+        data = self.load_factors(factors, self.table_name, _in, _between, _equal,
+                                 trade_code=True, **kwargs)
+        if isinstance(data, Iterator):
+            return _wrapper(data)
+        if data.empty:
+            return data
+        data = _reconstruct(data)
+        return data
+    
+    def save_data(self, data, table_id=None, if_exists='append', **kwargs):
+        super(AshareAudit, self).save_data(
+            data, self.table_id, if_exists)
+    
+    @clru_cache()
+    def load_h5(self, file_name):
+        try:
+            wind_id = self.data_dict.wind_factor_ids(
+                self.table_name, file_name)
+        except KeyError:
+            wind_id = self.table_id
+        data_pth = os.path.join(LOCAL_FINDB_PATH, self.table_id, wind_id+'.h5')
+        data = pd.read_hdf(data_pth, "data")
+        data['s_stmnote_audit_category'] = data['s_stmnote_audit_category'].map(
+            self.statement_type_map)
+        return data
+
+
+
 if __name__ == '__main__':
     # from FactorLib.data_source.stock_universe import StockUniverse
     from datetime import datetime
-    wind = WindST()
+    wind = AshareAudit()
     wind.connectdb()
-    data = wind.download_data(None)
+    data = wind.download_data([u'审计结果类别代码'])
     wind.save_data(data)
     # u = StockUniverse('000905')
     # ttm = wind.load_latest_period('净利润(不含少数股东损益)', ids=u, start='20170101', end='20171231')

@@ -9,7 +9,7 @@ class UqerDB(object):
     """优矿Online数据库封装"""
     _instance = None
 
-    def __init__(self, token="cc064ffebf0f0ad781f6127c7d84cade916f373946f481ea12d80006be7f4d64"):
+    def __init__(self, token="e6d97555184894b4ed38864e854caa0888967d87e5e3d6300c455525eeea5f63"):
         self.token = token
         self.client = None
 
