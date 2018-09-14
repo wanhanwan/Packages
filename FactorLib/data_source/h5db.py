@@ -56,9 +56,9 @@ class H5DB(object):
         try:
             lock.acquire()
             data.to_hdf(file_path, key=key, complib=complib,
-                        complevel=complevel, **kwargs)
+                        mode='w', complevel=complevel, **kwargs)
             if file_path in self.cached_data:
-                self.cached_data.update(file_path=data)
+                self.cached_data.update({file_path: data})
             lock.release()
         except Exception as e:
             lock.release()
@@ -152,13 +152,9 @@ class H5DB(object):
     def rename_factor(self, old_name, new_name, factor_dir):
         factor_path = self.abs_factor_path(factor_dir, old_name)
         temp_factor_path = self.abs_factor_path(factor_dir, new_name)
-        if factor_path in self.cached_data:
-            factor_data = self.cached_data.pop(factor_path)
-            self.cached_data[temp_factor_path] = factor_data
-        else:
-            factor_data = self._read_h5file(factor_path, old_name). \
-                to_frame().rename(columns={old_name: new_name}).to_panel()
-            del self.cached_data[factor_path]
+
+        factor_data = self._read_h5file(factor_path, old_name). \
+            to_frame().rename(columns={old_name: new_name}).to_panel()
         self._save_h5file(factor_data, temp_factor_path, new_name)
         self.delete_factor(old_name, factor_dir)
 
@@ -273,14 +269,15 @@ class H5DB(object):
 
         data *= multiplier
         ensure_dir_exists(os.path.dirname(file_path))
-        if not self.check_factor_exists(name, path):
+        if_exists = kwargs.get('if_exists', 'append')
+        if (not self.check_factor_exists(name, path)) or (if_exists == 'replace'):
             self._save_h5file(data, file_path, group)
             new_df = data
         else:
             df = self._read_h5file(file_path, group)
             new_df = df.append(data)
             new_df = new_df[~new_df.index.duplicated(keep='last')].sort_index()
-            self._save_h5file(data, file_path, group)
+            self._save_h5file(new_df, file_path, group)
         attr = {'multiplier': multiplier,
                 'fill_value': fill_value,
                 'factors': new_df.columns.tolist(),
