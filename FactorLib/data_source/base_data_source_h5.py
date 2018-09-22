@@ -124,10 +124,13 @@ class base_data_source(object):
             data_shift = data.shift(1)
             return data / data_shift - 1
         dates.sort()
-        close_prices = self.get_history_price(ids, dates=dates, type=type).sort_index()
-        ret = close_prices.groupby('IDs', group_keys=False).apply(_cal_return)
+        close_prices = self.get_history_price(
+            ids, dates=dates, type=type, adjust=True).sort_index()
+        # ret = close_prices.groupby('IDs', group_keys=False).apply(_cal_return
+        close_flat = close_prices.iloc[:, 0].unstack()
+        ret = close_flat.pct_change().stack().to_frame('returns')
         ret.index.names = ['date', 'IDs']
-        ret.columns = ['returns']
+        # ret.columns = ['returns']
         return ret
 
     def get_history_bar(self, ids, start, end, adjust=False, type='stock', freq='1d'):

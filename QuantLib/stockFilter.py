@@ -106,6 +106,7 @@ def typical(stocklist):
         stocklist = func(stocklist)
     return stocklist
 
+
 def drop_st_suspend(stocklist):
     """
     剔除如下股票：
@@ -116,6 +117,21 @@ def drop_st_suspend(stocklist):
     """
     from functools import partial
     __funclist = [_dropst, partial(_drop_suspendtrading, hold_days=10)]
+    for func in __funclist:
+        stocklist = func(stocklist)
+    return stocklist
+
+
+def drop_new_st_suspend(stocklist):
+    """
+    剔除如下股票：
+        1. st
+        2. 最近10日内停牌
+        3. 上市不满6个月
+    """
+    from functools import partial
+    __funclist = [_dropst, partial(_drop_suspendtrading, hold_days=10),
+                  partial(_drop_newstocks, months=6)]
     for func in __funclist:
         stocklist = func(stocklist)
     return stocklist
@@ -192,6 +208,7 @@ def drop_false_growth(data, upper_limit=3.0, upper_type='v', use_data=None):
 
     to_drop = (filter_data.iloc[:, 0] > filter_data.iloc[:, 1]) & (merge['merge_acc'] == 1)
     return data[~data.index.isin(to_drop[to_drop == 1].index)]
+
 
 def drop_abnormal_growth(data, threshold=4):
     """剔除净利润异常增长的股票
