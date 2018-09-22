@@ -1,6 +1,6 @@
 # coding: utf-8
 # from FactorLib.data_source.stock_universe import StockUnivers
-from pandas import DataFrame, Series
+from pandas import DataFrame, Series, Index
 from functools import wraps
 from collections import OrderedDict
 
@@ -10,7 +10,7 @@ def handle_ids(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
         ids = kwargs.get('ids', None)
-        if not isinstance(ids, (list, DataFrame, Series)) and ids is not None:
+        if not isinstance(ids, (list, DataFrame, Series, Index)) and ids is not None:
             s = 'start_date'
             if 'start' in kwargs:
                 s = 'start'
