@@ -258,7 +258,9 @@ class H5DB(object):
 
     def save_multi_columns(self, data, path, name, group='data',
                            multiplier=100, fill_value=100, **kwargs):
-        """保存多列的DataFrame"""
+        """保存多列的DataFrame
+        目前fill_value参数不起作用。
+        """
         file_path = self.abs_factor_path(path, name)
         attr_file_path = self.data_path + path + name + '_attr.pkl'
 
