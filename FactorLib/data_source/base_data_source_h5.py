@@ -396,11 +396,17 @@ class sector(object):
         stock_name_listdate = self.h5DB.load_factors(factors, ids=ids)
         stock_name_listdate = stock_name_listdate.reset_index(level=0, drop=True)
 
-        stock_members = self.get_stock_industry_info(ids, dates=date).swaplevel()
-        stocks_members_wind = self.get_stock_industry_info(ids, dates=date, industry='中信二级').swaplevel()
+        stock_members = self.get_stock_industry_info(ids, dates=date)
+        stocks_members_wind = self.get_stock_industry_info(
+            ids, dates=date, industry='中信二级')
         members = pd.concat([stock_members, stocks_members_wind], axis=1)
-        stock_info = pd.merge(members, stock_name_listdate, left_index=True, right_index=True, how='left')
-        stock_info = stock_info.swaplevel()
+        members = members.reindex(pd.MultiIndex.from_product([pd.DatetimeIndex(date), ids],
+                                                             names=['date', 'IDs']))
+
+        stock_info = pd.merge(members,
+                              stock_name_listdate,
+                              left_index=True,
+                              right_index=True)
         return stock_info
 
     def get_latest_unst(self, dates, months=6):

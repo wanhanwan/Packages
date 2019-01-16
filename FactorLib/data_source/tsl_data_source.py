@@ -249,11 +249,16 @@ class TSLDBOnline(object):
     @DateRange2Dates
     def get_index_members(self, idx, start_date=None, end_date=None, dates=None):
         r = []
-        func = 'getBKMembers'
+        if idx == '全部A股':
+            func = 'getahis3'
+            _ = '_gstr_from_func(func, [dd])'
+        else:
+            func = 'getBKMembers'
+            _ = '_gstr_from_func(func, [dd, idx])'
         idx = "'%s'" % idx
         for d in dates:
             dd = d.strftime("%Y%m%d")
-            script_str = _gstr_from_func(func, [dd, idx])
+            script_str = eval(_, {'dd':dd, 'idx':idx, '_gstr_from_func': _gstr_from_func, 'func':func})
             data = tsl.RemoteExecute(script_str, {})
             data = parse1DArray(data, "IDs", 1)
             data['date'] = d
