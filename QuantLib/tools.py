@@ -23,4 +23,43 @@ def _np_rolling_window(array, window):
     return np.lib.stride_tricks.as_strided(array, shape=shape, strides=strides)
 
 
+class RollingResultWrapper(object):
+    def __init__(self, func):
+        self.rollingfunc = func
+        self.rlist = []
 
+    def reset(self):
+        self.rlist = []
+
+    def __call__(self, *args, **kwargs):
+        """pandas.DataFrame.rolling Wrapper
+        当func返回多个值的时候，自动返回一个DataFrame
+        """
+        rslt = self.rollingfunc(*args, **kwargs)
+        self.rlist.append(rslt)
+        return 1
+
+    @property
+    def df(self):
+        return pd.DataFrame(self.rlist)
+
+
+def expweighted(half_window, arr_len=None, arr=None, scale=False):
+    if arr is None:
+        arr = np.ones(arr_len)
+    w = 0.5 ** (np.arange(len(arr)) / half_window)
+    w = w[::-1]
+    if scale:
+        w /= w.sum()
+    if arr is None:
+        return w
+    return arr * w
+
+
+def save_excel(data_dict, file_name, date_format=None,
+               datetime_format=None):
+    with pd.ExcelWriter(file_name,
+                        date_format=date_format,
+                        datetime_format=datetime_format) as f:
+        for sheet_name, df in data_dict.items():
+            df.to_excel(f, sheet_name=sheet_name)

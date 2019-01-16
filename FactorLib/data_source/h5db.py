@@ -15,7 +15,6 @@ from .helpers import handle_ids, FIFODict
 lock = Lock()
 warnings.simplefilter('ignore', category=FutureWarning)
 
-
 class H5DB(object):
     def __init__(self, data_path, max_cached_files=30):
         self.data_path = data_path
@@ -35,11 +34,9 @@ class H5DB(object):
                     factor_list.append([relpath, file[:-3]])
         self.data_dict = pd.DataFrame(
             factor_list, columns=['path', 'name'])
-
     def _read_h5file(self, file_path, key):
         if file_path in self.cached_data:
             return self.cached_data[file_path]
-
         lock.acquire()
         try:
             data = pd.read_hdf(file_path, key)
