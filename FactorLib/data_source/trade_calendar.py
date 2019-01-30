@@ -41,15 +41,15 @@ class CustomBusinessWeekEnd(DateOffset):
 
     def __init__(self, n=1, normalize=False, weekmask='Mon Tue Wed Thu Fri',
                  holidays=None, calendar=None, **kwds):
-        self.n = n
-        self.normalized = normalize
+        object.__setattr__(self, "n", n)
+        object.__setattr__(self, "normalized", normalize)
         self.kwds.update(kwds)
-        self.offset = kwds.get('offset', timedelta(0))
-        self.cbday = CustomBusinessDay(n=1, normalize=normalize, weekmask=weekmask, holidays=holidays,
-                                       calendar=calendar, offset=self.offset)
-        self.calendar = self.cbday.calendar
-        self.holidays = holidays
-        self.w_offset = Week(weekday=4)
+        object.__setattr__(self, "offset", kwds.get('offset', timedelta(0)))
+        object.__setattr__(self, "cbday", CustomBusinessDay(n=1, normalize=normalize, weekmask=weekmask, holidays=holidays,
+                                                            calendar=calendar, offset=self.offset))
+        object.__setattr__(self, "calendar", self.cbday.calendar)
+        object.__setattr__(self, "holidays", holidays)
+        object.__setattr__(self, "w_offset", Week(weekday=4))
 
     @apply_wraps
     def apply(self, other):
@@ -85,17 +85,17 @@ class CustomBusinessQuaterEnd(QuarterOffset):
 
     def __init__(self, n=1, normalize=False, weekmask='Mon Tue Wed Thu Fri',
                  holidays=None, calendar=None, **kwds):
-        self.n = n
-        self.normalize = normalize
+        object.__setattr__(self, "n", n)
+        object.__setattr__(self, "normalized", normalize)
         self.kwds.update(kwds)
-        self.offset = kwds.get('offset', timedelta(0))
-        self.startingMonth = kwds.get('startingMonth', 3)
-        self.cbday = CustomBusinessDay(n=1, normalize=normalize, weekmask=weekmask, holidays=holidays,
-                                       calendar=calendar)
-        self.calendar = self.cbday.calendar
-        self.holidays = holidays
-        self.startingMonth = self.startingMonth
-        self.q_offset = QuarterEnd(1)
+        object.__setattr__(self, "offset", kwds.get('offset', timedelta(0)))
+        object.__setattr__(self, "startingMonth", kwds.get('startingMonth', 3))
+        object.__setattr__(self, "cbday", CustomBusinessDay(n=1, normalize=normalize, weekmask=weekmask, holidays=holidays,
+                                                            calendar=calendar))
+        object.__setattr__(self, "calendar", self.cbday.calendar)
+        object.__setattr__(self, "holidays", holidays)
+        object.__setattr__(self, "q_offset", QuarterEnd(1))
+
 
     @apply_wraps
     def apply(self, other):
@@ -129,19 +129,19 @@ class CustomBusinessYearEnd(YearOffset):
 
     def __init__(self, n=1, normalize=False, weekmask='Mon Tue Wed Thu Fri',
                  holidays=None, calendar=None, **kwds):
-        self.n = n
-        self.normalize = normalize
+        object.__setattr__(self, "n", n)
+        object.__setattr__(self, "normalized", normalize)
         self.kwds.update(kwds)
-        self.offset = kwds.get('offset', timedelta(0))
-        self.month = kwds.get('month', self._default_month)
+        object.__setattr__(self, "offset", timedelta(0))
+        object.__setattr__(self, "month", self._default_month)
         try:
             kwds.pop('month')
         except Exception as e:
             pass
-        self.cbday = CustomBusinessDay(n=1, normalize=normalize, weekmask=weekmask, holidays=holidays,
-                                       calendar=calendar, **kwds)
+        object.__setattr__(self, "cbday", CustomBusinessDay(n=1, normalize=normalize, weekmask=weekmask, holidays=holidays,
+                                                            calendar=calendar, **kwds))
         self.kwds['calendar'] = self.cbday.calendar
-        self.y_offset = YearEnd(1)
+        object.__setattr__(self, "y_offset", YearEnd(1))
 
     @apply_wraps
     def apply(self, other):
@@ -302,6 +302,20 @@ class trade_calendar(object):
         time_stamp = as_timestamp(day)
         return _to_offset(freq).onOffset(time_stamp)
 
+    def is_last_day_of_month(self, day):
+        timestamp = as_timestamp(day)
+        if not self.is_trade_day(timestamp):
+            return False
+        next_day = self.tradeDayOffset(timestamp, 1, retstr=None)
+        return timestamp.month < next_day.month or timestamp.year < next_day.year
+
+    def is_first_day_of_month(self, day):
+        timestamp = as_timestamp(day)
+        if not self.is_trade_day(timestamp):
+            return False
+        last_day = self.tradeDayOffset(timestamp, -1, retstr=None)
+        return timestamp.month > last_day.month or timestamp.year > last_day.year
+
     @handle_retstr
     def get_latest_trade_days(self, days, **kwargs):
         """
@@ -324,7 +338,9 @@ class trade_calendar(object):
         is_tradingtime = time(9, 25, 0) < date_time.time() < time(15, 0, 0)
         return is_tradingdate and is_tradingtime
 
+
 tc = trade_calendar()
+
 
 if __name__ == '__main__':
     d = tc.get_trade_time('20100101', '20100105', freq='1H')

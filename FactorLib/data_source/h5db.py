@@ -289,11 +289,16 @@ class H5DB(object):
         file_path = self.abs_factor_path(path, file_name)
         return self._read_h5file(file_path, key=group)
 
-    def save_h5file(self, data, name, path, group='data', mode='a'):
+    def save_h5file(self, data, name, path, group='data', mode='a',
+                    use_index=True):
         file_path = self.abs_factor_path(path, name)
         if self.check_factor_exists(name, path) and mode != 'w':
             df = self.read_h5file(name, path, group=group)
-            data = df.append(data).drop_duplicates()
+            data = df.append(data)
+            if use_index:
+                data = data[~data.index.duplicated(keep='last')]
+            else:
+                data.drop_duplicates(inplace=True)
         self._save_h5file(data, file_path, group)
 
     def list_h5file_factors(self, file_name, file_pth):
