@@ -21,3 +21,9 @@ def read_csv(file_path, **kwargs):
         print(e)
         raise ValueError("读取文件失败！")
     return data
+
+
+def write_excel(df_dict, file_path, **kwargs):
+    with pd.ExcelWriter(file_path, **kwargs) as f:
+        for df in df_dict:
+            df_dict[df].to_excel(f, sheet_name=df)

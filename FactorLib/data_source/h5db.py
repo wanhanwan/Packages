@@ -166,8 +166,12 @@ class H5DB(object):
             max_date = self.read_h5file_attr(factor_name, factor_path, 'max_date')
             min_date = self.read_h5file_attr(factor_name, factor_path, 'min_date')
         except Exception:
-            panel = self._read_h5file(
-                self.abs_factor_path(factor_path, factor_name), key='data')
+            try:
+                panel = self._read_h5file(
+                    self.abs_factor_path(factor_path, factor_name), key='data')
+            except KeyError:
+                panel = self._read_h5file(
+                    self.abs_factor_path(factor_path, factor_name), key=factor_name)
             if isinstance(panel, pd.Panel):
                 min_date = Datetime2DateStr(panel.major_axis.min())
                 max_date = Datetime2DateStr(panel.major_axis.max())
