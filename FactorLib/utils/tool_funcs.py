@@ -281,3 +281,29 @@ def get_resource_abs_path():
     curr_path = Path(__file__)
     tar_path = curr_path.parents[1] / 'resource'
     return tar_path
+
+
+def get_members_of_date(date, entry_dt_field, remove_dt_field, return_field, data):
+    """获取某一天的成分股
+    函数需要输入一张包含纳入纳出日期的表，在纳入纳出日期之间的数据会被作为结果输出.
+
+    Parameters:
+    ===========
+    date : str
+        需要哪天的成分股,"YYYYMMDD"
+    entry_dt_field : str
+        data中纳入日期对应的列名
+    remove_dt_field : str
+        data中纳出日期对应的列名
+    return_field : str
+        data中需要返回的列名
+    data : DataFrame
+        一张包含纳入纳出日期的表, index为股票6位数字代码(String)。
+    """
+    date = int(date)
+    data = data.sort_index()
+    data.index.name = 'IDs'
+    rslt = data.loc[(data[entry_dt_field]<=date)&
+                    ((data[remove_dt_field].isnull())|(data[remove_dt_field]>=date)),
+                    return_field]
+    return rslt

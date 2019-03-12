@@ -11,6 +11,8 @@ from ..utils.datetime_func import Datetime2DateStr, DateStr2Datetime
 from ..utils.tool_funcs import ensure_dir_exists
 from ..utils.disk_persist_provider import DiskPersistProvider
 from .helpers import handle_ids, FIFODict
+from .tseries import reindex_date_of_multiindex
+
 
 lock = Lock()
 warnings.simplefilter('ignore', category=FutureWarning)
@@ -141,8 +143,8 @@ class H5DB(object):
     
     # 列出因子名称
     def list_factors(self, factor_dir):
-        dir_path = os.path.join(self.data_path, factor_dir)
-        factors = [x for x in os.listdir(dir_path) if x.endswith('.h5')]
+        dir_path = self.data_path + factor_dir
+        factors = [x[:-3] for x in os.listdir(dir_path) if x.endswith('.h5')]
         return factors
     
     # 重命名因子
@@ -413,7 +415,7 @@ class H5DB(object):
             data = self.load_factor(f, factor_dir).reset_index()
             self._save_feather(data, target_dir+f+'.feather')
 
-    def to_csv(self, factor_name, factor_dir):
+    def to_csv(self, factor_name, factor_dir, dates=None):
         target_dir = self.csv_data_path + factor_dir
         ensure_dir_exists(target_dir)
         if factor_name is None:
@@ -421,8 +423,8 @@ class H5DB(object):
         elif isinstance(factor_name, str):
             factor_name = [factor_name]
         for f in factor_name:
-            data = self.load_factor(f, factor_dir).reset_index()
-            data.to_csv(self.csv_data_path + factor_dir + f + '.csv')
+            data = self.load_factor(f, factor_dir, dates=dates).reset_index()
+            data.to_csv(self.csv_data_path + factor_dir + f + '.csv', index=False)
 
     def combine_factor(self, left_name, left_dir, right_name, right_dir, drop_right=True):
         """把两个因子合并，并删除右边的因子"""

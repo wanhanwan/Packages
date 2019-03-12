@@ -153,3 +153,13 @@ def move_dtindex(dataframe, shift, freq):
     if is_ser:
         new_frame = new_frame.iloc[:, 0]
     return new_frame
+
+
+def reindex_date_of_multiindex(series, dates, method='ffill'):
+    """对一个具有多重索引的DataFrame进行日期重索引."""
+    if isinstance(series, pd.Series):
+        df = series.unstack()
+        new_df = df.reindex(dates, method=method).stack()
+    else:
+        raise NotImplementedError("reindexing a dataframe is not implemented.")
+    return new_df

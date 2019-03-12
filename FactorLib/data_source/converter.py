@@ -13,6 +13,9 @@ from ..const import (
                         WIND_INDUSTRY_DICT_REVERSE
 )
 
+# mapping: 字典，{String类型的Wind行业代码：行业中文名称}
+# convertfunc: Int类型行业代码转成String类型的Wind行业代码；
+# name2id_func: String类型的Wind行业代码转成Int类型行业代码
 Rule = namedtuple('Rule', ['mapping', 'convertfunc', 'name2id_func'])
 
 
@@ -41,8 +44,8 @@ SW_LEVEL_2_DICT, CS_LEVEL_2_DICT, divrsfd_finan_sw, divrsfd_finan_cs = read_indu
 class Converter(object):
     def __init__(self, rules):
         """初始化
-        每条规则下mapping代表代码(带有前缀或后缀)-名称，
-        unmapping代表名称-代码(带有前缀或后缀)
+        每条规则下mapping代表代码(带有前缀或后缀)-行业中文名称，
+        unmapping代表行业中文名称-代码(带有前缀或后缀)
         """
         self._rules = rules
         self.unmapping = {}
@@ -50,7 +53,11 @@ class Converter(object):
             self.unmapping[name] = {rule.mapping[x]: x for x in rule.mapping}
 
     def convert(self, name, data):
-        """行业代码转行业名称"""
+        """Int类型的行业代码转行业中文名称
+        对应rule.convertfunc
+
+        如果data的类型是Series, data.values应为Int类型行业代码。
+        """
         try:
             r = self._rules[name]
         except KeyError:
@@ -65,7 +72,15 @@ class Converter(object):
             return data
 
     def name2id(self, name, data):
-        """行业名称转行业代码"""
+        """行业Wind代码转Int类型行业代码
+
+        行业Wind代码，每种行业分类不尽相同。中信行业是CI开头加6位数字；
+        申万行业801开头的6位数字，详情见FactorLib/const.py
+
+        行业代码是int类型，对应rule.name2id_func
+
+        如果data的类型是Series, data.values应为String类型的Wind行业代码。
+        """
         try:
             r = self._rules[name]
             unmapping = self.unmapping[name]
