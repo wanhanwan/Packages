@@ -26,6 +26,11 @@ def encode_datetime(dt):
                               dt.hour, dt.minute, dt.second, 0)
 
 
+def decode_date(dt):
+    dt_decode = tsl.DecodeDate(dt)
+    return pd.Timestamp(*dt_decode)
+
+
 def run_script(script, sysparams):
     data = tsl.RemoteExecute(script, sysparams)
     return data
@@ -269,6 +274,21 @@ class TSLDBOnline(object):
         return data.set_index(['date', 'IDs'])
 
     @DateRange2Dates
+    def get_st(self, start_date=None, end_date=None, dates=None):
+        r = []
+        for d in dates:
+            dd = d.strftime("%Y%m%d")
+            script_str = _gstr_from_func('getST', [dd])
+            data = tsl.RemoteExecute(script_str, {})
+            data = parse1DArray(data, "IDs", 1)
+            data['date'] = d
+            r.append(data)
+        data = pd.concat(r)
+        data['sign'] = 1
+        data['IDs'] = data['IDs'].str[2:]
+        return data.set_index(['date', 'IDs'])
+
+    @DateRange2Dates
     def get_index_weight(self, idx, start_date=None, end_date=None, dates=None):
         r = []
         func = 'IndexWeightGet'
@@ -291,5 +311,5 @@ if __name__ == '__main__':
     dates = pd.DatetimeIndex(['20180619', '20180622'])
     # data = PanelQuery(field, start_date='20180101', end_date='20180110')
     a = TSLDBOnline()
-    data = a.get_index_members('中证红利', dates=list(dates))
+    data = a.get_st(dates=list(dates))
     print(data)
