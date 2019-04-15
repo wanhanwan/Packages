@@ -141,17 +141,6 @@ def typical_add_latest_st(stocklist, st_months):
     return _drop_latest_st(typical(stocklist), st_months)
 
 
-def realtime_trade_limit(stocklist):
-    """实时行情限制，剔除当日停牌和涨跌停的股票"""
-    from FactorLib.data_source.wind_plugin import realtime_quote
-    stock_ids = stocklist.index.get_level_values(1).tolist()
-    date = stocklist.index.get_level_values(0).unique().tolist()
-    data = realtime_quote(['rt_last', 'rt_susp_flag', 'rt_high_limit', 'rt_low_limit'], ids=stock_ids)
-    limit_stocks = data.query("rt_susp_flag%10 !=0.0 or abs(rt_last-rt_high_limit)<0.02 or abs(rt_last-rt_low_limit)<0.02")
-    limit_stocks.index = pd.MultiIndex.from_product([date, limit_stocks.index], names=['date', 'IDs'])
-    return _difference(stocklist, limit_stocks)
-
-
 def realtime_typical(stocklist):
     """
     剔除如下股票：
@@ -185,37 +174,3 @@ def realtime_typical2(stocklist):
         stocklist = func(stocklist)
     return stocklist
 
-
-def drop_false_growth(data, upper_limit=3.0, upper_type='v', use_data=None):
-    """
-    如果增长率数值大于阈值，并且最近一年发生过并购
-    行为，那么就剔除这些股票
-    """
-    from FactorLib.data_source.wind_financial_data_api import incomesheet
-    all_dates = data.index.get_level_values('date').unique()
-    merge = data_source.sector.get_index_members('merge_acc', dates=all_dates)
-    if use_data is None:
-        filter_data = incomesheet.load_incr_tb('净利润(不含少数股东损益)', n=1, dates=list(all_dates.strftime('%Y%m%d')))
-    else:
-        filter_data = use_data.reindex(data.index)
-
-    if upper_type == 'q':
-        limit = filter_data.groupby('date').quantile(1-upper_limit)
-        limit.columns = ['limit']
-        filter_data = filter_data.join(limit)
-    else:
-        filter_data['limit'] = upper_limit
-
-    to_drop = (filter_data.iloc[:, 0] > filter_data.iloc[:, 1]) & (merge['merge_acc'] == 1)
-    return data[~data.index.isin(to_drop[to_drop == 1].index)]
-
-
-def drop_abnormal_growth(data, threshold=4):
-    """剔除净利润异常增长的股票
-    通常剔除归属母公司净利润增速炒超过4倍的股票
-    """
-    from FactorLib.data_source.wind_financial_data_api import incomesheet
-    all_dates = data.index.unique(level='date')
-    inc_rate = incomesheet.load_incr_tb(u'净利润(不含少数股东损益)', n=1, dates=list(all_dates.strftime('%Y%m%d')))
-    to_drop = inc_rate[inc_rate['inc_rate']>threshold]
-    return data[~data.index.isin(to_drop.index)]

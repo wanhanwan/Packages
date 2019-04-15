@@ -1,13 +1,5 @@
 # coding: utf-8
 """一些工具函数"""
-from FactorLib.const import (INDUSTRY_NAME_DICT,
-                   SW_INDUSTRY_DICT,
-                   CS_INDUSTRY_DICT,
-                   SW_INDUSTRY_DICT_REVERSE,
-                   CS_INDUSTRY_DICT_REVERSE,
-                   WIND_INDUSTRY_DICT_REVERSE,
-                   WIND_INDUSTRY_DICT
-                   )
 import pandas as pd
 import os
 
@@ -119,62 +111,6 @@ def ensure_dir_exists(dir_path):
     if not os.path.isdir(dir_path):
         os.makedirs(dir_path)
     return dir_path
-
-
-def get_industry_names(industry_symbol, industry_info):
-    if industry_symbol == 'sw_level_1':
-        series = pd.Series(SW_INDUSTRY_DICT).to_frame().rename(columns={0:industry_symbol})
-        series.index = series.index.astype("int32")
-    elif industry_symbol == 'cs_level_1':
-        series = pd.Series(CS_INDUSTRY_DICT).to_frame().rename(columns={0: industry_symbol})
-        series.index = [int(x[2:]) for x in series.index]
-    elif industry_symbol == 'wind_level_1':
-        series = pd.Series(WIND_INDUSTRY_DICT).to_frame().rename(columns={0: industry_symbol})
-        series.index = [float(x) for x in series.index]
-    elif industry_symbol == 'cs_level_2':
-        level_2_excel = os.path.abspath(os.path.dirname(__file__) +'/..') + os.sep + "resource" + os.sep + "level_2_industry_dict.xlsx"
-        level_2_dict = pd.read_excel(level_2_excel, sheetname=industry_symbol, header=0)
-        level_2_dict['Code'] = level_2_dict['Code'].apply(lambda x: int(x[2:]))
-        series = level_2_dict.set_index('Code').rename(columns={'Name': industry_symbol})
-    elif industry_symbol == 'sw_level_2':
-        level_2_excel = os.path.abspath(os.path.dirname(__file__) +'/..') + os.sep + "resource" + os.sep + "level_2_industry_dict.xlsx"
-        level_2_dict = pd.read_excel(level_2_excel, sheetname=industry_symbol, header=0)
-        level_2_dict['Code'] = level_2_dict['Code'].apply(int)
-        series = level_2_dict.set_index('Code').rename(columns={'Name': industry_symbol})
-    industry_info.columns = ['industry_code']
-    return industry_info.join(series, on='industry_code', how='left')[[industry_symbol]]
-
-
-def get_industry_code(industry_symbol, industry_info):
-    if industry_symbol in ['sw_level_2', 'cs_level_2']:
-        level_2_excel = "D:/Packages/FactorLib" + os.sep + "resource" + os.sep + "level_2_industry_dict.xlsx"
-        level_2_dict = pd.read_excel(level_2_excel, sheetname=industry_symbol, header=0)
-    industry_info.columns = ['industry_code']
-    if industry_symbol == 'cs_level_2':
-        level_2_dict['Code'] = level_2_dict['Code'].apply(lambda x: int(x[2:]))
-        series = level_2_dict.set_index('Name').rename(columns={'Code': industry_symbol})
-        return industry_info.join(series, on='industry_code', how='left')[[industry_symbol]]
-    elif industry_symbol == 'sw_level_2':
-        level_2_dict['Code'] = level_2_dict['Code'].apply(int)
-        series = level_2_dict.set_index('Name').rename(columns={'Code': industry_symbol})
-        temp = industry_info.join(series, on='industry_code', how='left')[[industry_symbol]]
-        temp = temp.unstack().fillna(method='backfill').stack().astype('int32')
-        return temp
-    elif industry_symbol == 'sw_level_1':
-        industry_info[industry_symbol] = industry_info['industry_code'].map(SW_INDUSTRY_DICT_REVERSE)
-        industry_info.dropna(inplace=True)
-        industry_info[industry_symbol] = industry_info[industry_symbol].str[:6].astype('int32')
-        return industry_info[[industry_symbol]]
-    elif industry_symbol == 'cs_level_1':
-        industry_info[industry_symbol] = industry_info['industry_code'].map(CS_INDUSTRY_DICT_REVERSE)
-        industry_info.dropna(inplace=True)
-        industry_info[industry_symbol] = industry_info[industry_symbol].str[2:].astype('int32')
-        return industry_info[[industry_symbol]]
-    elif industry_symbol == 'wind_level_1':
-        industry_info[industry_symbol] = industry_info['industry_code'].map(WIND_INDUSTRY_DICT_REVERSE)
-        industry_info.dropna(inplace=True)
-        industry_info[industry_symbol] = industry_info[industry_symbol].str[:6].astype('int32')
-        return industry_info[[industry_symbol]]
 
 
 # 将某报告期回溯N期
@@ -301,9 +237,19 @@ def get_members_of_date(date, entry_dt_field, remove_dt_field, return_field, dat
         一张包含纳入纳出日期的表, index为股票6位数字代码(String)。
     """
     date = int(date)
-    data = data.sort_index()
+    # data = data.sort_index()
     data.index.name = 'IDs'
     rslt = data.loc[(data[entry_dt_field]<=date)&
                     ((data[remove_dt_field].isnull())|(data[remove_dt_field]>=date)),
                     return_field]
+    return rslt
+
+
+def get_members_of_dates(dates, entry_dt_field, remove_dt_field, return_field, data):
+    """获取某个时间序列的指数成分股"""
+    all_ids = data.index.unique()
+    rslt = pd.DataFrame(index=dates, columns=all_ids, dtype='O')
+    for dt in dates:
+        idata = get_members_of_date(dt, entry_dt_field, remove_dt_field, return_field, data)
+        rslt.loc[dt, :] = idata
     return rslt
