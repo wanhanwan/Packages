@@ -54,12 +54,3 @@ def expweighted(half_window, arr_len=None, arr=None, scale=False):
     if arr is None:
         return w
     return arr * w
-
-
-def save_excel(data_dict, file_name, date_format=None,
-               datetime_format=None):
-    with pd.ExcelWriter(file_name,
-                        date_format=date_format,
-                        datetime_format=datetime_format) as f:
-        for sheet_name, df in data_dict.items():
-            df.to_excel(f, sheet_name=sheet_name)
