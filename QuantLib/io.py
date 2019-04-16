@@ -27,3 +27,13 @@ def write_excel(df_dict, file_path, **kwargs):
     with pd.ExcelWriter(file_path, **kwargs) as f:
         for df in df_dict:
             df_dict[df].to_excel(f, sheet_name=df)
+
+
+def read_wind_excel(file_name, usecols=None):
+    """读取Wind插件提取的Excel数据"""
+    data = pd.read_excel(file_name, header=0, index_col=0,
+                         parse_dates=True, skiprows=[1,2,3])
+    data.index.name = 'date'
+    if usecols is not None:
+        return data[list(usecols)].rename(columns=usecols)
+    return data
