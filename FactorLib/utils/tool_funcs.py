@@ -1,7 +1,8 @@
 # coding: utf-8
 """一些工具函数"""
 import pandas as pd
-import os
+import numpy as np
+from ..const import INDUSTRY_NAME_DICT
 
 
 try:
@@ -21,30 +22,6 @@ def parse_industry(industry):
 
 def anti_parse_industry(industry):
     return dict_reverse(INDUSTRY_NAME_DICT)[industry]
-
-
-def write_df_to_excel(sheet, start_point, df, index=True, columns=True):
-    if index:
-        df = df.reset_index()
-    df_shape = df.shape
-    if columns:
-        for i, x in enumerate(df.columns):
-            _ = sheet.cell(column=start_point[1]+i, row=start_point[0],
-                           value=x)
-            if isinstance(x, pd.Timestamp):
-                _.number_format = 'yyyy/mm/dd'
-        start_point = (start_point[0]+1,start_point[1])
-    for r in range(df_shape[0]):
-        for c in range(df_shape[1]):
-            col = start_point[1] + c
-            row = start_point[0] + r
-            _ = sheet.cell(column=col, row=row, value=df.iloc[r, c])
-            if isinstance(df.iloc[r, c], (int, float)):
-                _.number_format = '0.000'
-            elif isinstance(df.iloc[r, c], pd.Timestamp):
-                _.number_format = 'yyyy/mm/dd'
-    end_point = (start_point[0] + df_shape[0]-1, start_point[1] + df_shape[1]-1)
-    return end_point
 
 
 def tradecode_to_windcode(tradecode):
@@ -113,21 +90,6 @@ def ensure_dir_exists(dir_path):
     return dir_path
 
 
-# 将某报告期回溯N期
-def RollBackNPeriod(report_date, n_period):
-    Date = report_date
-    for i in range(1,n_period+1):
-        if Date[-4:]=='1231':
-            Date = Date[0:4]+'0930'
-        elif Date[-4:]=='0930':
-            Date = Date[0:4]+'0630'
-        elif Date[-4:]=='0630':
-            Date = Date[0:4]+'0331'
-        elif Date[-4:]=='0331':
-            Date = str(int(Date[0:4])-1)+'1231'
-    return Date
-
-
 # 在一个日期区间中可能发布的财务报告的报告期
 def ReportDateAvailable(start_date, end_date):
     def _(date):
@@ -139,34 +101,17 @@ def ReportDateAvailable(start_date, end_date):
             return date[:4] + '0930'
         else:
             return date
-    report_dates = pd.date_range(_(start_date), _(end_date), freq='Q')
-    return report_dates.strftime("%Y%m%d")
-
-
-# 对财务数据进行重新索引
-def financial_data_reindex(data, idx):
-    idx2 = idx.reset_index(level=1)
-    idx2.index = pd.DatetimeIndex(idx2.index)
-    new_data = idx2.join(data, on=['max_report_date', 'IDs'])
-    return new_data.set_index('IDs', append=True)
+    if start_date !=  end_date:
+        report_dates = pd.date_range(_(start_date), _(end_date), freq='Q')
+        return report_dates.strftime("%Y%m%d")
+    else:
+        return _(start_date)
 
 
 # 某个时间区间内的所有报告期(季度)
 def get_all_report_periods(start, end):
     periods = pd.date_range(start, end, freq='Q', name='date')
     return periods
-
-
-# 更新dict
-def deep_update_dict(from_dict, to_dict):
-    import collections
-    for (key, value) in from_dict.items():
-        if (key in to_dict.keys() and
-                isinstance(to_dict[key], collections.Mapping) and
-                isinstance(value, collections.Mapping)):
-            deep_update_dict(value, to_dict[key])
-        else:
-            to_dict[key] = value
 
 
 def distribute_equal(n, m):
@@ -177,30 +122,6 @@ def distribute_equal(n, m):
     for i in range(Remainder):
         Res[i] += 1
     return Res
-
-
-# 在给定的字符串列表str_list中寻找第一个含有name_list中给定字符串的字符串名字,如果没有找到，返回str_list的第一个元素
-def searchNameInStrList(str_list, name_list):
-    Rslt = None
-    for iStr in str_list:
-        for iNameStr in name_list:
-            if iStr.find(iNameStr) != -1:
-                Rslt = iStr
-                break
-        if Rslt is not None:
-            break
-    if Rslt is None:
-        Rslt = str_list[0]
-    return Rslt
-
-
-# 生成多维索引
-def generate_mulindex(method='product', **kwargs):
-    if method == 'product':
-        return pd.MultiIndex.from_product(kwargs.values(), names=list(kwargs))
-    elif method == 'array':
-        return pd.MultiIndex.from_arrays(kwargs.values(), names=list(kwargs))
-    raise KeyError
 
 
 # 返回一个可用名称
@@ -253,3 +174,15 @@ def get_members_of_dates(dates, entry_dt_field, remove_dt_field, return_field, d
         idata = get_members_of_date(dt, entry_dt_field, remove_dt_field, return_field, data)
         rslt.loc[dt, :] = idata
     return rslt
+
+
+def dummy2name(dummy):
+    """Dummy变量转换成对应的哑变量名称
+    Paramters:
+    ==========
+    dummy: DataFrame
+        哑变量，索引是二维索引。
+    """
+    columns = dummy.columns
+    names = dummy.apply(lambda x: columns[np.where(x)[0][0]], axis=1, raw=True)
+    return names

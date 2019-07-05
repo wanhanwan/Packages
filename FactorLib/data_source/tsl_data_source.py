@@ -35,6 +35,10 @@ def run_script(script, sysparams):
     data = tsl.RemoteExecute(script, sysparams)
     return data
 
+def run_function(func_name, *args):
+    script_str = _gstr_from_func(func_name, args)
+    return run_script(script_str, {})
+
 
 def CsQuery(field_dict, end_date, bk_name=_ashare, stock_list=None, condition="1",
             code_transfer=True, **kwargs):

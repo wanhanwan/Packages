@@ -86,21 +86,48 @@ def parseCrossSection2DArray(TSData, date):
 
 
 def parse2DArray(TSData, column_decode=None, encoding='utf8'):
-    """解析天软二维数组"""
+    """解析天软二维数组
+    二维数组的第一列是股票代码(字符串)，行是指标名称
+    """
     if TSData[0] != 0:
         raise ValueError("天软数据提取失败！")
     data = pd.DataFrame(TSData[1])
-    data.rename(columns=lambda x: x.decode('utf8'), inplace=True)
+    data.rename(columns=lambda x: x.decode(encoding),
+                inplace=True)
     if column_decode:
         for column in column_decode:
             data[column] = data[column].str.decode(encoding)
     return data
 
 
-def parse1DArray(TSData, col_name, column_decode=None, encoding='utf8'):
+def parse1DArray(TSData, col_name, encoding='utf8'):
+    """解析天软的一维数组
+    一维数组的索引是股票代码(字符串), 例如：
+    arr := array();
+    arr['SZ000001'] := 0.01;
+    arr['SZ000002'] := 0.02;
+    """
     if TSData[0] != 0:
         raise ValueError("天软数据提取失败！")
-    data = pd.DataFrame(TSData[1], columns=[col_name])
+    data = pd.Series(TSData[1], name=col_name)
+    try:
+        data.rename(index=lambda x: x.decode(encoding), inplace=True)
+    except AttributeError:
+        pass
+    return data
+
+
+def parse2DArrayWithIDIndex(TSData, column_decode=None, encoding='utf8'):
+    """解析天软二维数组
+    二维数组的索引是股票代码(字符串)，行是指标名称
+    """
+    if TSData[0] != 0:
+        raise ValueError("天软数据提取失败！")
+    data = pd.DataFrame(TSData[1]).T
+    data.rename(columns=lambda x: x.decode(encoding),
+                index=lambda x: x.decode(encoding),
+                inplace=True)
     if column_decode:
-        data[col_name] = data[col_name].str.decode(encoding)
+        for column in column_decode:
+            data[column] = data[column].str.decode(encoding)
     return data
