@@ -2,10 +2,12 @@ import pandas as pd
 import numpy as np
 
 
-def df_rolling2(df, window, apply_func, *args, **kwargs):
+def df_rolling2(df, window, apply_func, raw=False, *args, **kwargs):
     arr = df.values
     temp = np.moveaxis(np_rolling_window(arr.T, window),0,-1)
     rslt = np.asarray([apply_func(x, *args, **kwargs) for x in temp], dtype='float')
+    if raw:
+        return rslt
     if rslt.ndim == 1:
         return pd.Series(rslt, index=df.index[-len(rslt):])
     return pd.DataFrame(rslt, index=df.index[-len(rslt):])
@@ -53,8 +55,9 @@ def expweighted(half_window, arr_len=None, arr=None, scale=False):
 def return2nav(ret_data, start_point=None):
     """收益转净值"""
     nav = (1.0 + ret_data).cumprod()
-    if start_point is not None:
-        nav.loc[start_point, :] = 1.0
+    if start_point is None:
+        start_point = ret_data.index.min() - pd.Timedelta(1, unit='D')
+    nav.loc[start_point, :] = 1.0
     nav.sort_index(inplace=True)
     nav.fillna(method='ffill', inplace=True)
     return nav

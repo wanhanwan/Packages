@@ -117,16 +117,21 @@ def parse1DArray(TSData, col_name, encoding='utf8'):
     return data
 
 
-def parse2DArrayWithIDIndex(TSData, column_decode=None, encoding='utf8'):
+def parse2DArrayWithIDIndex(TSData, column_decode=None, encoding='GBK'):
     """解析天软二维数组
     二维数组的索引是股票代码(字符串)，行是指标名称
     """
     if TSData[0] != 0:
         raise ValueError("天软数据提取失败！")
-    data = pd.DataFrame(TSData[1]).T
-    data.rename(columns=lambda x: x.decode(encoding),
-                index=lambda x: x.decode(encoding),
-                inplace=True)
+    data = pd.DataFrame(TSData[1])
+    if data.shape[0] < data.shape[1]:
+        data = data.T
+    try:
+        data.rename(columns=lambda x: x.decode(encoding),
+                    inplace=True)
+        data.rename(index=lambda x: x.decode(encoding), inplace=True)
+    except:
+        pass
     if column_decode:
         for column in column_decode:
             data[column] = data[column].str.decode(encoding)

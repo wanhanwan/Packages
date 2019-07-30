@@ -4,7 +4,7 @@ import pandas as pd
 from PkgConstVars import H5_PATH, FACTOR_PATH
 
 from ..utils.datetime_func import DateStr2Datetime
-from ..utils.tool_funcs import parse_industry
+from ..utils.tool_funcs import parse_industry, dummy2name
 from .converter import IndustryConverter
 from .csv_db import CsvDB
 from .h5db import H5DB
@@ -52,6 +52,12 @@ class Sector(object):
         data = self.h5DB.load_factor2(file_name, '/base/').sort_index()
         df = data.reindex(pd.DatetimeIndex(dates, name='date'), method='ffill').stack().to_frame('consWeight')
         return df
+    
+    def get_industry_members(self, industry_name, classification='中信一级', dates=None):
+        """某个行业的股票列表"""
+        dummy = self.get_industry_dummy(classification, dates=dates, drop_first=False)
+        df = dummy[dummy[industry_name]==1]
+        return dummy2name(df)
 
 
 h5 = H5DB(H5_PATH)
