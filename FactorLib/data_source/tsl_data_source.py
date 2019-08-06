@@ -11,7 +11,7 @@ from FactorLib.utils.TSDataParser import *
 from functools import reduce, partial
 
 
-_ashare = "'上证A股;深证A股;创业板;中小企业板;暂停上市;终止上市'"
+_ashare = "'上证A股;深证A股;创业板;中小企业板;科创板;暂停上市;终止上市'"
 _fund = "'上证基金;深证基金;开放式基金'"
 _condition = 'firstday()<=getsysparam(pn_date())'
 

@@ -17,6 +17,7 @@ from pandas.tseries.offsets import (DateOffset,
                                     )
 from functools import wraps
 from datetime import time, timedelta
+from fastcache import clru_cache
 
 
 _default_min_date = as_timestamp('20000101')
@@ -211,7 +212,7 @@ class trade_calendar(object):
 
     @handle_retstr
     def get_trade_days(self, start_date=None, end_date=None, freq='1d',
-                       reverse=False, **kwargs):
+                       reverse=False, begin_date=False, **kwargs):
         """
         获得日期序列，支持日历日和交易日。
 
@@ -229,6 +230,9 @@ class trade_calendar(object):
             result =  raw[::-n].sort_values()
         else:
             result = pd.date_range(start_date, end_date, freq=offset)
+        if begin_date and freq[-1]!='d':
+            tmp = [self.tradeDayOffset(x, -1, freq='1'+freq[-1]) for x in result]
+            result = pd.DatetimeIndex([self.tradeDayOffset(x, 1, retstr=None) for x in tmp])
         return result
 
     @handle_retstr
@@ -302,6 +306,7 @@ class trade_calendar(object):
         time_stamp = as_timestamp(day)
         return _to_offset(freq).onOffset(time_stamp)
 
+    @clru_cache()
     def is_last_day_of_month(self, day):
         timestamp = as_timestamp(day)
         if not self.is_trade_day(timestamp):
@@ -309,6 +314,7 @@ class trade_calendar(object):
         next_day = self.tradeDayOffset(timestamp, 1, retstr=None)
         return timestamp.month < next_day.month or timestamp.year < next_day.year
 
+    @clru_cache()
     def is_first_day_of_month(self, day):
         timestamp = as_timestamp(day)
         if not self.is_trade_day(timestamp):

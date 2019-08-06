@@ -55,8 +55,9 @@ def expweighted(half_window, arr_len=None, arr=None, scale=False):
 def return2nav(ret_data, start_point=None):
     """收益转净值"""
     nav = (1.0 + ret_data).cumprod()
-    if start_point is not None:
-        nav.loc[start_point, :] = 1.0
+    if start_point is None:
+        start_point = ret_data.index.min() - pd.Timedelta(1, unit='D')
+    nav.loc[start_point, :] = 1.0
     nav.sort_index(inplace=True)
     nav.fillna(method='ffill', inplace=True)
     return nav
