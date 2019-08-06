@@ -470,21 +470,20 @@ def Fillna_Barra(factor_data, factor_names, ref_name, classify_name):
     return factor_tofill
 
 
-def FillnaByMeanOrQuantile(factor_data, factor_names, ref_names=None, industry=None, fill_value='mean',
-                           drop_classification=True):
+def FillnaByMeanOrQuantile(factor_data, factor_names=None, ref_names=None, industry=None, fill_value='mean'):
     """以均值或者分位数填充缺失值"""
-    def fill_na(df, fill_df):
-        idx = df.index.droplevel('IDs')[0]
-        df = df.fillna(fill_df.loc[idx])
-        return df
+    def fill_avg(df):
+        return df.fillna(df.mean())
+    def fill_quantile(df, q):
+        return df.fillna(df.quantile(q))
 
-    if factor_names is None:
-        factor_names = factor_data.columns
     data_len = len(factor_data)
     groups = ['date']
     if ref_names is not None:
         factor_data = factor_data.dropna(subset=ref_names)
         groups += ref_names
+    if factor_names is not None:
+        factor_data = factor_data[factor_names]
     if industry is not None:
         from FactorLib.data_source.base_data_source_h5 import sec
         from FactorLib.utils.tool_funcs import dummy2name
@@ -492,18 +491,14 @@ def FillnaByMeanOrQuantile(factor_data, factor_names, ref_names=None, industry=N
                                            idx=factor_data,
                                            drop_first=False)
         indu_group = dummy2name(indu_flag).dropna()
-        factor_data = factor_data.join(indu_group.to_frame(industry), how='inner')
-        groups.append(industry)
-    factor_data.set_index([x for x in groups if x != 'date'], inplace=True, append=True)
+        factor_data = factor_data[factor_data.index.isin(indu_group.index)]
+        groups.append(indu_group)
     if fill_value == 'mean':
-        fills = factor_data.groupby(groups)[factor_names].mean()
+        df = factor_data.groupby(groups).transform(fill_avg)
     elif isinstance(fill_value, float):
-        fills = factor_data.groupby(groups)[factor_names].quantile(fill_value)
+        df = factor_data.groupby(groups).transform(fill_quantile, q=fill_value)
     else:
         raise NotImplementedError("fill_value must be 'mean' or a float number.")
-    df = factor_data.groupby(groups)[factor_names].apply(fill_na, fill_df=fills)
-    if drop_classification:
-        df.reset_index([x for x in groups if x!='date'], drop=True, inplace=True)
     loss = (data_len - len(factor_data)) / data_len
     print("data loss: %.2f"%loss)
     return df
