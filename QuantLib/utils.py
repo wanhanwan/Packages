@@ -470,6 +470,45 @@ def Fillna_Barra(factor_data, factor_names, ref_name, classify_name):
     return factor_tofill
 
 
+def FillnaByMeanOrQuantile(factor_data, factor_names, ref_names=None, industry=None, fill_value='mean',
+                           drop_classification=True):
+    """以均值或者分位数填充缺失值"""
+    def fill_na(df, fill_df):
+        idx = df.index.droplevel('IDs')[0]
+        df = df.fillna(fill_df.loc[idx])
+        return df
+
+    if factor_names is None:
+        factor_names = factor_data.columns
+    data_len = len(factor_data)
+    groups = ['date']
+    if ref_names is not None:
+        factor_data = factor_data.dropna(subset=ref_names)
+        groups += ref_names
+    if industry is not None:
+        from FactorLib.data_source.base_data_source_h5 import sec
+        from FactorLib.utils.tool_funcs import dummy2name
+        indu_flag = sec.get_industry_dummy(industry=industry,
+                                           idx=factor_data,
+                                           drop_first=False)
+        indu_group = dummy2name(indu_flag).dropna()
+        factor_data = factor_data.join(indu_group.to_frame(industry), how='inner')
+        groups.append(industry)
+    factor_data.set_index([x for x in groups if x != 'date'], inplace=True, append=True)
+    if fill_value == 'mean':
+        fills = factor_data.groupby(groups)[factor_names].mean()
+    elif isinstance(fill_value, float):
+        fills = factor_data.groupby(groups)[factor_names].quantile(fill_value)
+    else:
+        raise NotImplementedError("fill_value must be 'mean' or a float number.")
+    df = factor_data.groupby(groups)[factor_names].apply(fill_na, fill_df=fills)
+    if drop_classification:
+        df.reset_index([x for x in groups if x!='date'], drop=True, inplace=True)
+    loss = (data_len - len(factor_data)) / data_len
+    print("data loss: %.2f"%loss)
+    return df
+
+
 def Join_Factors(*factor_data, merge_names=None, new_name=None, weight=None, style='SAST'):
     """合并因子,按照权重进行加总。只将非缺失的因子的权重重新归一合成。
 
@@ -633,36 +672,6 @@ def NeutralizeBySizeIndu(factor_data, factor_name, std_qt=True, indu_name='中�
     return resid.reindex(factor_data.index)
 
 
-def NeutralizeByRiskFactors(factor_data, factor_name=None, risk_factor_names=None, indu_name='中信一级',
-                            risk_source='xy', std_indep=True, **kwargs):
-    """对因子进行风险中性化"""
-    if isinstance(factor_data, pd.Series):
-        factor_name = factor_data.name
-        factor_data = factor_data.to_frame()
-    assert isinstance(factor_data, pd.DataFrame) and (factor_name is not None)
-    risk_ds = RiskDataSource(risk_source)
-    all_risk_factors = risk_ds.list_factor_names('risk_factor', '/factorData/')
-    if risk_factor_names is None:
-        risk_factor_names = all_risk_factors
-    else:
-        risk_factor_names = [x for x in risk_factor_names if x in all_risk_factors]
-    style = risk_ds.load_style_factor(factor_names=risk_factor_names,
-                                      ids=factor_data.index.get_level_values('IDs').unique().tolist(),
-                                      dates=factor_data.index.get_level_values('date').unique().tolist())
-    if std_indep:
-        style = style.apply(lambda x: StandardByQT(x.to_frame(), x.name))
-    drop_first_indu = kwargs.get('drop_first_indu', True)
-    indu = data_source.sector.get_industry_dummy(idx=factor_data, industry=indu_name, drop_first=drop_first_indu)
-    # indu = indu[(indu==1).any(axis=1)]
-    X = style.join(indu, how='inner')
-    add_const = kwargs.get('add_const', True)
-    resid = Orthogonalize(factor_data, X,
-                          left_name=factor_name,
-                          right_name=X.columns.tolist(),
-                          add_const=add_const)
-    return resid
-
-
 def CalFactorCorr(*factor_data, factor_names=None, dates=None, ids=None, idx=None,
                   style='SAST', method='spearman'):
     """计算因子之间的截面相关系数矩阵
@@ -716,8 +725,9 @@ def CalFactorCorr(*factor_data, factor_names=None, dates=None, ids=None, idx=Non
 
 if __name__ == '__main__':
     from FactorLib.data_source.base_data_source_h5 import h5_2, tc
-    dates = tc.get_trade_days('20180101', '20190531', freq='1m')
-    value = h5_2.load_factor2('StyleFactor_ValueFactor', '/XYData/StyleFactor/')
-    growth = h5_2.load_factor2('StyleFactor_GrowthFactor', '/XYData/StyleFactor/')
-    corr = CalFactorCorr(value, growth, dates=dates, style='AST')
-    print(corr)
+    dates = tc.get_trade_days('20180101', '20180228', freq='1m')
+    value = h5_2.load_factor2('StyleFactor_ValueFactor', '/XYData/StyleFactor/', dates=dates, stack=True)
+    growth = h5_2.load_factor2('AsnessQualityWithoutGrowth', '/quality/', dates=dates, stack=True)
+    data = pd.concat([value, growth], axis=1)
+    fillna = FillnaByMeanOrQuantile(data, ['AsnessQualityWithoutGrowth'], ref_names=['StyleFactor_ValueFactor'])
+    print(fillna)

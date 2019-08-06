@@ -2,10 +2,12 @@ import pandas as pd
 import numpy as np
 
 
-def df_rolling2(df, window, apply_func, *args, **kwargs):
+def df_rolling2(df, window, apply_func, raw=False, *args, **kwargs):
     arr = df.values
     temp = np.moveaxis(np_rolling_window(arr.T, window),0,-1)
     rslt = np.asarray([apply_func(x, *args, **kwargs) for x in temp], dtype='float')
+    if raw:
+        return rslt
     if rslt.ndim == 1:
         return pd.Series(rslt, index=df.index[-len(rslt):])
     return pd.DataFrame(rslt, index=df.index[-len(rslt):])
