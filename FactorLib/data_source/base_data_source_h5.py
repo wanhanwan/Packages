@@ -45,6 +45,15 @@ class Sector(object):
         elif isinstance(drop_first, str):
             indu_info = indu_info.drop(drop_first, axis=1)
         return indu_info
+
+    def get_industry_info(self, industry, ids=None, dates=None, idx=None):
+        """行业信息
+        返回Series, value是行业名称, name是行业分类
+        """
+        industry_dummy = self.get_industry_dummy(industry, ids, dates, idx, False)
+        industry_info = dummy2name(industry_dummy)
+        industry_info.name = industry
+        return industry_info
     
     def get_index_weight(self, index_ticker, dates=None):
         """指数成分股权重"""
@@ -54,7 +63,9 @@ class Sector(object):
         return df
     
     def get_industry_members(self, industry_name, classification='中信一级', dates=None):
-        """某个行业的股票列表"""
+        """某个行业的股票列表
+        返回Series
+        """
         dummy = self.get_industry_dummy(classification, dates=dates, drop_first=False)
         df = dummy[dummy[industry_name]==1]
         return dummy2name(df)

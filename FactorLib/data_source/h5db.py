@@ -234,6 +234,8 @@ class H5DB(object):
         with pd.HDFStore(factor_path, mode='r') as f:
             try:
                 data = pd.read_hdf(f, key='data', where=where_term)
+                if ids is not None and data.shape[1] != len(ids):
+                    data = data.reindex(columns=ids)
             except NotImplementedError:
                 data = pd.read_hdf(f, key='data').reindex(index=dates, columns=ids)
         data.name = factor_name
@@ -276,8 +278,8 @@ class H5DB(object):
             data = data[data[check_A].str.match('^[0,3,6]')]
         return data
 
-    def save_h5file(self, data, name, path, group='data',
-                    use_index=True, if_exists='append',
+    def save_h5file(self, data, name, path, group='data', ignore_index=True,
+                    drop_duplicated_by_index=True, if_exists='append',
                     sort_by_fields=None, sort_index=False):
         """直接把DataFrame保存成h5文件
 
@@ -300,16 +302,21 @@ class H5DB(object):
         if self.check_factor_exists(name, path):
             df = self.read_h5file(name, path, group=group)
             if if_exists == 'append':
-                data = df.append(data, ignore_index=True)
+                data = df.append(data, ignore_index=ignore_index)
             elif if_exists == 'replace':
                 pass
-            elif use_index and if_exists=='update':
-                data = data[~data.index.duplicated(keep='last')]
-            else:
+            elif if_exists=='update':
                 data = df.append(data)
-                data.drop_duplicates(inplace=True)
+                if drop_duplicated_by_index:
+                    data = data[~data.index.duplicated(keep='last')]
+                else:
+                    data.drop_duplicates(inplace=True)
+            else:
+                raise NotImplementedError
         if sort_by_fields is not None:
             data.sort_values(sort_by_fields, inplace=True)
+        if sort_index:
+            data.sort_index(inplace=True)
         self._save_h5file(data, file_path, group)
 
     def list_h5file_factors(self, file_name, file_pth):

@@ -426,48 +426,61 @@ def TransformBySymmetricOrthogonalize(df):
     df2 = df.groupby('date').apply(duichen)
     return df2
 
-def Fillna_Barra(factor_data, factor_names, ref_name, classify_name):
+
+def FillnaByRegression(factor_data, factor_names, ref_names, classify_name=None,
+                       add_constant=False):
     """
     Barra缺失值填充， 具体方法如下：
 
         1. 按照分类因子(classify_name)将股票分类，分类因子通常是一级行业因子
         2. 在每一类股票里使用参考变量(ref_name)对待填充因子进行回归，缺失值被回归
            拟合值替代。参考变量通常是流通市值。
+        3. 参考变量不能有缺失值.
 
     :param factor_data: pandas.dataframe
 
     :param factor_names: list
         带填充因子名称。因子名称必须是factor_data中列的子集
-    :param ref_name: 1元素的list
+    :param ref_name: list
         参考变量，通常是流通市值,必须是factor_data中列的子集
-    :param classify_name: 1元素的list
+    :param classify_name: str
         分类变量，通常是中信一级行业，必须是factor_data中列的子集
     :return: pandas.dataframe
 
     """
-    factor_tofill = factor_data[factor_names].copy()
-    class_factor = factor_data[classify_name]
-    ref_factor = np.log(factor_data[ref_name])
-    all_dates = factor_tofill.index.get_level_values(0).unique()
-    for idate in all_dates:
-        iclass_data = class_factor.loc[idate, classify_name[0]]
-        iref_data = ref_factor.loc[idate, ref_name[0]]
+    def estimate(y, x, z):
+        """estimate nan values in y by ols"""
+        nanind = np.isnan(y)
+        olsmodel = sm.OLS(y[~nanind], x[~nanind, :]).fit()
+        y[nanind] = olsmodel.predict(x[nanind, :])
+        return pd.Series(y, index=z)
+
+    factor_data = factor_data.copy()
+    if np.any(np.isnan(factor_data[ref_names].to_numpy())):
+        raise ValueError("reference variables exist NaN!")
+    if add_constant:
+        factor_data['constant'] = 1.0
+        ref_names.append('constant')
+    if classify_name is None:
+        factor_data.sort_index(inplace=True)
+        l = []
         for ifactor in factor_names:
-            ifactor_data = factor_tofill.loc[idate, ifactor]
-            not_nan_idx = pd.notnull(ifactor_data)
-            not_nan_idx_sum = not_nan_idx.sum()
-            if not not_nan_idx.all():   # 存在缺失值
-                for ijclass in iclass_data[~not_nan_idx].unique():
-                    ij_not_na = not_nan_idx & (iclass_data == ijclass)
-                    ij_na = (~not_nan_idx) & (iclass_data == ijclass)
-                    x = iref_data[ij_not_na]
-                    y = ifactor_data[ij_not_na]
-                    x_mean = x.mean()
-                    y_mean = y.mean()
-                    beta = ((x*y).sum()-not_nan_idx_sum*x_mean*y_mean)/((x**2).sum()-not_nan_idx_sum*x_mean**2)
-                    alpha = y_mean - x_mean*beta
-                    ifactor_data.loc[ij_na] = alpha+beta*iref_data[ij_na]
-    return factor_tofill
+            new = factor_data.groupby('date').apply(
+                lambda x: estimate(x[ifactor].to_numpy(), x[ref_names].to_numpy(), x.index))
+            l.append(new.reset_index(level=1, drop=True))
+        df = pd.concat(l, axis=1, ignore_index=True).rename(columns={i: v for i, v in enumerate(factor_names)})
+    else:
+        all_dates = factor_data.index.get_level_values('date').unique()
+        factor_data.sort_values(['date', classify_name], inplace=True)
+        df = pd.DataFrame(index=factor_data.index, columns=factor_names)
+        for idate in all_dates:
+            for ifactor in factor_names:
+                new = factor_data.loc[idate].groupby(classify_name).apply(
+                    lambda x: estimate(x[ifactor].to_numpy(), x[ref_names].to_numpy(), x.index)
+                )
+                df.loc[idate, ifactor] = new.to_numpy()
+    df.sort_index(inplace=True)
+    return df
 
 
 def Join_Factors(*factor_data, merge_names=None, new_name=None, weight=None, style='SAST'):
@@ -716,8 +729,9 @@ def CalFactorCorr(*factor_data, factor_names=None, dates=None, ids=None, idx=Non
 
 if __name__ == '__main__':
     from FactorLib.data_source.base_data_source_h5 import h5_2, tc
-    dates = tc.get_trade_days('20180101', '20190531', freq='1m')
-    value = h5_2.load_factor2('StyleFactor_ValueFactor', '/XYData/StyleFactor/')
-    growth = h5_2.load_factor2('StyleFactor_GrowthFactor', '/XYData/StyleFactor/')
-    corr = CalFactorCorr(value, growth, dates=dates, style='AST')
-    print(corr)
+    dates = tc.get_trade_days('20180101', '20180228', freq='1m')
+    growth = h5_2.load_factor2('StyleFactor_GrowthFactor', '/XYData/StyleFactor/', dates=dates, stack=True)
+    payout = h5_2.load_factor2('AsnessQualityWithoutGrowth', '/quality/', dates=dates, stack=True)
+    data = pd.concat([growth, payout], axis=1, join='outer')
+    data_fillna = Fillna_Barra(data, ['Quality_for_Growth'], ref_names=['StyleFactor_GrowthFactor'])
+    print(data_fillna)
