@@ -229,6 +229,7 @@ def __StandardFun__(data0, **kwargs):
         data_to_standard[kwargs['factor_name']+'_after_standard'] = 0
     return data_to_standard
 
+
 def __StandardFun2__(data0, **kwargs):
     """横截面标准化函数"""
     IDNums = data0.shape[0]
@@ -503,7 +504,7 @@ def FillnaByMeanOrQuantile(factor_data, factor_names=None, ref_names=None, indus
         indu_flag = sec.get_industry_dummy(industry=industry,
                                            idx=factor_data,
                                            drop_first=False)
-        indu_group = dummy2name(indu_flag).dropna()
+        indu_group = dummy2name(indu_flag)
         factor_data = factor_data[factor_data.index.isin(indu_group.index)]
         groups.append(indu_group)
     if fill_value == 'mean':
@@ -536,6 +537,8 @@ def Join_Factors(*factor_data, merge_names=None, new_name=None, weight=None, sty
 
     def nansum(a, w):
         nanind = np.isfinite(a)
+        if np.sum(nanind) == 0.0:
+            return np.nan
         return np.sum(a[nanind] * w[nanind]) / np.sum(w[nanind])
 
     if new_name is None:
@@ -565,6 +568,7 @@ def Join_Factors(*factor_data, merge_names=None, new_name=None, weight=None, sty
         weight_array[na_ind] = 0.0
         weight_array = weight_array / weight_array.sum(axis=1)[:, np.newaxis]
         new_values = np.nansum(factor_values * weight_array, axis=1)
+        new_values[np.all(na_ind, axis=1)] = np.nan
         return pd.DataFrame(new_values, index=factor_data[0].index, columns=[new_name])
     else:
         new_values = np.apply_along_axis(nansum, 0, factor_values, w=weight)
@@ -641,7 +645,7 @@ def merge_dataframes(*dfs, join='outer'):
 
 
 def NeutralizeBySizeIndu(factor_data, factor_name, std_qt=True, indu_name='中信一级',
-                         drop_first_indu=True, new_name='resid', **kwargs):
+                         drop_first_indu=True, new_name='resid', ret_std=False, **kwargs):
     """ 为因子进行市值和行业中性化
 
     市值采用对数市值(百万为单位);
@@ -656,6 +660,8 @@ def NeutralizeBySizeIndu(factor_data, factor_name, std_qt=True, indu_name='中�
         因子名称
     std_qt: bool
         在中性化之前是否进行分位数标准化，默认为True
+    ret_std: bool
+        返回之前把数据标准化一下
     indu_name: str
         行业选取
     add_constant: bool
@@ -677,6 +683,8 @@ def NeutralizeBySizeIndu(factor_data, factor_name, std_qt=True, indu_name='中�
     indep_data = lncap.join(indu_flag, how='inner')
     resid = Orthogonalize(factor_data, indep_data, factor_name, industry_names+['lncap'], **kwargs)
     resid.columns = [new_name]
+    if ret_std:
+        return StandardByQT(resid.reindex(factor_data.index), factor_name=new_name)
     return resid.reindex(factor_data.index)
 
 

@@ -93,3 +93,23 @@ def calc_corr(mat1, mat2=None, weight=None, use_ewavg=True):
     std = np.sqrt(np.diag(cov))
     corr = cov / std[:, None] / std[None, :]
     return corr
+
+
+def get_percentile_at(arr, values=None):
+    """value在数组arr中的分位数(升序)
+    如果value是空，默认取arr的最后一个元素.
+    遇到重复值，尽量靠右排列(返回值尽可能大)
+
+    Parameters:
+    ===========
+    arr: array or Series
+    value: float number or array, default None.
+    """
+    if isinstance(arr, pd.Series):
+        arr = arr.to_numpy()
+    if values is None:
+        values = arr[-1]
+        arr = arr[:-1]
+    arr = np.sort(arr)
+    pos = np.searchsorted(arr, values, side='right')
+    return pos/np.isfinite(arr).sum()
