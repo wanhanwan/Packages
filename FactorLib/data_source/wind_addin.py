@@ -2,6 +2,8 @@ import pandas as pd
 import warnings
 import re
 
+from datetime import datetime
+from pandas._libs import OutOfBoundsDatetime
 from pandas.tseries.offsets import as_timestamp
 
 
@@ -13,6 +15,40 @@ def suffix_ids(ids):
 
 def _argdict_to_arglist(arg_dict):
     return [x+'='+str(y) for x, y in arg_dict.items()]
+
+
+def _safe_format_date(date):
+    if isinstance(date, str):
+        date = date.replace('-', '')
+        return "%s-%s-%s" % (date[:4], date[4:6], date[6:8])
+    elif isinstance(date, (pd.Timestamp, datetime)):
+        return date.strftime("%Y-%m-%d")
+    else:
+        raise NotImplementedError("非法的日期格式!")
+
+
+def _as_timestamp(obj):
+    if isinstance(obj, pd.Timestamp):
+        return obj
+    try:
+        return pd.Timestamp(obj)
+    except OutOfBoundsDatetime:
+        pass
+    return obj
+
+
+def _safe_convert_to_dataframe(data):
+    """把从Wind API返回的数据转成DataFrame
+    """
+    if data.ErrorCode != 0:
+        raise ValueError(str(data.ErrorCode))
+    dates = [_as_timestamp(x) for x in data.Times]
+    if len(data.Data) == 1:
+        rslt = pd.Series(data.Data[0], index=dates)
+    else:
+        rslt = pd.DataFrame(data.Data).T
+        rslt.index = pd.DatetimeIndex(dates)
+    return rslt
 
 
 class WindAddIn(object):
@@ -90,6 +126,47 @@ class WindAddIn(object):
             res[i] = self.wsd_convert_to_df(data)
         df = pd.concat(res).set_index(['date', 'IDs'])
         return df
+    
+    def edb(self, field_code, start_date, end_date,
+            fill_method=None, frequency=None,
+            usenames=None):
+        """从Wind终端下载宏观数据.
+
+        Parameters: 
+        ===========
+        field_code: str
+            宏观数据指标的Wind ID. 例如，"工业企业:利润总额:累计同比"所对应的Wind ID是"M0000557".
+        
+            更多指标可在Wind客户端输入"CG"查看.
+        start_date: str or datetime-like
+            数据的开始日期
+        end_date: str or datetime-like
+            数据的结束日期.
+        fill_method: str, None by default
+            无交易数据处理.默认是沿用上期数值，如果是None，则用NaN替代.
+        frequency: str, None by default
+            数据采样频率
+        
+        Return:
+        ===========
+        pandas.Series
+        """
+        self.connect()
+        start_date = _safe_format_date(start_date)
+        end_date = _safe_format_date(end_date)
+        
+        params_str = ''
+        if fill_method == 'Previous':
+            params_str += 'Fill=Previous'
+
+        data = self.w.edb(field_code, start_date, end_date, params_str)
+        final = _safe_convert_to_dataframe(data)
+        if usenames is not None:
+            if isinstance(final, pd.Series):
+                final.name = usenames
+            else:
+                final.columns = usenames
+        return final
 
 
 if __name__ == '__main__':

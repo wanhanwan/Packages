@@ -9,7 +9,6 @@ from multiprocessing import Lock
 from ..utils.datetime_func import Datetime2DateStr, DateStr2Datetime
 from ..utils.tool_funcs import ensure_dir_exists
 from ..utils.disk_persist_provider import DiskPersistProvider
-from .financial_data_loader import FinancialDataLoader
 from .helpers import handle_ids, FIFODict
 
 
@@ -34,7 +33,6 @@ class H5DB(object):
         self.data_dict = None
         self.cached_data = FIFODict(max_cached_files)
         self.max_cached_files = max_cached_files
-        self.fin_data_loader = FinancialDataLoader()
         # self._update_info()
     
     def _update_info(self):
@@ -53,13 +51,12 @@ class H5DB(object):
         lock.acquire()
         try:
             data = pd.read_hdf(file_path, key)
-            if self.max_cached_files > 0:
-                self.cached_data[file_path] = data
-            lock.release()
-            return data
-        except Exception as e:
-            lock.release()
-            raise e
+        except KeyError:
+            data = pd.read_hdf(file_path, 'data')
+        if self.max_cached_files > 0:
+            self.cached_data[file_path] = data
+        lock.release()
+        return data
 
     def _save_h5file(self, data, file_path, key,
                      complib='blosc', complevel=9,
@@ -184,31 +181,27 @@ class H5DB(object):
 
     # --------------------------数据管理-------------------------------------------
     @handle_ids
-    def load_factor(self, factor_name, factor_dir=None, dates=None, ids=None, idx=None):
+    def load_factor(self, factor_name, factor_dir=None, dates=None, ids=None, idx=None,
+                    date_level=0):
         if idx is not None:
             dates = idx.index.get_level_values('date').unique()
             return self.load_factor(factor_name, factor_dir=factor_dir, dates=dates).reindex(idx.index, copy=False)
         factor_path = self.abs_factor_path(factor_dir, factor_name)
-        panel = self._read_h5file(factor_path, factor_name)
+        data = self._read_h5file(factor_path, factor_name)
         if (ids is not None) and (not isinstance(ids, list)):
             ids = [ids]
-        if dates is None and ids is None:
-            df = panel.to_frame()
-            return df
-        elif dates is None:
-            df = panel.ix[factor_name, :, ids].stack().to_frame()
-            df.index.names = ['date', 'IDs']
-            df.columns = [factor_name]            
-            return df
-        elif ids is None:
-            df = panel.ix[factor_name, pd.DatetimeIndex(dates), :].stack().to_frame()
-            df.index.names = ['date', 'IDs']
-            df.columns = [factor_name]              
-            return df
+        if dates is None:
+            dates = slice(None)
+        if ids is None:
+            ids = slice(None)
+        if date_level == 0:
+            s = pd.IndexSlice[dates, ids]
         else:
-            df = panel.ix[factor_name, pd.DatetimeIndex(dates), ids].stack().to_frame()
-            df.index.names = ['date', 'IDs']
-            df.columns = [factor_name]              
+            s = pd.IndexSlice[ids, dates]
+        if dates is None and ids is None:
+            return data
+        else:
+            df = data.loc[s, :]
             return df
 
     @handle_ids
@@ -287,6 +280,8 @@ class H5DB(object):
         ----------
         use_index: bool
             当文件已存在，去重处理时按照索引去重。
+        ignore_index: bool:
+            if_exists='append'时, 是否重新建立索引。
         if_exists: str
             文件已存在时的处理方式：'append', 'replace' or 'update'.
             'append': 直接添加，不做去重处理
@@ -374,6 +369,23 @@ class H5DB(object):
                           index=pd.MultiIndex.from_product([df.index,df.columns], names=['date', 'IDs']),
                           columns=factor_name_list)
         return df
+
+    def load_macro_factor(self, factor_name, factor_dir, ids=None, ann_dates=None, dates=None,
+                          date_level=0, time='15:00'):
+        data = self.load_factor(factor_name, factor_dir, ids=ids, date_level=date_level)
+        if 'ann_dt' in data.columns and ann_dates is not None:
+            data = data.reset_index().set_index('ann_dt').sort_index()
+            dates = pd.to_datetime(ann_dates, format='%Y%m%d') + pd.Timedelta(hours=int(time[:2]), minutes=int(time[-2:]))
+            df = data.groupby('name').apply(lambda x: x.reindex(dates, method='ffill'))[['data']]
+        else:
+            if dates is None:
+                dates = slice(None)
+            if date_level == 0:
+                df = data.loc[pd.IndexSlice[dates, :], ['data']]
+            else:
+                df = data.loc[pd.IndexSlice[:, dates], ['data']]
+        return df
+
     
     def save_factor(self, factor_data, factor_dir, if_exists='append'):
         """往数据库中写数据
