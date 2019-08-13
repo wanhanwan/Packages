@@ -204,7 +204,6 @@ class H5DB(object):
             df = data.loc[s, :]
             return df
 
-    @handle_ids
     def load_factor2(self, factor_name, factor_dir=None, dates=None, ids=None, idx=None,
                      stack=False, check_A=False):
         """加载另外一种类型的因子
