@@ -271,8 +271,8 @@ class H5DB(object):
         return data
 
     def save_h5file(self, data, name, path, group='data', ignore_index=True,
-                    drop_duplicated_by_index=True, if_exists='append',
-                    sort_by_fields=None, sort_index=False):
+                    drop_duplicated_by_index=True, drop_duplicated_by_keys=None,
+                    if_exists='append', sort_by_fields=None, sort_index=False):
         """直接把DataFrame保存成h5文件
 
         Parameters
@@ -304,7 +304,9 @@ class H5DB(object):
                 if drop_duplicated_by_index:
                     data = data[~data.index.duplicated(keep='last')]
                 else:
-                    data.drop_duplicates(inplace=True)
+                    data.drop_duplicates(subset=drop_duplicated_by_keys,
+                                         keep='last',
+                                         inplace=True)
             else:
                 raise NotImplementedError
         if sort_by_fields is not None:
