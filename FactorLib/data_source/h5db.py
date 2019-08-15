@@ -305,10 +305,11 @@ class H5DB(object):
                     data = data[~data.index.duplicated(keep='last')]
                 else:
                     data.drop_duplicates(inplace=True)
+                    data.reset_index(drop=True, inplace=True)
             else:
                 raise NotImplementedError
         if sort_by_fields is not None:
-            data.sort_values(sort_by_fields, inplace=True)
+            data = data.sort_values(sort_by_fields)
         if sort_index:
             data.sort_index(inplace=True)
         self._save_h5file(data, file_path, group)
@@ -379,6 +380,8 @@ class H5DB(object):
         else:
             if dates is None:
                 dates = slice(None)
+            else:
+                dates = pd.to_datetime(dates, format='%Y%m%d')
             if date_level == 0:
                 df = data.loc[pd.IndexSlice[dates, :], ['data']]
             else:
