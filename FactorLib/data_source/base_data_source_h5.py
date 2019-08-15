@@ -58,10 +58,14 @@ class Sector(object):
     def get_index_weight(self, index_ticker, dates=None):
         """指数成分股权重"""
         file_name = f'consWeight{index_ticker}'
-        data = self.h5DB.load_factor2(file_name, '/base/').sort_index()
+        try:
+            data = self.h5DB.load_factor2(file_name, '/base/').sort_index()
+        except OSError:
+            file_name = f'cons{index_ticker}'
+            data = self.h5DB.load_factor2(file_name, '/base/').sort_index()
         df = data.reindex(pd.DatetimeIndex(dates, name='date'), method='ffill').stack().to_frame('consWeight')
         return df
-    
+
     def get_industry_members(self, industry_name, classification='中信一级', dates=None):
         """某个行业的股票列表
         返回Series
