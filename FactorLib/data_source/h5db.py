@@ -215,6 +215,8 @@ class H5DB(object):
             dates = idx.index.get_level_values('date').unique().tolist()
             ids = idx.index.get_level_values('IDs').unique().tolist()
         factor_path = self.abs_factor_path(factor_dir, factor_name)
+        if dates is not None:
+            dates = pd.to_datetime(dates)
         if (dates is not None) and (ids is not None):
             where_term = "(index in dates) & (columns in ids)"
         elif dates is not None:
