@@ -25,3 +25,4 @@ def run_func(target_func, func_args, split_args, core_nums=2):
     p.close()
     p.join()
     print("calculation has finished!")
+    
