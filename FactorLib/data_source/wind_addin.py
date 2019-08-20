@@ -87,6 +87,14 @@ class WindAddIn(object):
         df = pd.DataFrame(res, columns=columns)
         return df
     
+    def edb_convert_to_df(self, data):
+        dates = [as_timestamp(x) for x in data.Times]
+        # ids = data.Codes * len(dates)
+        # res = list(zip(*([ids, dates] + data.Data)))
+        # columns = ['IDs', 'date'] + [x.lower() for x in data.Fields]
+        df = pd.DataFrame(data.Data, columns=data.Codes, index=dates)
+        return df
+    
     def wss(self, filed_names, ids, dates, date_field='tradeDate', arg_dict=None):
         """封装WindAPI的wss函数
         
@@ -163,7 +171,7 @@ class WindAddIn(object):
             params_str += 'Fill=Previous'
 
         data = self.w.edb(field_code, start_date, end_date, params_str)
-        final = _safe_convert_to_dataframe(data)
+        final = self.edb_convert_to_df(data)
         if usenames is not None:
             if isinstance(final, pd.Series):
                 final.name = usenames
