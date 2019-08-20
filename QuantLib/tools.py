@@ -110,6 +110,12 @@ def get_percentile_at(arr, values=None):
     if values is None:
         values = arr[-1]
         arr = arr[:-1]
+    if isinstance(values, float) and np.isnan(values):
+        return np.nan
     arr = np.sort(arr)
-    pos = np.searchsorted(arr, values, side='right')
+    if isinstance(values, float):
+        return np.searchsorted(arr, values, side='right')/np.isfinite(arr).sum()
+    pos = np.zeros_like(values) * np.nan
+    idx = np.isfinite(values)
+    pos[idx] = np.searchsorted(arr, values[idx], side='right')
     return pos/np.isfinite(arr).sum()
