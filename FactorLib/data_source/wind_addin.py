@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import warnings
 import re
 
@@ -92,7 +93,12 @@ class WindAddIn(object):
         # ids = data.Codes * len(dates)
         # res = list(zip(*([ids, dates] + data.Data)))
         # columns = ['IDs', 'date'] + [x.lower() for x in data.Fields]
-        df = pd.DataFrame(data.Data, columns=data.Codes, index=dates)
+        if (len(dates) > 1 and len(data.Codes)>1) or len(data.Codes)==1:
+            df = pd.DataFrame(np.asarray(data.Data, dtype='float').T,
+                              columns=data.Codes,
+                              index=dates)
+        else:
+            df = pd.DataFrame(data.Data, columns=data.Codes, index=dates)
         return df
     
     def wss(self, filed_names, ids, dates, date_field='tradeDate', arg_dict=None):
