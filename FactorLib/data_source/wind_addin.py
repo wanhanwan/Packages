@@ -38,23 +38,6 @@ def _as_timestamp(obj):
     return obj
 
 
-def _safe_convert_to_dataframe(data):
-    """把从Wind API返回的数据转成DataFrame
-    """
-    if data.ErrorCode != 0:
-        raise ValueError(str(data.ErrorCode))
-    dates = [_as_timestamp(x) for x in data.Times]
-    if len(data.Data) == 1:
-        try:
-            rslt = pd.Series(data.Data[0], index=dates)
-        except ValueError:
-            rslt = pd.DataFrame(data.Data, index=dates)
-    else:
-        rslt = pd.DataFrame(data.Data).T
-        rslt.index = pd.DatetimeIndex(dates)
-    return rslt
-
-
 class WindAddIn(object):
     _instance = None
     

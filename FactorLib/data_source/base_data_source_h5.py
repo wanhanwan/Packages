@@ -44,6 +44,7 @@ class Sector(object):
             indu_info = indu_info.iloc[:, 1:]
         elif isinstance(drop_first, str):
             indu_info = indu_info.drop(drop_first, axis=1)
+        indu_info.rename_axis(['date', 'IDs'], inplace=True)
         return indu_info
 
     def get_industry_info(self, industry, ids=None, dates=None, idx=None):
