@@ -67,17 +67,21 @@ def drop_patch(code):
     return code.split(".")[0]
 
 
-def import_mod(mod_name):
-    try:
-        from importlib import import_module
-        return import_module(mod_name)
-    except Exception as e:
-        return None
+def import_module_from_file(module_name, module_path):
+    """
+    从源文件引入一个模块
 
-
-def import_module(module_name, module_path):
+    Parameters:
+    ===========
+    module_name: str
+        模块的文件名
+    module_path: str
+        模块的文件路径(包含文件名)
+    """
     import importlib.util as ilu
     spec = ilu.spec_from_file_location(module_name, module_path)
+    if spec is None:
+        raise FileNotFoundError("模块不存在: %s" % module_path)
     m = ilu.module_from_spec(spec)
     spec.loader.exec_module(m)
     return m
