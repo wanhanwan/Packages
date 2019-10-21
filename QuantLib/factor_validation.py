@@ -1,64 +1,10 @@
 # coding: utf-8
 import pandas as pd
 import numpy as np
-from . import stockFilter
 
 from FactorLib.data_source.base_data_source_h5 import data_source, tc
-from FactorLib.data_source.tseries import move_dtindex
 from alphalens.utils import get_clean_factor_and_forward_returns
 from alphalens.performance import factor_information_coefficient
-
-
-# 计算因子的IC值
-def cal_ic(factor_data, factor_name, window='1m', rank=False, stock_validation=None,
-           retstocknums=False):
-    """
-    每一期的因子值与下一期的股票股票收益率做相关性检验(IC)
-
-    :param factor_data:dataframe 因子数据
-
-    :param factor_name: 因子名称
-
-    :param window: offset, IC值的时间窗口
-
-    :param rank: 若为True，返回RankIC
-
-    :param stock_validation: str: 剔除非法股票, 支持stockFilter中定义的函数名
-
-    :return: ic
-
-    """
-    def corr(data, rank):
-        if rank:
-            return data.corr(method='spearman').iloc[0, 1]
-        else:
-            return data.corr(method='pearson').iloc[0, 1]
-
-    if stock_validation is not None:
-        valid_idx = getattr(stockFilter, stock_validation)(factor_data)
-        new_factor = factor_data[factor_name].reindex(valid_idx.index)
-    else:
-        new_factor = factor_data[factor_name]
-
-    start_dt = new_factor.index.get_level_values(0).min()
-    offset_of_start_dt = data_source.trade_calendar.tradeDayOffset(start_dt, 1, '1d')
-    end_dt = new_factor.index.get_level_values(0).max()
-    offset_of_end_dt = data_source.trade_calendar.tradeDayOffset(end_dt, 1, window)
-    ids = new_factor.index.get_level_values(1).unique().tolist()
-
-    max_data_of_ret = data_source.h5DB.get_date_range('daily_returns', '/stocks/')[1]
-    if max_data_of_ret < offset_of_start_dt:
-        if retstocknums:
-            return None, 0
-        return None
-    ret = data_source.get_fix_period_return(ids, freq=window, start_date=offset_of_start_dt, end_date=offset_of_end_dt)
-    future_ret = move_dtindex(ret, -1, window).rename(columns={'daily_returns_%':'future_ret'})
-    new_factor = pd.concat([new_factor, future_ret], axis=1, join='inner')
-
-    ic = new_factor.groupby(level=0).apply(corr, rank=rank)
-    if retstocknums:
-        return ic, new_factor.groupby(level=0)[factor_name].count()
-    return ic
 
 
 def cal_ic_by_alphalens(factor_data, prices=None, group_by=None, periods=(20,), **kwargs):

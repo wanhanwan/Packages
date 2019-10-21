@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# nav.py
+# nav_calculator.py
 # @Author : wanhanwan (wanshuai_shufe@163.com)
 # @Date   : 2019/8/20 下午3:53:36
 import numpy as np
