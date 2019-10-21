@@ -65,7 +65,7 @@ def _calc_order(curr_w, w, order, assets=None):
             order[k] = w[k] - curr_w[k]
 
 
-def get_nav(ret_df, asset_weight, rebalance_periods,
+def get_nav_and_weights(ret_df, asset_weight, rebalance_periods,
             cash_name, leverage_name=None, interest_name=None,
             credit_name=None):
     """计算净值
@@ -80,6 +80,7 @@ def get_nav(ret_df, asset_weight, rebalance_periods,
         再平衡时间段
     """
     ret_p = pd.Series(np.zeros(ret_df.shape[0]), index=ret_df.index)
+    weights = {}
     all_assets = ret_df.columns.tolist()
 
     if isinstance(rebalance_periods, int):
@@ -98,6 +99,7 @@ def get_nav(ret_df, asset_weight, rebalance_periods,
     for i, (dt, ret) in enumerate(ret_df.iterrows()):
         i_ret, curr_weights = _fast_forward(curr_weights, ret)
         ret_p.iat[i] = i_ret
+        weights[dt] = curr_weights.copy()
 
         # 主动调仓和再平衡同时进行，若两个存在冲突，主动调仓优先级更高
         init_weight = _get_init_weight(asset_weight, dt, all_assets)
@@ -121,4 +123,5 @@ def get_nav(ret_df, asset_weight, rebalance_periods,
                  interest_name, credit_name)
 
     nav = return2nav(ret_p)
-    return nav
+    wt = pd.DataFrame(weights).T
+    return nav, wt
