@@ -265,7 +265,7 @@ class DataLoader(object):
         df.index.names = ['date', 'IDs']
         return df
 
-    def last_nperiod(self, raw_data, field_name, dates, ids, dtype, n=1):
+    def last_nperiod(self, raw_data, field_name, dates, ids, dtype='float64', n=1):
         """回溯N个报告期之前的财务数据"""
         r = pd.DataFrame(index=dates, columns=ids, dtype=dtype)
         for date in dates:
@@ -318,7 +318,7 @@ class DataLoader(object):
         return raw_data.reindex(new_idx).reset_index(level='date', drop=True)
 
     @staticmethod
-    def latest_period(raw_data, field_name, dates, ids, dtype, quarter=None):
+    def latest_period(raw_data, field_name, dates, ids, dtype='float64', quarter=None):
         """最近报告期财务数据
         Parameters:
         ==============
