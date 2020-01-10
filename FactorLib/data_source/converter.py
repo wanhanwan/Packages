@@ -46,6 +46,8 @@ class Converter(object):
         """行业中文名称转Int类型行业代码
 
         行业代码是int类型，对应rule.name2id_func
+        
+        某些二级行业会带有罗马数字Ⅱ, 函数输入时可以忽略。
 
         如果data的类型是Series, data.values应为String类型的Wind行业代码。
         """
@@ -71,7 +73,47 @@ class Converter(object):
                 return data.dropna().map(unmapping).apply(r.name2id_func).reindex(data.index)
         else:
             return data
-
+    
+    def name2windid(self, name, data):
+        """行业中文名称转Wind行业代码(无后缀的字符串)
+        
+        某些二级行业会带有罗马数字Ⅱ, 函数输入时可以忽略。
+        """
+        try:
+            unmapping = self.unmapping[name]
+        except KeyError:
+            return data
+        if isinstance(data, list):
+            try:
+                names = [unmapping[x] for x in data]
+            except KeyError:
+                unmapping = {x.replace('Ⅱ',''):y for x,y in unmapping.items()}
+                names = [unmapping[x] for x in data]
+        elif isinstance(data, pd.Series):
+            try:
+                names = data.dropna().map(unmapping).reindex(data.index)
+            except ValueError:
+                unmapping = {x.replace('Ⅱ', ''): y for x, y in unmapping.items()}
+                names = data.dropna().map(unmapping).reindex(data.index)
+        else:
+            raise RuntimeError("不支持的数据类型")
+        return names
+    
+    def windid2name(self, name, windid):
+        """"Wind行业代码(无后缀)转行业中文名称(省略罗马数字)"""
+        try:
+            r = self._rules[name]
+            mapping = {k:v.replace('Ⅱ', '') for k,v in r.mapping.items()}
+        except KeyError:
+            return windid
+        if isinstance(windid, list):
+            names = [mapping[x] for x in windid]
+        elif isinstance(windid, pd.Series):
+            names = windid.dropna().map(mapping).reindex(windid.index)
+        else:
+            raise RuntimeError("不支持的数据类型")
+        return names
+        
     def all_values(self, name):
         """返回所有行业中文名称"""
         try:
@@ -111,32 +153,6 @@ IndustryConverter = Converter({
     'sw_level_2': Rule(industry_dict['sw_level_2'], lambda x: str(int(x)), int)
 })
 
-
-# ncdb中数据类型decode/encode
-# 日期类型
-DATE_ECODING = {'dtype': 'uint16', 'scale_factor': 1, '_FillValue': 0, 'units': 'days since 1970-01-01', 'zlib': True,
-'complevel': 9}
-PRICE_ENCODING = {'dtype': 'uint16', 'scale_factor': 10e-3, '_FillValue': 0, 'zlib': True,
-'complevel': 9}
-BIGNUM_ENCODING = {'dtype': 'int64', 'scale_factor': 10e-5, '_FillValue': -9999,'zlib': True,
-'complevel': 9}
-INTEGER_ENCODING = {'dtype': 'int32', 'scale_factor': 1, '_FillValue': -9999, 'zlib': True,
-'complevel': 9}
-BOOL_ENCODING = {'dtype': 'uint8', 'scale_factor': 1, '_FillValue': 2, 'zlib': True,
-'complevel': 9}
-
-
-def parse_nc_encoding(dtype):
-    if dtype in [np.float32, np.float64]:
-        return BIGNUM_ENCODING
-    elif dtype in [np.int32, np.int16, np.int64]:
-        return INTEGER_ENCODING
-    elif dtype in [np.bool]:
-        return BOOL_ENCODING
-    elif dtype in [np.datetime64]:
-        return DATE_ECODING
-    else:
-        return {}
 
 
 if __name__ == '__main__':

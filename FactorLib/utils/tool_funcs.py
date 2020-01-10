@@ -2,6 +2,7 @@
 """一些工具函数"""
 import pandas as pd
 import numpy as np
+import re
 from ..const import INDUSTRY_NAME_DICT
 
 
@@ -57,11 +58,17 @@ def tradecode_to_tslcode(code):
 
 @clru_cache()
 def windcode_to_tslcode(windcode):
-    return windcode[-2:] + windcode[:6]
+    dot_indice = windcode.find(".")
+    if dot_indice>0:
+        return windcode[dot_indice+1:]+windcode[:dot_indice]
+    return windcode
 
 @clru_cache()
 def tslcode_to_tradecode(code):
-    return code[2:]
+    match = re.match("[a-zA-Z]*([0-9]*)", code)
+    if match:
+        return match.group(1)
+    return code
 
 def drop_patch(code):
     return code.split(".")[0]

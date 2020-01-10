@@ -10,6 +10,7 @@ from ..utils.datetime_func import Datetime2DateStr, DateStr2Datetime
 from ..utils.tool_funcs import ensure_dir_exists
 from ..utils.disk_persist_provider import DiskPersistProvider
 from .helpers import handle_ids, FIFODict
+from pathlib import Path
 
 
 lock = Lock()
@@ -27,9 +28,9 @@ def append_along_index(df1, df2):
 
 class H5DB(object):
     def __init__(self, data_path, max_cached_files=30):
-        self.data_path = data_path
-        self.feather_data_path = os.path.abspath(data_path+'/../feather')
-        self.csv_data_path = os.path.abspath(data_path+'/../csv')
+        self.data_path = str(data_path)
+        self.feather_data_path = os.path.abspath(self.data_path+'/../feather')
+        self.csv_data_path = os.path.abspath(self.data_path+'/../csv')
         self.data_dict = None
         self.cached_data = FIFODict(max_cached_files)
         self.max_cached_files = max_cached_files
@@ -53,9 +54,10 @@ class H5DB(object):
             data = pd.read_hdf(file_path, key)
         except KeyError:
             data = pd.read_hdf(file_path, 'data')
+        finally:
+            lock.release()
         if self.max_cached_files > 0:
             self.cached_data[file_path] = data
-        lock.release()
         return data
 
     def _save_h5file(self, data, file_path, key,
@@ -274,7 +276,9 @@ class H5DB(object):
 
     def save_h5file(self, data, name, path, group='data', ignore_index=True,
                     drop_duplicated_by_index=True, drop_duplicated_by_keys=None,
-                    if_exists='append', sort_by_fields=None, sort_index=False):
+                    if_exists='append', sort_by_fields=None, sort_index=False,
+                    append_axis=0,
+                    **kwargs):
         """直接把DataFrame保存成h5文件
 
         Parameters
@@ -293,18 +297,22 @@ class H5DB(object):
             写入之前，DataFrame先按照字段排序
         sort_index: bool, 默认为False
             写入之前，是否按照索引排序
+        kwargs: 传入_save_h5file
         """
         file_path = self.abs_factor_path(path, name)
         if self.check_factor_exists(name, path):
             df = self.read_h5file(name, path, group=group)
             if if_exists == 'append':
-                data = df.append(data, ignore_index=ignore_index)
+                data = pd.concat([df, data], axis=append_axis, ignore_index=True)
             elif if_exists == 'replace':
                 pass
             elif if_exists=='update':
-                data = df.append(data)
+                data = pd.concat([df, data], axis=append_axis)
                 if drop_duplicated_by_index:
-                    data = data[~data.index.duplicated(keep='last')]
+                    if append_axis == 0:
+                        data = data[~data.index.duplicated(keep='last')]
+                    else:
+                        data = data.iloc[:, ~data.columns.duplicated(keep='last')]
                 else:
                     data.drop_duplicates(subset=drop_duplicated_by_keys,
                                          keep='last',
@@ -316,7 +324,7 @@ class H5DB(object):
             data = data.sort_values(sort_by_fields)
         if sort_index:
             data.sort_index(inplace=True)
-        self._save_h5file(data, file_path, group)
+        self._save_h5file(data, file_path, group, **kwargs)
 
     def list_h5file_factors(self, file_name, file_pth):
         """"提取h5File的所有列名"""

@@ -631,7 +631,10 @@ def align_dataframes(*dfs, axis='index', join='outer'):
         raise ValueError("axis must be index, columns or both.")
     r = [None] * len(dfs)
     for i, df in enumerate(dfs):
-        r[i] = df.reindex(index=index, columns=columns)
+        if isinstance(df, pd.DataFrame):
+            r[i] = df.reindex(index=index, columns=columns)
+        else:
+            r[i] = df.reindex(index=index)
     return tuple(r)
 
 

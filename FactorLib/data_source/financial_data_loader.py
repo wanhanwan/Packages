@@ -383,3 +383,39 @@ class DataLoader(object):
         new = self.latest_period(raw_data, field_name, dates=dates, ids=ids)
         old = self.last_nperiod(raw_data, field_name, dates=dates, ids=ids)
         return avg(old, new)
+
+
+class ConsistentPeriodDataLoader(object):
+
+    def _load_period_data(self, data, period, filed_name):
+        return data[data['date']==period][filed_name]
+
+
+    def ttm(self, raw_data, field_name, dates, ids, dtype):
+        """加载ttm数据
+
+        Parameters
+        ==============
+        raw_data: pd.DataFrame
+            原始的财务数据, 数据框中必须包含一下字段:
+                IDs: 股票代码, 格式必须与参数ids一致
+                date：财报会计报告期, yyyymmdd的int格式
+                ann_dt: 财报的公告期, yyyymmdd的int格式
+                quarter: 会计报告期所在季度, int
+                year: 会计报告期所在年份, int
+        field_name: str
+            待计算的财务数据字段名称
+        dates: list/array
+            日期序列, yyyymmdd的int格式
+        ids: same type as IDs in raw_data
+        """
+        r = pd.DataFrame(index=dates, columns=ids, dtype=dtype)
+        for date in dates:
+            data = raw_data.query("ann_dt <= @date")
+            latest = data.groupby('IDs')[[field_name, 'date']].last()
+            tmp = data.groupby(['IDs', 'date'])[field_name].last()
+            last_year = self._last_nyear(tmp, latest['date'], quarter=4)
+            last_quarter = self._last_nyear(tmp, latest['date'])
+            ittm = latest[field_name] + last_year - last_quarter
+            r.loc[date, :] = ittm
+        return r

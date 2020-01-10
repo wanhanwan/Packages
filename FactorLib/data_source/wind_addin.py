@@ -149,7 +149,7 @@ class WindAddIn(object):
         
         Return:
         ===========
-        pandas.Series
+        pandas.DataFrame
         """
         self.connect()
         start_date = _safe_format_date(start_date)

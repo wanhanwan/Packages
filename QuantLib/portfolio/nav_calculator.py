@@ -9,119 +9,120 @@ import pandas as pd
 from QuantLib.tools import return2nav
 
 
-def _get_rebalancing_asset(i, rebalancing_periods):
-    return rebalancing_periods[
-        i%rebalancing_periods==0].index.tolist()
-
-
-def _get_init_weight(weight, dt, asset):
-    if isinstance(weight, pd.Series):
-        return weight[asset]
-    else:
-        loc = weight.columns.get_loc(asset)
-        return weight.loc[:dt].iat[-1, loc]
-
-
-def _buy(asset_name, wt, weights, cash_name, leverage_name,
-         interest_name, credit_name):
-    if wt > 0:
-        cash_available = max(0, weights[cash_name] - 0.05)
-        if leverage_name is not None:
-            leverage_available = max(
-                (weights[interest_name] + weights[credit_name]*0.7)-abs(weights[leverage_name]),
-                0.0
-                )
-        else:
-            leverage_available = 0.0
-        wt = min(wt, cash_available+leverage_available)
-        leverage_need = max(0, wt-cash_available)
-        if leverage_need > 0.0:
-            weights[leverage_name] -= leverage_need
-            weights[cash_name] -= cash_available
-        else:
-            weights[cash_name] -= wt
-        weights[asset_name] += wt
-    else:
-        if leverage_name is not None:
-            weights[leverage_name] -= wt
-            if weights[leverage_name] > 0.0:
-                weights[cash_name] += weights[leverage_name]
-                weights[leverage_name] = 0.0
-        weights[asset_name] += wt
-
-
 def _fast_forward(weights, ret):
-    total_ret = sum((weights[x]*ret[x] for x in weights))
-    divider = sum((weights[x]*(1+ret[x]) for x in weights))
-    new_weights = {x: weights[x]*(1+ret[x])/divider for x in weights}
+    """
+    weights: array
+    ret: array
+    """
+    total_ret = np.sum(weights * ret)
+    divider = np.sum(np.abs(weights)*(1.0+ret))
+    new_weights = (np.abs(weights) * (1.0+ret) / divider) * np.sign(weights)
     return total_ret, new_weights
 
 
-def _calc_order(curr_w, w, order, assets=None):
-    if assets is None:
-        assets = list(w)
-    for k in assets:
-        if k in assets:
-            order[k] = w[k] - curr_w[k]
-
-
-def get_nav_and_weights(ret_df, asset_weight, rebalance_periods,
-            cash_name, leverage_name=None, interest_name=None,
-            credit_name=None):
+def get_nav_and_weights(rtn_df, rebalance_weights, init_weights):
     """计算净值
 
     Parameters:
     ==========
     ret_df: DataFrame
         收益率序列
-    weight: Series or DataFrame
-        权重序列，Series会广播到整个时间段.
-    rebalance_periods: int or dict
-        再平衡时间段
+    rebalance_weights: DataFrame
+        权重序列
+    init_weights: dict or Series
+        初始权重
     """
-    ret_p = pd.Series(np.zeros(ret_df.shape[0]), index=ret_df.index)
-    weights = {}
-    all_assets = ret_df.columns.tolist()
-
-    if isinstance(rebalance_periods, int):
-        rebalance_periods = pd.Series(
-            np.ones(ret_df.shape[1]) * rebalance_periods,
-            index=ret_df.colunms
-        )
+    rtn_df = rtn_df.copy()
+    rtn_df['rebalance'] = 0.0
+    asset_names = rtn_df.columns
+    if isinstance(init_weights, dict):
+        weights = pd.Series(init_weights)
     else:
-        rebalance_periods = pd.Series(rebalance_periods)
+        weights = init_weights.copy()
+    rebalance_weights = rebalance_weights.copy()
+    rebalance_weights = rebalance_weights.reindex(columns=asset_names)
+    # 加入平衡项，平衡项的收益为0，不影响结果。
+    rebalance_weights['rebalance'] = 1.0 - rebalance_weights.sum(axis=1)
+    weights = weights.reindex(index=asset_names)
+    weights.at['rebalance'] = 1.0 - weights.sum()
+#    weights = weights.to_numpy()
+    
+    rebalance_dates = rebalance_weights.index
+    rtns_series = pd.Series(index=rtn_df.index)
+    weights_df = pd.DataFrame(columns=asset_names, index=rtn_df.index)
+    for dt, rtn in rtn_df.iterrows():
+        if dt in rebalance_dates:
+            weights = rebalance_weights.loc[dt, :].to_numpy()
+        weights_df.loc[dt,:] = weights
+        r, weights = _fast_forward(weights, rtn.to_numpy())
+        rtns_series.at[dt] = r
+    nav = return2nav(rtns_series)
+    return nav, weights_df
 
-    if isinstance(asset_weight, pd.Series):
-        curr_weights = asset_weight.to_dict()
-    else:
-        curr_weights = asset_weight.iloc[0, :].to_dict()
 
-    for i, (dt, ret) in enumerate(ret_df.iterrows()):
-        i_ret, curr_weights = _fast_forward(curr_weights, ret)
-        ret_p.iat[i] = i_ret
-        weights[dt] = curr_weights.copy()
-
-        # 主动调仓和再平衡同时进行，若两个存在冲突，主动调仓优先级更高
-        init_weight = _get_init_weight(asset_weight, dt, all_assets)
-        order = {}
-        rebalancing_assets = _get_rebalancing_asset(i+1, rebalance_periods)
-        if leverage_name is not None:
-            init_weight.drop(leverage_name, inplace=True)
-            rebalancing_assets = [x for x in rebalancing_assets if x!=leverage_name]
-        _calc_order(curr_weights, init_weight, order, rebalancing_assets)
-        if isinstance(asset_weight, pd.DataFrame) and dt in asset_weight.index:
-            _calc_order(curr_weights, init_weight, order)
+def get_nav_and_weights2(rtn_df,
+                         capital_weights,
+                         init_capital_weights,
+                         leverages,
+                         init_leverages):
+    def _fast_forward2(ret, cw_t, l_t):
+        total_ret = np.sum(ret * l_t)
+        new_l_t = (cw_t*np.abs(l_t)*(1.0+ret))/(1.0+np.sum(cw_t*l_t*ret))*np.sign(l_t)
+        new_cw_t = cw_t*(1.0+l_t*ret)/np.sum(cw_t*(1.0+l_t*ret))
+        return total_ret, new_cw_t, new_l_t
         
-        sell_assets = [k for k in order if order[k]<0]
-        for asset in sell_assets:
-            _buy(asset, order[asset], curr_weights, cash_name, leverage_name,
-                 interest_name, credit_name)
+    asset_names = rtn_df.columns
+    if isinstance(init_capital_weights, dict):
+        cw = pd.Series(init_capital_weights).reindex(asset_names).to_numpy()
+    assert isinstance(capital_weights, pd.DataFrame)
+    capital_weights = capital_weights.reindex(columns=asset_names, fill_value=0.0)
+    if isinstance(leverages, (int,float)):
+        leverages = pd.DataFrame(
+                data=np.ones(capital_weights.shape)*leverages,
+                index=capital_weights.index,
+                columns=capital_weights.columns)
+    else:
+        assert isinstance(leverages, pd.DataFrame)
+        leverages = leverages.reindex(columns=asset_names)
+    if isinstance(init_leverages, dict):
+        l = pd.Series(init_leverages).reindex(asset_names).to_numpy()
+    elif isinstance(init_leverages, (int, float)):
+        l = pd.Series(init_leverages, index=asset_names).to_numpy()
+    else:
+        assert isinstance(init_leverages, pd.Series)
+        l = init_leverages.reindex(asset_names).to_numpy()
+    
+    rebalance_dates = capital_weights.index
+    rtns_series = pd.Series(index=rtn_df.index)
+    leverage_df = pd.DataFrame(columns=asset_names, index=rtn_df.index)
+    capital_df = pd.DataFrame(columns=asset_names, index=rtn_df.index)
+    for dt, rtn in rtn_df.iterrows():
+        if dt in rebalance_dates:
+            cw = capital_weights.loc[dt, :].to_numpy()
+            l = leverages.loc[dt, :].to_numpy()
+        leverage_df.loc[dt,:] = l
+        capital_df.loc[dt, :] = cw
+        r, cw, l = _fast_forward2(rtn.to_numpy(), cw, l)
+        rtns_series.at[dt] = r
+    nav = return2nav(rtns_series)
+    return nav, capital_df, leverage_df
 
-        buy_assets = [k for k in order if order[k]>0]
-        for asset in buy_assets:
-            _buy(asset, order[asset], curr_weights, cash_name, leverage_name,
-                 interest_name, credit_name)
 
-    nav = return2nav(ret_p)
-    wt = pd.DataFrame(weights).T
-    return nav, wt
+if __name__ == "__main__":
+    import numpy as np
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    sns.set(style='whitegrid')
+    plt.rcParams['font.sans-serif'] = ['SimHei']
+    plt.rcParams['axes.unicode_minus'] = False
+
+    ret_df = pd.DataFrame((np.random.randn(1000, 2))/100.0,
+                          index=pd.date_range('2010-01-01', periods=1000),
+                          columns=list('ab'))
+    weights_df = pd.DataFrame([[0.5,0.5]], index=[pd.to_datetime('2010-2-28')], columns=['a', 'b'])
+    nav, weights = get_nav_and_weights(ret_df, weights_df, {'a': 0.5, 'b': 0.5})
+    nav_test = return2nav(ret_df.mean(axis=1))
+    pd.concat([nav, nav_test], axis=1).plot()
+    plt.show()
+
