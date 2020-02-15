@@ -286,6 +286,8 @@ class trade_calendar(object):
         """
 
         today = as_timestamp(today)
+        if not self.is_trade_day(today):
+            today = self.get_latest_trade_days(today, retstr=None)
         if n == 0:
             if int(freq[0]) > 1:
                 warnings.warn('invalid step length of freq. It must be 1 when n=0')

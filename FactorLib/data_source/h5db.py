@@ -277,8 +277,7 @@ class H5DB(object):
     def save_h5file(self, data, name, path, group='data', ignore_index=True,
                     drop_duplicated_by_index=True, drop_duplicated_by_keys=None,
                     if_exists='append', sort_by_fields=None, sort_index=False,
-                    append_axis=0,
-                    **kwargs):
+                    append_axis=0, **kwargs):
         """直接把DataFrame保存成h5文件
 
         Parameters
@@ -303,7 +302,7 @@ class H5DB(object):
         if self.check_factor_exists(name, path):
             df = self.read_h5file(name, path, group=group)
             if if_exists == 'append':
-                data = pd.concat([df, data], axis=append_axis, ignore_index=True)
+                data = pd.concat([df, data], axis=append_axis, ignore_index=ignore_index)
             elif if_exists == 'replace':
                 pass
             elif if_exists=='update':
@@ -320,6 +319,8 @@ class H5DB(object):
                     data.reset_index(drop=True, inplace=True)
             else:
                 raise NotImplementedError
+        if ignore_index and not drop_duplicated_by_index:
+            data.reset_index(drop=True, inplace=True)
         if sort_by_fields is not None:
             data = data.sort_values(sort_by_fields)
         if sort_index:
@@ -360,7 +361,7 @@ class H5DB(object):
                 _l.append(df)
         if merge:
             return pd.concat(_l, axis=1)
-        return tuple(l)
+        return tuple(_l)
     
     def load_factors3(self, factor_names_dict, dates=None, ids=None,
                       idx=None):
@@ -437,7 +438,8 @@ class H5DB(object):
             else:
                 raise KeyError("please make sure if_exists is valide")
 
-    def save_factor2(self, factor_data, factor_dir, if_exists='append'):
+    def save_factor2(self, factor_data, factor_dir, if_exists='append',
+                     fillvalue=None, fillmethod=None):
         """往数据库中写数据
         数据格式：DataFrame(index=date, columns=IDs)
         """
@@ -466,6 +468,10 @@ class H5DB(object):
             raw = pd.read_hdf(factor_path, key='data')
             new = factor_data[~factor_data.index.isin(raw.index)]
             d = append_along_index(raw, new)
+            if fillvalue:
+                d = d.sort_index().fillna(fillvalue)
+            if fillmethod:
+                d = d.sort_index().fillna(method=fillmethod)
             self._save_h5file(d, factor_path, 'data', complevel=0,
                               format='table')
         elif if_exists == 'update':
@@ -473,6 +479,10 @@ class H5DB(object):
             raw, factor_data = raw.align(factor_data, axis='columns')
             raw.update(factor_data)
             d = append_along_index(raw, factor_data[~factor_data.index.isin(raw.index)])
+            if fillvalue:
+                d = d.sort_index().fillna(fillvalue)
+            if fillmethod:
+                d = d.sort_index().fillna(method=fillmethod)
             self._save_h5file(d, factor_path, 'data', complevel=0,
                               format='table')
         elif if_exists == 'replace':
@@ -520,12 +530,12 @@ class H5DB(object):
             factor_data = pd.get_dummies(factor_data)
         else:
             assert isinstance(factor_data, pd.DataFrame) and indu_name is not None
-        factor_data = factor_data.drop('T00018', axis=0, level='IDs').fillna(0)
+        factor_data = factor_data.drop('T00018', axis=0, level='IDs', errors='ignore').fillna(0)
         factor_data = factor_data.loc[(factor_data != 0).any(axis=1)]
         file_pth = self.abs_factor_path(factor_dir, indu_name)
         if self.check_factor_exists(indu_name, factor_dir):
             mapping = self._read_pklfile(file_pth.replace('.h5', '_mapping.pkl'))
-            factor_data = factor_data.reindex(columns=mapping)
+            factor_data = factor_data.reindex(columns=mapping, fill_value=0)
             new_saver = pd.DataFrame(np.argmax(factor_data.values, axis=1), columns=[indu_name],
                                      index=factor_data.index)
         else:

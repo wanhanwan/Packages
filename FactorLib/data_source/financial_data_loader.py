@@ -52,6 +52,36 @@ def quarter2intdate(year, quarter):
     return year * 10000 + quarter * 3 * 100 + day
 
 
+def safe_convert_int_to_date(df, columns):
+    for c in columns:
+        if pd.api.types.is_numeric_dtype(df[c].dtype):
+            df[c] = pd.to_datetime(df[c].apply(lambda x: str(int(x))), format='%Y%md')
+    return df
+
+
+def safe_convert_date_to_int(df, columns):
+    for c in columns:
+        if pd.api.types.is_datetime64_dtype(df[c].dtype):
+            df[c] = df[c].dt.strftime("%Y%m%d").astype('int64')
+    return df
+
+
+def safe_extract_year_from_date(ser):
+    if pd.api.types.is_numeric_dtype(ser):
+        year = ser // 10000
+    else:
+        year = ser.dt.year
+    return year.astype('int64')
+
+
+def safe_extract_quarter_from_date(ser):
+    if pd.api.types.is_numeric_dtype(ser):
+        quarter = ser % 10000 // 100 / 4
+    else:
+        quarter = ser.dt.quarter
+    return quarter.astype('int64')
+
+
 def min_report_date(date, quarter=None):
     """返回当下日期理论上最晚的报告期
     计算原则：
@@ -124,7 +154,7 @@ def div(x, y):
 class DataLoader(object):
     """财务数据库的数据加载器"""
 
-    def ttm(self, raw_data, field_name, dates, ids, dtype):
+    def ttm(self, raw_data, field_name, dates, ids, dtype='float64'):
         """加载ttm数据
 
         Parameters
@@ -153,7 +183,7 @@ class DataLoader(object):
             r.loc[date, :] = ittm
         return r
 
-    def last_nyear_ttm(self, raw_data, field_name, dates, ids, dtype, n=1):
+    def last_nyear_ttm(self, raw_data, field_name, dates, ids, dtype='float64', n=1):
         """回溯N年之前的TTM数值
         例如 2017-03-31报告期在1年之前的TTM值是2015-03-31至2016-03-31的数据
         """
@@ -182,7 +212,7 @@ class DataLoader(object):
             r.loc[date, :] = ittm
         return r
 
-    def last_nperiod_ttm(self, raw_data, field_name, dates, ids, dtype, n=1):
+    def last_nperiod_ttm(self, raw_data, field_name, dates, ids, dtype='float64', n=1):
         """回溯N年之前的TTM数值
         例如 2017-03-31报告期在1年之前的TTM值是2015-03-31至2016-03-31的数据
         """
@@ -209,7 +239,7 @@ class DataLoader(object):
             r.loc[date, :] = ittm
         return r
 
-    def last_nyear(self, raw_data, field_name, dates, ids, dtype, n=1, quarter=None):
+    def last_nyear(self, raw_data, field_name, dates, ids, dtype='float64', n=1, quarter=None):
         """回溯N年之前同期的财务数据
 
         Parameters:
@@ -247,7 +277,7 @@ class DataLoader(object):
             r.loc[date, :] = idata
         return r
 
-    def last_nyears(self, raw_data, field_name, dates, ids=None, n=1, quarter=None):
+    def last_nyears(self, raw_data, field_name, dates, ids=None, n=1, quarter=None, dtype='float64'):
         """回溯0~N年之前同期的财务数据"""
         if quarter is not None:
             raw_data = raw_data.query('quarter==@quarter')
@@ -352,7 +382,7 @@ class DataLoader(object):
         inc_r = incr_rate(old, new)
         return inc_r
 
-    def inc_rate_hb(self, raw_data, field_name, dates, ids, dtype):
+    def inc_rate_hb(self, raw_data, field_name, dates, ids, dtype='float64'):
         """环比增长率"""
         def _incr_rate(old, new):
             old, new = old.align(new, axis=0, join='outer')
@@ -384,6 +414,38 @@ class DataLoader(object):
         old = self.last_nperiod(raw_data, field_name, dates=dates, ids=ids)
         return avg(old, new)
 
+
+data_loader = DataLoader()
+def run_data_loader(func_name, data, field_name, idx=None, dates=None, ids=None, **kwargs):
+    """
+    函数式运行DataLoader实例
+
+    Parameters:
+    -----------
+    func_name: str
+        DataLoader成员函数名称, 如ttm
+    data: DataFrame
+        必须有的列：IDs date ann_dt，日期可以是datetime格式，也可以是int格式。
+        可选的列：year、quarter
+    
+    Returns:
+        DataFrame
+    """
+    data = data.copy()
+    assert {field_name, 'IDs', 'date'} < set(data.columns)
+    safe_convert_date_to_int(data, ['date', 'ann_dt'])
+    if 'year' not in data.columns:
+        data['year'] = safe_extract_year_from_date(data['date'])
+    if 'quarter' not in data.columns:
+        data['quarter'] = safe_extract_quarter_from_date(data['date'])
+    
+    if idx is not None:
+        dates = [int(x.strftime('%Y%m%d')) for x in idx.index.get_level_values('date').unique()]
+        ids = list(idx.index.get_level_values('IDs').unique())
+    df = getattr(data_loader, func_name)(data, field_name, dates = dates, ids = ids, **kwargs)
+    if df.index.nlevels == 1 and pd.api.types.is_numeric_dtype(df.index.dtype):
+        df.index = pd.DatetimeIndex([str(x) for x in df.index])
+    return df
 
 class ConsistentPeriodDataLoader(object):
 

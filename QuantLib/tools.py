@@ -104,7 +104,7 @@ def calc_corr(mat1, mat2=None, weight=None, use_ewavg=True):
     return corr
 
 
-def get_percentile_at(arr, values=None):
+def get_percentile_at(arr, values=None, side='right'):
     """value在数组arr中的分位数(升序)
     如果value是空，默认取arr的最后一个元素.
     遇到重复值，尽量靠右排列(返回值尽可能大)
@@ -113,6 +113,8 @@ def get_percentile_at(arr, values=None):
     ===========
     arr: array or Series
     value: float number or array, default None.
+    side: 'left' or 'right'(default)
+        如果遇到重复值，'left'会使返回值尽可能小；'right'反之。
     """
     if isinstance(arr, pd.Series):
         arr = arr.to_numpy()
@@ -179,3 +181,4 @@ def backward_regression(X, y, threshold_out, verbose=False):
         if not changed:
             break
     return included
+

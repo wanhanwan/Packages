@@ -65,6 +65,7 @@ def get_nav_and_weights2(rtn_df,
                          init_capital_weights,
                          leverages,
                          init_leverages):
+    """杠杆型资产(期货)的回测框架"""
     def _fast_forward2(ret, cw_t, l_t):
         total_ret = np.sum(ret * l_t)
         new_l_t = (cw_t*np.abs(l_t)*(1.0+ret))/(1.0+np.sum(cw_t*l_t*ret))*np.sign(l_t)

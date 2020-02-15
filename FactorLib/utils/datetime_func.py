@@ -1,5 +1,5 @@
 # coding: utf-8
-from pandas import datetime as pdDateTime
+from datetime import datetime as pdDateTime
 from FactorLib.data_source.trade_calendar import tc
 from collections import Iterable
 from functools import wraps
