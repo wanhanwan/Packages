@@ -4,7 +4,9 @@
 import tushare as ts
 import pandas as pd
 import numpy as np
+from time import sleep
 from FactorLib.utils.tool_funcs import get_members_of_date
+from functools import update_wrapper
 
 
 _token = '6135b90bf40bb5446ef2fe7aa20a9467ad10023eda97234739743f46'
@@ -14,6 +16,33 @@ SZEXG = 'SZSE' # 深交所代码
 
 ts.set_token(_token)
 pro_api = ts.pro_api()
+
+
+def set_call_limit(max_times=60, sleep_seconds=60):
+    if isinstance(max_times, int):
+        if max_times < 0:
+            max_times = 1
+    else:
+        raise TypeError("Expected max_times to be an integer")
+    
+    def decorating_function(user_function):
+        wrapper = _time_limit_wrapper(user_function, max_times, sleep_seconds)
+        return update_wrapper(wrapper, user_function)
+    
+    return decorating_function
+
+
+def _time_limit_wrapper(user_function, max_times, sleep_seconds):    
+    times = 0
+    def wrapper(*args, **kwargs):
+        nonlocal times
+        if times == max_times:
+            print(f"sleep {sleep_seconds} sceonds")
+            sleep(sleep_seconds)
+            times = 0
+        times += 1
+        return user_function(*args, **kwargs)
+    return wrapper
 
 
 class TushareDB(object):
@@ -276,19 +305,19 @@ class TushareDB(object):
         return data
 
     def option_daily_price_get(self, trade_date=None, ticker=None, start_date=None, end_date=None,
-                               fields=None, exchange='SSE'):
+                               fields=None, exchange=None):
         """
-        期权日行情数据
+        期权日行情数据(单次最大1000行)
         :param trade_date: str
             交易日期 YYYYMMDD
         :param ticker: str
-            证券代码 深交所300ETF期权以9开头；上交所期权以1开头
+            证券代码 深交所300ETF期权以9开头；上交所期权以1开头;
         :param start_date: str
             起始日期
         :param end_date: str
             结束日期
         :param exchange: str
-            交易所
+            交易所  上交所SSE、中金所CFFEX、深交所SZSE、上期所SHFE、CZCE郑商所、DCE大商所
         :param fields: str
             字段名称 ts_code合约代码 trade_date交易日期 close当日收盘价 open开盘价
                     high最高价 low最低价 pre_close前收盘价 pre_settle昨结算价
@@ -305,6 +334,7 @@ class TushareDB(object):
         data = self.run_api('opt_daily', exchange=exchange, ts_code=ticker,
                             trade_date=trade_date, start_date=start_date,
                             end_date=end_date)
+        data['vol'] *= 10000
         if fields:
             data = data[fields.strip().split(',')]
         data['trade_date'] = pd.to_datetime(data['trade_date'], format='%Y%m%d')
@@ -382,6 +412,39 @@ class TushareDB(object):
         if fields is not None:
             data = data[fields.strip().split(',')]
         data['end_date'] = pd.to_datetime(data['end_date'], format='%Y%m%d')
+        return data
+    
+    def fund_daily_price_get(self, ts_code=None, trade_date=None, start_date=None, end_date=None,
+                             fields=None):
+        """
+        基金日行情数据(每次最多返回800行数据)
+
+        Parameters:
+        -----------
+        ts_code: str
+            基金代码(带后缀)
+        start_date: str
+            开始日期YYYYMMDD
+        end_date: str
+            结束日期
+        trade_date: str
+            交易日期
+        fields: str
+            详见：https://tushare.pro/document/2?doc_id=127
+
+        returns：
+        -------
+        DataFrame ts_code, trade_date....
+
+        """
+        data = self.run_api('fund_daily', ts_code = ts_code,
+                            start_date = start_date,
+                            end_date = end_date,
+                            trade_date = trade_date
+                            )
+        if fields is not None:
+            data = data[fields.strip().split(',')]
+        data['trade_date'] = pd.to_datetime(data['trade_date'], format='%Y%m%d')
         return data
     
     def income_sheet(self, ticker=None, start_period=None, end_period=None, period=None,

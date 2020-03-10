@@ -112,10 +112,46 @@ class JQDataAPI(object):
         q = self._filter(q, *filter_str)
         data = pd.DataFrame(opt.run_query(q)).drop(columns=['id'], errors='ignore')
         if trade_date is not None:
-            data = data[~data['delist_date']<trade_date]
+            data = data[~(data['delist_date']<pd.to_datetime(trade_date))]
         if fields == '*':
             return data
         return data[fields.strip().split(',')]
+    
+    def opt_daily_preopen_get(self, contract_code=None, trade_date=None, contract_trade_code=None,
+                          fields='*'):
+        """
+        ETF期权每日交易的基本参数，包含合约单位、行权价格，持仓量，涨跌停价格数据等。
+
+        Parameters:
+        -----------
+        contract_code: str
+            8位数字的期权合约代码(需添加后缀)。期权合约变更前后，这个期权代码是不变的。
+        trade_date: str
+            交易日期 YYYY-MM-DD
+        contract_trade_code: str
+            17位数字的期权交易代码
+        fileds: str
+            交易日期、合约代码、涨跌停价、合约单位、行权价格等等。
+
+            详见https://www.joinquant.com/help/api/help?name=Option#%E8%8E%B7%E5%8F%96%E6%9C%9F%E6%9D%83%E6%AF%8F%E6%97%A5%E7%9B%98%E5%89%8D%E9%9D%99%E6%80%81%E6%96%87%E4%BB%B6
+        
+        """
+        module = 'opt'
+        table = 'OPT_DAILY_PREOPEN'
+        if fields == '*':
+            q = self._query(module, table)
+        else:
+            q = self._query_multi_fields(*([module, table, x] for x in fields.strip().split(',')))
+        filter_str = []
+        if contract_code:
+            filter_str.append(f"{module}.{table}.code=='{contract_code}'")
+        if trade_date:
+            filter_str.append(f"{module}.{table}.date=='{trade_date}'")
+        if contract_trade_code:
+            filter_str.append(f"{module}.{table}.trading_code=='{contract_trade_code}'")
+        q = self._filter(q, *filter_str)
+        data = pd.DataFrame(opt.run_query(q)).drop(columns=['id'], errors='ignore')
+        return data
     
     def income_statement_get(self, ticker=None, period=None, start_period=None,
                              end_period=None, report_type=None, fields=None):
@@ -200,6 +236,50 @@ class JQDataAPI(object):
         q = self._filter(q, *filter_str)
         data = pd.DataFrame(finance.run_query(q)).drop(columns=['id'], errors='ignore')
         return data
+    
+    def opt_daily_prices_get(self, contract_code=None, trade_date=None, start_trade_date=None,
+                             end_trade_date=None, exchange=None, fields=None):
+        """
+        期权日行情数据(每次最多返回3000行数据)
+
+        Parameters:
+        -----------
+        contract_code: str
+            8位数字的期权合约代码(需添加后缀)。期权合约变更前后，这个期权代码是不变的。
+        trade_date: str
+            交易日期 YYYY-MM-DD
+        start_trade_date: str
+            起始交易日期
+        end_trade_date: str
+            终止交易日期
+        exchange: str
+            交易所代码 XSHG上交所、XSHE深交所、CCFX中金所
+        fields: str
+            返回字段 详见：https://www.joinquant.com/help/api/help?name=Option#%E8%8E%B7%E5%8F%96%E6%9C%9F%E6%9D%83%E6%97%A5%E8%A1%8C%E6%83%85%E6%95%B0%E6%8D%AE
+        """
+        module = 'opt'
+        table = 'OPT_DAILY_PRICE'
+
+        if fields is None:
+            q = self._query(module, table)
+        else:
+            q = self._query_multi_fields(*([module, table, x] for x in fields.strip().split(',')))
+        # filter_str = [f"{module}.{table}.code=={module}.{table}.a_code"]
+        filter_str = []
+        if contract_code:
+            filter_str.append(f"{module}.{table}.code=='{contract_code}'")
+        if trade_date:
+            filter_str.append(f"{module}.{table}.date=='{trade_date}'")
+        if start_trade_date:
+            filter_str.append(f"{module}.{table}.date>='{start_trade_date}'")
+        if end_trade_date:
+            filter_str.append(f"{module}.{table}.date<='{end_trade_date}'")
+        if exchange:
+            filter_str.append(f"{module}.{table}.exchange_code=='{exchange}'")
+        q = self._filter(q, *filter_str)
+        data = pd.DataFrame(opt.run_query(q)).drop(columns=['id'], errors='ignore')
+        return data
+
 
 
 jq_api = JQDataAPI()

@@ -40,4 +40,4 @@ if __name__ == '__main__':
                             field=['ticker', 'program', 'restructuringType',
                                    'iniPublishDate', 'isSucceed', 'institNameSub', 'publishDate'],
                             beginDate='20180101', endDate='20181231')
-    data.to_hdf("D:/data/ma_2018.h5", "data")
+    # data.to_hdf("D:/data/ma_2018.h5", "data")

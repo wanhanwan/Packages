@@ -11,7 +11,7 @@ from ..utils.tool_funcs import ensure_dir_exists
 from ..utils.disk_persist_provider import DiskPersistProvider
 from .helpers import handle_ids, FIFODict
 from pathlib import Path
-
+pd.options.compute.use_numexpr = True
 
 lock = Lock()
 warnings.simplefilter('ignore', category=FutureWarning)
@@ -24,6 +24,19 @@ def append_along_index(df1, df2):
                        index=df1.index.append(df2.index))
     new.sort_index(inplace=True)
     return new
+
+
+def auto_increase_keys(_dict, keys):
+    if _dict:
+        max_v = max(_dict.values())
+    else:
+        max_v = 0
+
+    for key in keys:
+        if key not in _dict:
+            max_v += 1
+            _dict[key] = max_v
+    return _dict
 
 
 class H5DB(object):
@@ -56,17 +69,45 @@ class H5DB(object):
             data = pd.read_hdf(file_path, 'data')
         finally:
             lock.release()
+        # update at 2020.02.15: surpport wide dataframe
+        columns_mapping = self._read_columns_mapping(file_path)
+        if not columns_mapping.empty:
+            data.rename(
+                columns=pd.Series(columns_mapping.index, index=columns_mapping.to_numpy()),
+                inplace=True
+                )
+
         if self.max_cached_files > 0:
             self.cached_data[file_path] = data
         return data
+    
+    def _read_columns_mapping(self, file_path):
+        try:
+            data = pd.read_hdf(file_path, 'column_name_mapping')
+        except KeyError:
+            data = pd.Series()
+        return data
+    
+    def _normalize_columns(self, input, column_mapping):
+        return column_mapping[column_mapping.index.isin(input)].tolist()
 
     def _save_h5file(self, data, file_path, key,
                      complib='blosc', complevel=9,
                      mode='w', **kwargs):
         try:
             lock.acquire()
-            data.to_hdf(file_path, key=key, complib=complib,
-                        mode=mode, complevel=complevel, **kwargs)
+
+            # update at 2020.02.15: surpport wide dataframe
+            if data.shape[1] > 1000:
+                columns_mapping = {x:y for x, y in zip(data.columns, range(data.shape[1]))}
+                data2 = data.rename(columns=columns_mapping)
+            else:
+                data2 = data
+                columns_mapping = {}
+            with pd.HDFStore(file_path, mode=mode, complevel=complevel,
+                             complib=complib) as f:
+                f.put(key, data2, **kwargs)
+                f.put('column_name_mapping', pd.Series(columns_mapping))
             if file_path in self.cached_data:
                 self.cached_data.update({file_path: data})
             lock.release()
@@ -217,23 +258,29 @@ class H5DB(object):
             dates = idx.index.get_level_values('date').unique().tolist()
             ids = idx.index.get_level_values('IDs').unique().tolist()
         factor_path = self.abs_factor_path(factor_dir, factor_name)
+
+        columns_mapping = self._read_columns_mapping(factor_path)
+        if not columns_mapping.empty and ids is not None:
+            ids_normalized = self._normalize_columns(ids, columns_mapping)
+            if not ids_normalized:
+                return pd.DataFrame(columns=ids)
+        else:
+            ids_normalized = ids
+
+        where_term = None
         if dates is not None:
             dates = pd.to_datetime(dates)
-        if (dates is not None) and (ids is not None):
-            where_term = "(index in dates) & (columns in ids)"
-        elif dates is not None:
             where_term = "index in dates"
-        elif ids is not None:
-            where_term = 'columns in ids'
-        else:
-            where_term = None
+
         with pd.HDFStore(factor_path, mode='r') as f:
             try:
-                data = pd.read_hdf(f, key='data', where=where_term)
-                if ids is not None and data.shape[1] != len(ids):
-                    data = data.reindex(columns=ids)
-            except NotImplementedError:
+                data = pd.read_hdf(f, key='data', where=where_term, columns=ids_normalized)
+                if ids_normalized is not None and data.shape[1] != len(ids_normalized):
+                    data = data.reindex(columns=ids_normalized)
+            except NotImplementedError as e:
                 data = pd.read_hdf(f, key='data').reindex(index=dates, columns=ids)
+        if not columns_mapping.empty:
+            data.rename(columns=pd.Series(columns_mapping.index, index=columns_mapping.to_numpy()), inplace=True)
         data.name = factor_name
         if check_A:
             data = data.filter(regex='^[6,0,3]', axis=1)
@@ -465,7 +512,7 @@ class H5DB(object):
             self._save_h5file(factor_data, factor_path, 'data', complevel=0,
                               format='table')
         elif if_exists == 'append':
-            raw = pd.read_hdf(factor_path, key='data')
+            raw = self._read_h5file(factor_path, key='data')
             new = factor_data[~factor_data.index.isin(raw.index)]
             d = append_along_index(raw, new)
             if fillvalue:
@@ -475,7 +522,7 @@ class H5DB(object):
             self._save_h5file(d, factor_path, 'data', complevel=0,
                               format='table')
         elif if_exists == 'update':
-            raw = pd.read_hdf(factor_path, key='data')
+            raw = self._read_h5file(factor_path, key='data')
             raw, factor_data = raw.align(factor_data, axis='columns')
             raw.update(factor_data)
             d = append_along_index(raw, factor_data[~factor_data.index.isin(raw.index)])

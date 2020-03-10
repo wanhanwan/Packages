@@ -79,7 +79,7 @@ class Sector(object):
     def get_fund_info(self, fund_code=None, fund_type=None, start_date=None, fund_manager=None, benchmark=None):
         """
         获取公募基金的基本信息
-        数据源来自Wind终端-基金-专题统计-报表收藏-股票+混合型基金基本资料。这个数据需要定时更新。
+        数据源来自Wind终端-基金-专题统计-报表收藏-基金基本资料-全部基金(只含主代码)。这个数据需要定时更新。
 
         :param fund_code str or list
             基金代码
@@ -101,9 +101,9 @@ class Sector(object):
         @lru_cache()
         def get_fund_file():
             return pd.read_excel(
-                self.h5DB.abs_factor_path('/fund/', '股票+混合型基金基本资料').replace('.h5', '.xlsx'),
+                self.h5DB.abs_factor_path('/fund/', '基金基本资料').replace('.h5', '.xlsx'),
                 header=0,
-                parse_dates=['成立日期']
+                parse_dates=['成立日期', '到期日期']
             )
         fund_info = get_fund_file()
         if fund_code:
@@ -117,6 +117,60 @@ class Sector(object):
         if benchmark:
             fund_info = fund_info[fund_info['比较基准'].str.contains(benchmark)]
         return fund_info
+    
+    @lru_cache()
+    def _load_raw_data(self):
+        contracts = h5_2.read_h5file('contracts', '/opt/')
+        contracts_adj = h5_2.read_h5file('contracts_adjust', '/opt/').sort_values('adj_date')
+        # contracts_adj = contracts_adj.sort_values(['code','new_name'])
+        # contracts_adj = contracts_adj.drop_duplicates(subset=['code'], keep='last')
+        return contracts, contracts_adj
+    
+    @lru_cache()
+    def get_history_option(self, date, exchange=None, underlying_ticker=None):
+        """
+        获取历史期权合约(上交所、深交所和中金所的股票期权)
+
+        Parameters:
+        ----------
+        date: str
+            交易日期
+        exchenge: str
+            上交所XSHG、深交所XSHE、中金所CCFX
+        underlying_ticker: str
+            标的证券代码，如000300、510050、510300、159919
+        
+        Returns:
+        --------
+        DataFrame: date code trading_code symbol exchange_code list_date adj_date
+        """
+        c, cadj = self._load_raw_data()
+        dt = pd.to_datetime(date)
+        contracts_curr_dt = c[(c.list_date <= dt) & (c.last_trade_date >= dt)][
+            ['code', 'trading_code', 'symbol', 'exchange_code', 'underlying_symbol', 'list_date']]
+        contracts_curr_dt.set_index('code', inplace = True)
+        contracts_curr_dt['adj_date'] = pd.to_datetime('1900-01-01')
+        assert contracts_curr_dt.index.is_unique
+
+        
+        contracts_adj_curr_dt = contracts_curr_dt[contracts_curr_dt.index.isin(cadj.code.unique())]
+        for i in contracts_adj_curr_dt.index:
+            adj_record = cadj[(cadj.code == i) & (dt < cadj.adj_date)]
+            if not adj_record.empty:
+                contracts_curr_dt.loc[i, 'trading_code'] = adj_record['ex_trading_code'].iat[0]
+                contracts_curr_dt.loc[i, 'symbol'] = adj_record['ex_name'].iat[0]
+            adj_record2 = cadj[(cadj.code == i) & (dt >= cadj.adj_date)]
+            if not adj_record2.empty:
+                contracts_curr_dt.loc[i, 'trading_code'] = adj_record2['new_trading_code'].iat[-1]
+                contracts_curr_dt.loc[i, 'symbol'] = adj_record2['new_name'].iat[-1]
+                contracts_curr_dt.loc[i, 'adj_date'] = adj_record2['adj_date'].iat[-1]
+        contracts_curr_dt['date'] = dt
+
+        if exchange:
+            contracts_curr_dt = contracts_curr_dt[contracts_curr_dt.exchange_code == exchange]
+        if underlying_ticker:
+            contracts_curr_dt = contracts_curr_dt[contracts_curr_dt.underlying_symbol == underlying_ticker]
+        return contracts_curr_dt.reset_index()
 
 
 h5_2 = H5DB(FACTOR_PATH)
@@ -149,6 +203,63 @@ class Fund(object):
         return funds
 
 
+class Option(object):
+
+    @lru_cache()
+    def _load_raw_data(self):
+        contracts = h5_2.read_h5file('contracts', '/opt/')
+        contracts_adj = h5_2.read_h5file('contracts_adjust', '/opt/').sort_values('adj_date')
+        return contracts, contracts_adj
+
+    @staticmethod
+    def get_latest_trading_code_info(contract_id, date):
+        """"
+        获取最新期权合约的交易代码、调整日期和上市日期
+
+        Parameters:
+        -----------
+        contract_id: str
+            合约代码 如10000001 或 10000001.XSHG
+        
+        date: datetime or str
+            当前日期
+
+        Return:
+        ----------
+        Series
+        """
+        contracts = sec.get_history_option(date = date)
+        contracts = contracts.query("code == '%s'" % contract_id.split('.')[0])
+        assert len(contracts) == 1
+        return contracts[['code', 'trading_code', 'adj_date', 'list_date']].iloc[0]
+    
+    @staticmethod
+    def get_contract_daily_info(date, is_adjusted=None, contract_type=None, underlying_symbol=None,
+                                level=None, level_non_adjusted=None, delivery_type=None, squeeze=True):
+        """获取每日期权信息"""
+        data = h5_2.read_h5file('contract_info', '/opt/')
+        date = pd.to_datetime(date)
+        
+        query_str = "(date==@date)"
+        if is_adjusted is not None:
+            query_str += f" and (is_adjusted=={is_adjusted})"
+        if contract_type:
+            query_str += f" and (contract_type=='{contract_type}')"
+        if underlying_symbol:
+            query_str += f" and (underlying_symbol=='{underlying_symbol}')"
+        if level:
+            query_str += f" and (level=='{level}')"
+        if level_non_adjusted:
+            query_str += f" and (level_non_adjusted=='{level_non_adjusted}')"
+        if delivery_type:
+            query_str += f" and (delivery_type=='{delivery_type}')"
+        rslt = data.query(query_str)
+        if len(rslt)==1 and squeeze:
+            return rslt.iloc[0, :]
+        return rslt
+
+
 h5 = H5DB(H5_PATH)
 csv = CsvDB()
 fund = Fund()
+option = Option()

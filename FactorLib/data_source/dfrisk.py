@@ -32,16 +32,16 @@ class DFQuantRiskModelDataSource(object):
     @property
     @lru_cache()
     def factor_names(self):
-        indunamedict = {'银行': 'Bank', '非银行金融': 'NonBankFinance', '医药': 'Medicine',
-                        '电子元器件': 'ElectronicComponents', '食品饮料': 'FoodBeverage',
+        indunamedict = {'银行': 'Bank', '非银行金融or综合金融': 'NonBankFinance', '医药': 'Medicine',
+                        '电子元器件or电子': 'ElectronicComponents', '食品饮料': 'FoodBeverage',
                         '房地产': 'RealEstate', '机械': 'Machinery', '基础化工': 'BasicChemical',
                         '电力及公用事业': 'Utilities', '汽车': 'Cars', '计算机': 'Computers',
                         '家电': 'HomeAppliance', '有色金属': 'Metal', '建筑': 'Architecture',
-                        '交通运输': 'Transportation', '电力设备': 'ElectricalEquipment',
+                        '交通运输': 'Transportation', '电力设备or电力设备及新能源': 'ElectricalEquipment',
                         '传媒': 'Media', '通信': 'Commutation', '商贸零售': 'CommercialRetail',
                         '农林牧渔': 'Agriculture', '建材': 'BuildingMaterials', '钢铁': 'Iron',
                         '国防军工': 'Military', '石油石化': 'Petroleum', '轻工制造': 'LightManufacturing',
-                        '煤炭': 'Coal', '纺织服装': 'Clothing', '餐饮旅游': 'CateringTourism',
+                        '煤炭': 'Coal', '纺织服装': 'Clothing', '餐饮旅游or消费者服务': 'CateringTourism',
                         '综合': 'Comprehensive'}
         res = pd.DataFrame(self.conn.execute("SELECT * FROM dfrisk.riskfactor_info").fetchall())
         res.columns = ['id', 'name']
