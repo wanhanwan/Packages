@@ -1,6 +1,6 @@
 # encoding: utf-8
 # author: wanhanwan
-
+import os
 import bcolz
 import datetime
 import pandas as pd
@@ -58,20 +58,21 @@ _default_data_dype = {
 }
 
 
-def _create_na_mapper(dtype, float_na):
+def _create_na_mapper(dtype, user_mapper, float_na):
     """
     string的空值是''
     datetime的空值是1900-1-1
     float的空值是nan
     """
-    mapper = {}
-    for key, tye in dtype.items():
-        if tye == 'datetime':
-            mapper[key] = datetime.datetime(1900, 1, 1)
-        elif tye == 'numeric':
-            mapper[key] = float_na[key]
-        elif tye == 'string':
-            mapper[key] = ''
+    dft_na = {
+        'datetime': pd.Timestamp('1900-01-01'),
+        'numeric': float_na,
+        'string': ''
+    }
+    mapper = {
+        key: user_mapper.get(key, dft_na[value]) for
+            key, value in dtype.items()
+    }
     return mapper
 
 
@@ -102,9 +103,7 @@ def convert_to_int(df, dtypes, rounds, datetime_format='%Y%m%d', convert_datetim
     return df
 
 
-def id_range(id_series, datetime_format):
-    assert id_series.is_monotonic
-    id_series = id_series.to_numpy()
+def id_range(id_series):
     last_indices = np.where(id_series[1:]!=id_series[:-1])[0]
     if last_indices.size == 0:
         return {id_series[0]: (0, len(id_series))}
@@ -120,6 +119,38 @@ def append_along_index(df1, df2):
                        index=df1.index.append(df2.index))
     new.sort_index(inplace=True)
     return new
+
+
+def view_fields(a, names):
+    """
+    `a` must be a numpy structured array.
+    `names` is the collection of field names to keep.
+
+    Returns a view of the array `a` (not a copy).
+    """
+    dt = a.dtype
+    formats = [dt.fields[name][0] for name in names]
+    offsets = [dt.fields[name][1] for name in names]
+    itemsize = a.dtype.itemsize
+    newdt = np.dtype(dict(names=names,
+                          formats=formats,
+                          offsets=offsets,
+                          itemsize=itemsize))
+    b = a.view(newdt)
+    return b
+
+
+def remove_fields(a, names):
+    """
+    `a` must be a numpy structured array.
+    `names` is the collection of field names to remove.
+
+    Returns a view of the array `a` (not a copy).
+    """
+    dt = a.dtype
+    keep_names = [name for name in dt.names if name not in names]
+    return a[keep_names]
+
 
 
 class BcolzFile(object):
@@ -178,6 +209,12 @@ class BcolzDB(object):
             attr['round_mapper'][f],
             attr['na_mapper'][f]
         )
+    
+    def _idx_of(self, line_map, idx_start=None, idx_end=None):
+        keys = np.asarray(list(line_map.keys()), dtype=str)
+        s = line_map[min(keys[keys >= idx_start])][0] if idx_start else None
+        e = line_map[max(keys[keys<=idx_end])][1] if idx_end else None
+        return s, e
 
     def load_factor(self,
                     name,
@@ -185,7 +222,7 @@ class BcolzDB(object):
                     idx_name,
                     idx_start=None,
                     idx_end=None,
-                    idx=None,
+                    idx: pd.Index = None,
                     set_idx_name=None,
                     reindex_idx=None,
                     fields=None,
@@ -196,6 +233,7 @@ class BcolzDB(object):
         """
         if idx is not None:
             idx_start, idx_end = min(idx), max(idx)
+            idx_name = idx.name
         pth = self._p(factor_path, name, idx_name)
         attr = pd.read_pickle(Path(pth).parent / 'attrs.pkl')
         handler = self._load_table_handler(pth)
@@ -204,13 +242,12 @@ class BcolzDB(object):
             s, e  = 0, attr['max_rows']
         elif idx_start is None:
             s = 0
-            e = handler.line_map[idx_end][1]
+            e = self._idx_of(handler.line_map, idx_end=idx_end)[1]
         elif idx_end is None:
-            s = handler.line_map[idx_start][0]
+            s = self._idx_of(handler.line_map, idx_start=idx_start)[0]
             e = attr['max_rows']
         else:
-            s = handler.line_map[idx_start][0]
-            e = handler.line_map[idx_end][1]
+            s, e = self._idx_of(handler.line_map, idx_start, idx_end)
 
         fields = fields or handler._table.names
         dtypes = [
@@ -241,7 +278,8 @@ class BcolzDB(object):
                     datetime_format: str = '%Y%m%d',
                     save_datetime_as_int: bool = True,
                     sorter: list = None,
-                    if_exists = 'update'
+                    if_exists: str = 'update',
+                    save_index: bool = True
                     ):
         """
             保存一个DataFrame. 如果DataFrame有MultiIndex, 则为每一个level
@@ -257,40 +295,41 @@ class BcolzDB(object):
             index_names = [df.index.name]
         df.reset_index(inplace=True)
 
+        dtype_mapper = check_dataframe_dtypes(df)
+        na_mapper = _create_na_mapper(dtype_mapper, na_mapper or {}, nan)
+        df.fillna(na_mapper, inplace=True)
+
+        dft_round_mapper = {key: round for key in dtype_mapper}
+        if round_mapper:
+            round_mapper.update(dft_round_mapper)
+        else:
+            round_mapper = dft_round_mapper
+        df = convert_to_int(df, dtype_mapper, round_mapper, datetime_format, save_datetime_as_int)
+
+        def update_matrix(old, new, unique_names):
+            mask = np.ones(old.shape[0], dtype='bool')
+            for n in unique_names:
+                np.logical_and(mask, np.in1d(old[n], new[n]), out=mask)
+            old = np.delete(old, np.where(mask), axis=0)
+            new = np.hstack((old, new)) # todo  invalid type promotion
+            return new
+
         for idx in index_names:
             pth = self._p(save_path, name, idx)
             if self.check_table_existence(pth):
                 factor_attrs = self.load_factor_attr(save_path, name)
                 if if_exists == 'update':
-                    old = self.load_factor(
-                        name,
-                        save_path,
-                        idx,
-                        attrs = factor_attrs
+                    old = self._load_table_handler(pth)._table[:]
+                    new = df.to_records(
+                        index=False,
+                        column_dtypes={x:old.dtype[x] for x in df.columns}
                     )
-                    d = old.append(df).drop_duplicates(subset=index_names, keep='last')
+                    new = update_matrix(old, new, factor_attrs['index_names'])
                 else:
-                    d = df.copy()
+                    new = df.to_records(index=False)
             else:
                 ensure_dir_exists(path.dirname(pth))
-                d = df.copy()
-
-            dtype_mapper = check_dataframe_dtypes(d)
-
-            na_mapper = {} if na_mapper is None else na_mapper
-            for n in dtype_mapper:
-                if n not in na_mapper:
-                    na_mapper[n] = nan
-            df_na_value = _create_na_mapper(dtype_mapper, na_mapper)
-            for n, value in df_na_value.items():
-                d[n].fillna(value, inplace=True)
-
-            round_mapper = {} if round_mapper is None else round_mapper
-            for n in dtype_mapper:
-                if n not in round_mapper:
-                    round_mapper[n] = round
-
-            d = convert_to_int(d, dtype_mapper, round_mapper, datetime_format, save_datetime_as_int)
+                new = df.to_records(index=False)
 
             sort_columns = copy(sorter or [idx])
             if idx not in sort_columns:
@@ -298,23 +337,87 @@ class BcolzDB(object):
             else:
                 sort_columns.remove(idx)
                 sort_columns = [idx] + sort_columns
-            d = d.sort_values(sort_columns).reset_index(drop=True)
-            line_map = id_range(d[idx], datetime_format)
-            if is_datetime64_dtype(is_datetime64_dtype(line_map.keys())):
-                line_map = {x.strftime(datetime_format):y for x, y in line_map.items()}
+            new.sort(order=sort_columns)
+            line_map = id_range(new[idx])
+            if np.issubdtype(new[idx].dtype, np.datetime64):
+                line_map = {pd.Timestamp(x).strftime(datetime_format):y for x, y in line_map.items()}
             else:
                 line_map = {str(x):y for x, y in line_map.items()}
-
-            ct = bcolz.ctable.fromdataframe(d, rootdir=pth, mode='w')
-            ct.attrs['line_map'] = line_map
+            if not save_index:
+                ct = bcolz.ctable(remove_fields(new, [idx]), rootdir=pth, mode='w')
+                ct.attrs['line_map'] = list(new[idx])
+            else:
+                ct = bcolz.ctable(new, rootdir=pth, mode='w')
+                ct.attrs['line_map'] = line_map
 
         attrs = {
             'index_names' : index_names,
             'dtype_mapper': dtype_mapper,
             'na_mapper': na_mapper,
             'round_mapper': round_mapper,
-            'max_rows': d.shape[0],
+            'max_rows': new.shape[0],
             'datetime_format': datetime_format
         }
         dumper = DiskPersistProvider(path.join(self.root_dir, save_path.strip('/'), name))
         dumper.dump(attrs, 'attrs')
+
+    def save_factor_by_date(self,
+                            df: pd.DataFrame,
+                            save_path: str,
+                            name: str,
+                            nan: int = -1,
+                            na_mapper: dict = None,
+                            round: int = 4,
+                            round_mapper: dict = None,
+                            datetime_format: str = '%Y%m%d',
+                            save_datetime_as_int: bool = True,
+                            sorter: list = None,
+                            if_exists='update'
+                            ):
+        for dt, data in df.groupby('date', group_keys=False, as_index=False):
+            try:
+                data = data.reset_index('date', drop=True)
+            except:
+                pass
+            self.save_factor(data,
+                             f'{save_path}{name}/',
+                             dt.strftime(datetime_format),
+                             nan,
+                             na_mapper,
+                             round,
+                             round_mapper,
+                             datetime_format,
+                             save_datetime_as_int,
+                             sorter,
+                             'replace',
+                             False
+                             )
+
+    @clru_cache()
+    def _load_factor_by_date(self, name, factor_path, date):
+        h = self._load_table_handler(self._p(factor_path, name, date, 'IDs'))
+        data = self.load_factor(date, factor_path+'/'+name+'/', 'IDs')
+        data.index = pd.Index(h.line_map, name='IDs')
+        return data
+
+    def load_factor_by_date(self,
+                            name: str,
+                            factor_path: str,
+                            start_date: str,
+                            end_date: str,
+                            ids: list=None,
+                            fields: list=None
+                            ):
+        df = []
+        dates = []
+        for dt in (x for x in os.listdir(self.root_dir+factor_path+'/'+name)
+                   if start_date<=x<=end_date):
+            _d = self._load_factor_by_date(name, factor_path, dt)
+            df.append(_d)
+            dates.append(dt)
+        df = pd.concat(df, keys=pd.DatetimeIndex(dates, name='date'))
+        if ids:
+            df = df.loc[pd.IndexSlice[:, ids], :]
+        if fields:
+            df = df[fields]
+        return df

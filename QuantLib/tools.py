@@ -182,3 +182,74 @@ def backward_regression(X, y, threshold_out, verbose=False):
             break
     return included
 
+
+from empyrical.stats import sharpe_ratio
+from itertools import combinations
+from scipy.stats import rankdata
+def compute_pbo(ret_df, S, performance_func=sharpe_ratio):
+    """
+    计算过拟合概率
+    """
+    ret_values = ret_df.dropna().to_numpy()
+    ret_values = np.array_split(ret_values, S)
+    N = ret_df.shape[1]
+
+    Cs = list(combinations(range(S), S // 2))
+    all_chunks = set(range(S))
+    df_result = pd.DataFrame(index=list(range(len(Cs))),
+                             columns=['w', 'metric_in', 'metric_out'])
+    for i, chunk in enumerate(Cs):
+        in_sample = np.concatenate([ret_values[j] for j in chunk], axis=0)
+        out_sample = np.concatenate([ret_values[j] for j in (all_chunks - set(chunk))],
+                                    axis=0)
+
+        # compute performance metric
+        performance_in = performance_func(in_sample)
+        performance_out = performance_func(out_sample)
+
+        # rank
+        idx_best = performance_in.argmax()
+        rank = rankdata(performance_out)[idx_best]
+        w = 1.0 - rank / N
+        df_result.iloc[i,:] = [w, performance_in[idx_best], performance_out[idx_best]]
+
+    return (df_result['w'] > 0.5).sum()/len(df_result), df_result
+
+
+def compute_pbo_sampled_randomly(ret_df, S, N, K, performance_func=sharpe_ratio):
+    """
+    随机抽选样本，计算过拟合概率
+
+    Parameters:
+    -----------
+    S: int
+        将样本按时间序列分成S份。
+    N：int
+        每次抽样从S中抽N份作为样本内和样本外。
+    K：int
+        重复实验次数。
+    """
+    ret_values = ret_df.dropna().to_numpy()
+    ret_values = np.array_split(ret_values, S)
+    N = ret_df.shape[1]
+
+    all_chunks = set(range(S))
+    Cs = [np.random.choice(list(range(S)), N) for x in range(K)]
+    Cs2 = [np.random.choice(list(all_chunks-set(x)), N) for x in Cs]
+    df_result = pd.DataFrame(index=list(range(len(Cs))),
+                             columns = ['w', 'metric_in', 'metric_out'])
+    for i, chunk in enumerate(Cs):
+        in_sample = np.concatenate([ret_values[j] for j in chunk], axis=0)
+        out_sample = np.concatenate([ret_values[j] for j in Cs2[i]], axis=0)
+
+        # compute performance metric
+        performance_in = performance_func(in_sample)
+        performance_out = performance_func(out_sample)
+
+        # rank
+        idx_best = performance_in.argmax()
+        rank = rankdata(performance_out)[idx_best]
+        w = 1.0 - rank / N
+        df_result.iloc[i,:] = [w, performance_in[idx_best], performance_out[idx_best]]
+    
+    return (df_result['w'] > 0.5).sum() / len(df_result), df_result

@@ -280,13 +280,201 @@ class JQDataAPI(object):
         data = pd.DataFrame(opt.run_query(q)).drop(columns=['id'], errors='ignore')
         return data
 
+    def opt_daily_risk_indicators_get(self, contract_code=None, trade_date=None, start_trade_date=None,
+                                         end_trade_date=None, exchange=None, fields=None):
+        """
+        期权日频风险指标
 
+        Parameters:
+        -----------
+        contract_code: str
+            8位数字的期权合约代码(需添加后缀)。期权合约变更前后，这个期权代码是不变的。
+            代码后缀：XSHG上交所、XSHE深交所、CCFX中金所
+        trade_date: str
+            交易日期 YYYY-MM-DD
+        exchange: str
+            交易所代码 XSHG上交所、XSHE深交所、CCFX中金所
+        start_trade_date: str
+            起始交易日期
+        end_trade_date: str
+            终止交易日期
+        fields: str
+            返回字段 详见：https://www.joinquant.com/help/api/help?name=Option#%E8%8E%B7%E5%8F%96%E6%9C%9F%E6%9D%83%E9%A3%8E%E9%99%A9%E6%8C%87%E6%A0%87%E6%95%B0%E6%8D%AE
+        """
+        module = 'opt'
+        table = 'OPT_RISK_INDICATOR'
+
+        if fields is None:
+            q = self._query(module, table)
+        else:
+            q = self._query_multi_fields(*([module, table, x] for x in fields.strip().split(',')))
+
+        filter_str = []
+        if contract_code:
+            filter_str.append(f"{module}.{table}.code=='{contract_code}'")
+        if trade_date:
+            filter_str.append(f"{module}.{table}.date=='{trade_date}'")
+        if start_trade_date:
+            filter_str.append(f"{module}.{table}.date>='{start_trade_date}'")
+        if end_trade_date:
+            filter_str.append(f"{module}.{table}.date<='{end_trade_date}'")
+        if exchange:
+            filter_str.append(f"{module}.{table}.exchange_code=='{exchange}'")
+        q = self._filter(q, *filter_str)
+        data = pd.DataFrame(opt.run_query(q)).drop(columns=['id'], errors='ignore')
+        return data
+    
+    def stock_dividend_get(self, ticker=None, start_report_date=None, end_report_date=None, fields=None):
+        """
+        A股分红送股信息
+
+        Parameters:
+        -----------
+        ticker: str
+            股票代码
+        start_report_date: str
+            起始报告日期 YYYY-MM-DD
+        end_report_date: str
+            结束报告日期 YYYY-MM-DD
+        fields: str
+            返回字段，详见：https://www.joinquant.com/help/api/help?name=Stock#%E4%B8%8A%E5%B8%82%E5%85%AC%E5%8F%B8%E5%88%86%E7%BA%A2%E9%80%81%E8%82%A1%EF%BC%88%E9%99%A4%E6%9D%83%E9%99%A4%E6%81%AF%EF%BC%89%E6%95%B0%E6%8D%AE
+        """
+        module = 'finance'
+        table = 'STK_XR_XD'
+
+        if fields is None:
+            q = self._query(module, table)
+        else:
+            q = self._query_multi_fields(*([module, table, x] for x in fields.strip().split(',')))
+        
+        filter_str = []
+        if ticker:
+            code = tradecode_to_uqercode(ticker)
+            filter_str.append(f"{module}.{table}.code=='{code}'")
+        if start_report_date:
+            filter_str.append(f"{module}.{table}.report_date>='{start_report_date}'")
+        if end_report_date:
+            filter_str.append(f"{module}.{table}.report_date<='{end_report_date}'")
+        q = self._filter(q, *filter_str)
+        data = pd.DataFrame(finance.run_query(q)).drop(columns=['id'], errors='ignore')
+        return data
+
+    def fund_dividend_get(self, ticker=None, start_ann_date=None, end_ann_date=None,
+                          fields=None):
+        """
+        基金分红信息
+
+        Parameter:
+        ---------
+        ticker: str
+            基金代码
+        start_ann_date: str
+            起始公告日期
+        end_ann_date: str
+            终止公告日期
+        fields: str
+            返回字段
+            详见：https://www.joinquant.com/help/api/help?name=JQData#%E8%8E%B7%E5%8F%96%E5%9F%BA%E9%87%91%E5%88%86%E7%BA%A2%E6%8B%86%E5%88%86%E5%90%88%E5%B9%B6%E4%BF%A1%E6%81%AF
+        """
+        module = 'finance'
+        table = 'FUND_DIVIDEND'
+        if fields is None:
+            q = self._query(module, table)
+        else:
+            q = self._query_multi_fields(*([module, table, x] for x in fields.strip().split(',')))
+        filter_str = []
+        if ticker:
+            filter_str.append(f"{module}.{table}.code=='{ticker}'")
+        if start_ann_date:
+            filter_str.append(f"{module}.{table}.pub_date>='{start_ann_date}'")
+        if end_ann_date:
+            filter_str.append(f"{module}.{table}.pub_date<='{end_ann_date}'")
+        q = self._filter(q, *filter_str)
+        data = pd.DataFrame(finance.run_query(q)).drop(columns=['id'], errors='ignore')
+        return data
+    
+    def fund_portfolio_get(self, ticker=None, start_period=None, end_period=None, fields=None):
+        """
+        基金持仓信息
+
+        Parameters:
+        -----------
+        ticker: str
+            基金代码
+        start_period: str
+            起始财报日期YYYY-MM-DD
+        end_period: str
+            终止财报日期YYYY-MM-DD
+        fields: str
+            返回字段
+            详见：https://www.joinquant.com/help/api/help?name=JQData#%E8%8E%B7%E5%8F%96%E5%9F%BA%E9%87%91%E6%8C%81%E8%82%A1%E4%BF%A1%E6%81%AF%EF%BC%88%E6%8C%89%E5%AD%A3%E5%BA%A6%E5%85%AC%E5%B8%83%EF%BC%89
+        """
+        module = 'finance'
+        table = 'FUND_PORTFOLIO_STOCK'
+        if fields is None:
+            q = self._query(module, table)
+        else:
+            q = self._query_multi_fields(*([module, table, x] for x in fields.strip().split(',')))
+        filter_str = []
+        if ticker:
+            filter_str.append(f"{module}.{table}.code=='{ticker}'")
+        if start_period:
+            filter_str.append(f"{module}.{table}.period_end>='{start_period}'")
+        if end_period:
+            filter_str.append(f"{module}.{table}.period_end<='{end_period}'")
+        q = self._filter(q, *filter_str)
+        data = pd.DataFrame(finance.run_query(q)).drop(columns=['id'], errors='ignore')
+        for c in ['period_start', 'period_end', 'pub_date']:
+            if c in data.columns:
+                data = data.astype({c: 'datetime64'})
+        return data
+
+    def fund_nav_get(self, ticker=None, start_date=None, end_date=None, fields=None):
+        """
+        基金净值
+
+        Parameters:
+        -----------
+        ticker: str
+            基金代码(无后缀)
+        start_date: str
+            起始日期YYYY-MM-DD
+        end_date: str
+            终止日期YYYY-MM-DD
+        fields: str
+            返回字段 code、day、net_value、sum_value、factor、acc_factor、refactor_net_value
+        """
+
+        module = 'finance'
+        table = 'FUND_NET_VALUE'
+        if fields is None:
+            q = self._query(module, table)
+        else:
+            q = self._query_multi_fields(*([module, table, x] for x in fields.strip().split(',')))
+        filter_str = []
+        if ticker:
+            filter_str.append(f"{module}.{table}.code=='{ticker}'")
+        if start_date:
+            filter_str.append(f"{module}.{table}.day>='{start_date}'")
+        if end_date:
+            filter_str.append(f"{module}.{table}.day<='{end_date}'")
+        q = self._filter(q, *filter_str)
+        data = pd.DataFrame(
+            finance.run_query(q)).drop(columns=['id'],
+            errors='ignore',
+        )
+        return data
 
 jq_api = JQDataAPI()
 
 
-
 if __name__ == '__main__':
     jq_api = JQDataAPI()
-    data = jq_api.opt_contract_info_get()
-    print(data)
+    data = jq_api.fund_portfolio_get('000311','2020-03-31','2020-03-31')
+    print(data.dtypes)
+
+
+import pandas as pd
+df = pd.Series(['2020-01-01', '2020-01-02'])
+df.astype('datetime64')
+pd.DatetimeIndex(df)

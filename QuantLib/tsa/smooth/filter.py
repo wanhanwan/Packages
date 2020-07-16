@@ -78,3 +78,53 @@ def hp_filter(ts, min_periods=10, freq='M', lamb=None):
         min_periods=min_periods).agg(_get_last_one, l=lamb)
     roll_trend.iloc[:min_periods] = cycle
     return roll_trend.reindex(ts.index)
+
+
+def ewma(ts, window=None, half_life=None):
+    """
+    EWMA
+
+    This is equivalent to Pandas.Series.ewm(adjust=False, span=window).mean().
+    But much faster.
+
+    Algorithms:
+    -----------
+    weighted_average[0] = arg[0];
+
+    weighted_average[i] = (1-alpha)*weighted_average[i-1] + alpha*arg[i].
+
+    Parameters:
+    -----------
+    ts: Series
+    window: int
+        alpha = 2 / (1 + window)
+    half_life: int
+        alpha = 1 - exp(log(0.5)/half_life)
+    """
+    if isinstance(ts, pd.Series):
+        return_arr = False
+        data = ts.to_numpy()
+    else:
+        return_arr = True
+        data = np.asarray(ts, dtype='float64')
+
+    if window:
+        alpha = 2 / (window + 1.0)
+    elif half_life:
+        alpha = 1 - np.exp(np.log(0.5)/half_life)
+    alpha_rev = 1 - alpha
+
+    n = data.shape[0]
+    pows = alpha_rev ** (np.arange(n+1))
+
+    scale_arr = 1 / pows[:-1]
+    offset = data[0] * pows[1:]
+    pw0 = alpha * alpha_rev ** (n - 1)
+
+    mult = data * pw0 * scale_arr
+    cumsums = mult.cumsum()
+    out = offset + cumsums * scale_arr[::-1]
+
+    if return_arr:
+        return out
+    return pd.Series(out, index=ts.index)

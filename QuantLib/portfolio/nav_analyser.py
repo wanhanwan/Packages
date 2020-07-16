@@ -54,7 +54,6 @@ class Analyser(object):
             benchmark_returns = _add_date_index(benchmark_navs, period).pct_change(fill_method=None).iloc[1:]
         return cls(returns, benchmark_returns, risk_free_rate, period)
 
-
     def set_date_range(self, start_date, end_date):
         if start_date is not None:
             s = as_timestamp(start_date)

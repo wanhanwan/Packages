@@ -9,7 +9,7 @@ import numpy as np
 from .popt import absolute_portfolio_optimization, portfolio_optimization
 
 
-def portfolio_optimization2(r, cov=None, Xf=None, F=None, D=None, wb=None, w0=None, c_=None,
+def portfolio_optimization_cvx(r, cov=None, Xf=None, F=None, D=None, wb=None, w0=None, c_=None,
                             lambda_=None, sigma=None, delta_=None, wmin=None, wmax=None,A=None,
                             bmin=None,bmax=None,B=None,beq=None,
                             fmin=None, fmax=None,cpct=None, **kwargs):
@@ -31,23 +31,45 @@ def portfolio_optimization2(r, cov=None, Xf=None, F=None, D=None, wb=None, w0=No
     其中 , w 是绝对权重 , x 是主动权重 , 股票协方差 V 由结构化因子模型确定.
     如果传入cov, V=cov; 否则，V=V = Xf'(F)Xf + D^2
 
-    r numpy.array(n,) 股票预期收益
-    cov numpy.array(n,n)股票协方差矩阵
-    Xf numpy.array(n,m) 风险因子取值
-    F numpy.array(m,m) 风险因子收益率协方差矩阵
-    D numpy.array(n,) 股票残差风险矩阵
-    w0 numpy.array(n,) 组合初始权重 , None 表示首次建仓 初始权重为 0
-    wb numpy.array(n,) 基准指数权重
-    c_ float 或者 numpy.array(n,) 换手惩罚参数
-    lambda_ float 风险惩罚参数
-    sigma_ float 跟踪误差约束 , 0.05 表示 5%
-    delta_ float 换手约束参数 单边
-    wmin float 或者 numpy.array(n,) 绝对权重最小值
-    wmax float 或者 numpy.array(n,) 绝对权重最大值
-    fmin float list tuple 或者 numpy.array(m,) 因子暴露最小值
-    fmax float list tuple 或者 numpy.array(m,) 因子暴露最大值
-    cpct float 0 到 1 之间 成分股内股票权重占比
-    A numpy.array(n,p) 其他线性约束矩阵
+    Parameter:
+    -----------
+    r: numpy.array(n,)
+        股票预期收益
+    cov: numpy.array(n,n)
+        股票协方差矩阵
+    Xf: numpy.array(n,m)
+        风险因子取值
+    F: numpy.array(m,m)
+        风险因子收益率协方差矩阵
+    D: numpy.array(n,)
+        股票残差风险矩阵
+    w0: numpy.array(n,)
+        组合初始权重,None表示首次建仓,初始权重为0
+    wb: numpy.array(n,)
+        基准指数权重
+    c_: float or numpy.array(n,)
+        换手惩罚参数
+    lambda_:float
+        风险惩罚参数
+    sigma_: float
+        跟踪误差约束,0.05
+    delta_: float
+        换手约束参数,单边
+    wmin: float or numpy.array(n,)
+        绝对权重最小值
+    wmax: float or numpy.array(n,)
+        绝对权重最大值
+    fmin: float/list/tuple/numpy.array(m,)
+        因子暴露最小值
+    fmax: float/list/tuple/numpy.array(m,)
+        因子暴露最大值
+    cpct: float
+        from 0 to 1, 成分股内股票权重占比
+    A: numpy.array(n,p)
+        其他线性约束矩阵
+    kwargs: dict
+        传入cvxpy.problem.solve()中的参数。
+        指定优化器
     """
     n = len(r) # 资产数量
     x = cvx.Variable(n)
@@ -85,7 +107,9 @@ def portfolio_optimization2(r, cov=None, Xf=None, F=None, D=None, wb=None, w0=No
     if B is not None:
         eq = B.T @ x
         constraints.append(beq==eq)
-        # constraints.append(beq>=eq)
+    if cpct is not None and wb is not None:
+        is_member = np.where(wb != 0.0)[0]
+        constraints.append(cvx.sum(w[is_member])>=cpct)
     
     # 优化
     prob = cvx.Problem(cvx.Maximize(obj), constraints)
@@ -100,4 +124,3 @@ def portfolio_optimization2(r, cov=None, Xf=None, F=None, D=None, wb=None, w0=No
     else:
         result = {}
     return result
-

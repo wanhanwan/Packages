@@ -84,7 +84,8 @@ class ThreeQuantilesTest(object):
         
         rslt = {'t': t, 'nobs': nobs.sum(), 'F1': f1, 'F3': f3, 'adf_pvalue': adf,
                 'F1_Series': returns[labels==1],
-                'F3_Series': returns[labels==3]}
+                'F3_Series': returns[labels == 3],
+                'Labels': labels}
         if print_result:
             print(
                 """样本内检验结果\n
@@ -159,7 +160,8 @@ class ThreeQuantilesTest(object):
         
         rslt = {'t': t, 'nobs': nobs.sum(), 'F1': f1, 'F3': f3, 'adf_pvalue': adf,
                 'F1_Series': returns[labels==1],
-                'F3_Series': returns[labels==3]}
+                'F3_Series': returns[labels == 3],
+                'Labels': labels}
         print(
             """样本外检验结果
             adf_p: %.2f\n

@@ -92,6 +92,7 @@ def resample_func(data, convert_to, func):
         p = p.swaplevel().unstack()
     if offset.onOffset(data.index[-1]) and _is_nan(p.iloc[-1]):
         p = p.iloc[:-1]
+    # p.index.freq = offset
     return p
 
 

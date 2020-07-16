@@ -1,5 +1,5 @@
 import numpy as np
-from multiprocessing.pool import Pool
+from multiprocess import Pool
 
 
 def run_func(target_func, func_args, split_args, core_nums=2):
@@ -12,8 +12,8 @@ def run_func(target_func, func_args, split_args, core_nums=2):
         target_func(split_args, func_args)
     func_args: dict
         被传入到运行函数中
-    split_args: 2-dimensioned array of N * K
-        参数列表会平均分配到不同的进程中去。N代表参数的个数，K代表每个参数的长度
+    split_args: two-dimensioned array N*K
+        参数列表会平均分配到不同的进程中去。N代表参数个数，K代表每个参数下元素数量。
     core_nums: int
         创建进程的数量
     """
@@ -21,7 +21,8 @@ def run_func(target_func, func_args, split_args, core_nums=2):
     p = Pool(core_nums)
     for i in range(core_nums):
         print("create process %s" % i)
-        p.apply_async(target_func, args=tuple(s_args[i]), kwds=func_args)
+        p.apply_async(target_func, args=tuple(s_args[i]), kwds=func_args,
+                      callback=lambda x: print(x), error_callback=lambda x: print(x))
     p.close()
     p.join()
     print("calculation has finished!")

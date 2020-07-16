@@ -1,8 +1,12 @@
 # coding: utf-8
 """一些工具函数"""
-import pandas as pd
-import numpy as np
 import re
+import six
+import subprocess
+import numpy as np
+import pandas as pd
+
+from collections import Iterable
 from ..const import INDUSTRY_NAME_DICT
 
 
@@ -73,7 +77,25 @@ def tslcode_to_tradecode(code):
 def drop_patch(code):
     return code.split(".")[0]
 
+# ------------日期相关----------------------------------------
+from FactorLib.data_source.trade_calendar import as_timestamp
 
+@clru_cache()
+def date_to_str(date, format='%Y%m%d'):
+    return as_timestamp(date).strftime(format)
+
+@clru_cache()
+def str_to_date(s):
+    return as_timestamp(s)
+
+def date_to_int(date):
+    return int(date_to_str(date))
+
+@clru_cache()
+def int_to_date(x: int):
+    return as_timestamp(str(x))
+
+# ----------------------------------------------------------
 def import_module_from_file(module_name, module_path):
     """
     从源文件引入一个模块
@@ -92,6 +114,21 @@ def import_module_from_file(module_name, module_path):
     m = ilu.module_from_spec(spec)
     spec.loader.exec_module(m)
     return m
+
+
+def run_file(file_path, arg_str='', error='ignore'):
+    """
+    在子进程中运行一个py文件
+    """
+    print("正在运行：%s"%file_path)
+    status = subprocess.call('python.exe ' + file_path + ' ' +arg_str, shell=True)
+    if status == 0:
+        print("运行成功：%s"%file_path)
+    elif error == 'ignore':
+        print("运行失败: %s"%file_path)
+    else:
+        raise RuntimeError("运行失败: %s"%file_path)
+    return status
 
 
 def ensure_dir_exists(dir_path):
@@ -123,16 +160,6 @@ def ReportDateAvailable(start_date, end_date):
 def get_all_report_periods(start, end):
     periods = pd.date_range(start, end, freq='Q', name='date')
     return periods
-
-
-def distribute_equal(n, m):
-    """把整数n平均分成m份"""
-    Quotient = n // m
-    Remainder = n % m
-    Res = [Quotient] * m
-    for i in range(Remainder):
-        Res[i] += 1
-    return Res
 
 
 # 返回一个可用名称
@@ -178,7 +205,26 @@ def get_members_of_date(date, entry_dt_field, remove_dt_field, return_field, dat
 
 
 def get_members_of_dates(dates, entry_dt_field, remove_dt_field, return_field, data):
-    """获取某个时间序列的指数成分股"""
+    """
+    获取某个时间序列的指数成分股
+    
+    Parameters:
+    ===========
+    date : str of list
+        需要哪天的成分股,"YYYYMMDD"
+    entry_dt_field : str
+        data中纳入日期对应的列名
+    remove_dt_field : str
+        data中纳出日期对应的列名
+    return_field : str
+        data中需要返回的列名
+    data : DataFrame
+        一张包含纳入纳出日期的表, index为股票6位数字代码(String)。
+    
+    Return:
+    -------
+    DataFrame(index=dates, columns=ids)
+    """
     all_ids = data.index.unique()
     rslt = pd.DataFrame(index=dates, columns=all_ids, dtype='O')
     for dt in dates:
@@ -197,3 +243,10 @@ def dummy2name(dummy):
     columns = dummy.columns
     names = dummy.apply(lambda x: columns[np.where(x)[0][0]], axis=1, raw=True)
     return names
+
+
+def is_non_string_iterable(arg):
+    return (
+        isinstance(arg, Iterable)
+        and not isinstance(arg, six.string_types)
+    )

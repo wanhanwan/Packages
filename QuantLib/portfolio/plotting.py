@@ -16,7 +16,8 @@ plt.rcParams['font.sans-serif'] = ['SimHei']
 plt.rcParams['axes.unicode_minus'] = False
 
 
-def plot_nav_year_by_year(returns, benchmark_returns=None):
+def plot_nav_year_by_year(returns, benchmark_returns=None,
+                          hide_tick_labels=False):
     """分年的净值图"""
     if (benchmark_returns is not None) and (not np.all(benchmark_returns.to_numpy()==0.0)):
         returns = returns.to_frame('组合').join(benchmark_returns.to_frame('基准'))
@@ -37,5 +38,7 @@ def plot_nav_year_by_year(returns, benchmark_returns=None):
         ax = axes[r, c]
         nav = return2nav(returns[returns.index.year==years[i]])
         nav.plot(ax=ax)
+        if hide_tick_labels:
+            ax.xaxis.set_ticklabels([])
         ax.set_title(str(years[i]))
     return fig, axes

@@ -52,6 +52,9 @@ class CustomBusinessWeekEnd(DateOffset):
         object.__setattr__(self, "holidays", holidays)
         object.__setattr__(self, "w_offset", Week(weekday=4))
 
+    def to_string(self):
+        return f"{self.n}w"
+
     @apply_wraps
     def apply(self, other):
         n = self.n
@@ -97,6 +100,8 @@ class CustomBusinessQuaterEnd(QuarterOffset):
         object.__setattr__(self, "holidays", holidays)
         object.__setattr__(self, "q_offset", QuarterEnd(1))
 
+    def to_string(self):
+        return f"{self.n}q"
 
     @apply_wraps
     def apply(self, other):
@@ -144,6 +149,9 @@ class CustomBusinessYearEnd(YearOffset):
         self.kwds['calendar'] = self.cbday.calendar
         object.__setattr__(self, "y_offset", YearEnd(1))
 
+    def to_string(self):
+        return f"{self.n}y"
+
     @apply_wraps
     def apply(self, other):
         n = self.n
@@ -169,16 +177,27 @@ class CustomBusinessYearEnd(YearOffset):
         return (dt + self.cbday).year != dt.year
 
 
+class MyTradeDays(CustomBusinessDay):
+    def to_string(self):
+        return f"{self.n}d"
+
+
+class MyTradeMonths(CustomBusinessMonthEnd):
+    def to_string(self):
+        return f"{self.n}m"
+
 traderule_alias_mapping = {
-    'd': CustomBusinessDay(holidays=chn_holidays),
+    'd': MyTradeDays(holidays=chn_holidays),
     'w': CustomBusinessWeekEnd(holidays=chn_holidays),
-    'm': CustomBusinessMonthEnd(holidays=chn_holidays),
+    'm': MyTradeMonths(holidays=chn_holidays),
     'q': CustomBusinessQuaterEnd(holidays=chn_holidays),
     'y': CustomBusinessYearEnd(holidays=chn_holidays)
 }
 
 
 def _to_offset(freq):
+    if isinstance(freq, DateOffset):
+        return freq
     if freq[-1] in traderule_alias_mapping:
         return traderule_alias_mapping.get(freq[-1]) * int(freq[:-1])
     else:
@@ -288,6 +307,7 @@ class trade_calendar(object):
         today = as_timestamp(today)
         if not self.is_trade_day(today):
             today = self.get_latest_trade_days(today, retstr=None)
+            incl_on_offset_today = False
         if n == 0:
             if int(freq[0]) > 1:
                 warnings.warn('invalid step length of freq. It must be 1 when n=0')
@@ -340,11 +360,17 @@ class trade_calendar(object):
     def is_trading_time(date_time):
         """
         交易时间判断
-
         """
         is_tradingdate = trade_calendar.is_trade_day(date_time.date())
         is_tradingtime = time(9, 25, 0) < date_time.time() < time(15, 0, 0)
         return is_tradingdate and is_tradingtime
+
+    def days_between(self, start, end):
+        """
+        两个日期之间间隔的交易日数量
+        """
+        days = self.get_trade_days(start, end, retstr=None)
+        return len(days) - 1 if days[0]==as_timestamp(start) else len(days)
 
 
 tc = trade_calendar()

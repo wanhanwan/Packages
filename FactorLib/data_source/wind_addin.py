@@ -73,9 +73,6 @@ class WindAddIn(object):
     
     def edb_convert_to_df(self, data):
         dates = [as_timestamp(x) for x in data.Times]
-        # ids = data.Codes * len(dates)
-        # res = list(zip(*([ids, dates] + data.Data)))
-        # columns = ['IDs', 'date'] + [x.lower() for x in data.Fields]
         if (len(dates) > 1 and len(data.Codes)>1) or len(data.Codes)==1:
             df = pd.DataFrame(np.asarray(data.Data, dtype='float').T,
                               columns=data.Codes,
@@ -139,9 +136,9 @@ class WindAddIn(object):
         
             更多指标可在Wind客户端输入"CG"查看.
         start_date: str or datetime-like
-            数据的开始日期
+            数据的开始日期, YYYYMMDD
         end_date: str or datetime-like
-            数据的结束日期.
+            数据的结束日期, YYYYMMDD.
         fill_method: str, None by default
             无交易数据处理.默认是沿用上期数值，如果是None，则用NaN替代.
         frequency: str, None by default

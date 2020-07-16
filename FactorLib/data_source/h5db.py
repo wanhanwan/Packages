@@ -310,6 +310,8 @@ class H5DB(object):
             factor_data = factor_data.stack().to_frame(factor_data.name)
         if isinstance(factor_data.index, pd.MultiIndex):
             factor_data = factor_data.reset_index().join(names, on='IDs', how='left')
+        elif isinstance(factor_data, pd.Series):
+            factor_data = factor_data.reset_index().join(names, on='IDs', how='left')
         else:
             factor_data = factor_data.stack().reset_index().join(names, on='IDs', how='left')
         return factor_data
@@ -369,7 +371,7 @@ class H5DB(object):
         if ignore_index and not drop_duplicated_by_index:
             data.reset_index(drop=True, inplace=True)
         if sort_by_fields is not None:
-            data = data.sort_values(sort_by_fields)
+            data.sort_values(sort_by_fields, inplace=True)
         if sort_index:
             data.sort_index(inplace=True)
         self._save_h5file(data, file_path, group, **kwargs)
@@ -509,7 +511,7 @@ class H5DB(object):
         self.create_factor_dir(factor_dir)
         factor_path = self.abs_factor_path(factor_dir, factor_name)
         if not self.check_factor_exists(factor_name, factor_dir):
-            self._save_h5file(factor_data, factor_path, 'data', complevel=0,
+            self._save_h5file(factor_data, factor_path, 'data', complevel=9,
                               format='table')
         elif if_exists == 'append':
             raw = self._read_h5file(factor_path, key='data')
