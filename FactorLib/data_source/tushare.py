@@ -447,6 +447,23 @@ class TushareDB(object):
         data['trade_date'] = pd.to_datetime(data['trade_date'], format='%Y%m%d')
         return data
     
+    def fund_manager_get(self, ts_code, fields=None):
+        """
+        基金经理任职信息
+
+        Parameters:
+        -----------
+        ts_code: str
+            基金代码(带后缀)
+        fields: str
+            返回字段，以逗号分隔。
+            具体详见：https://tushare.pro/document/2?doc_id=208
+        """
+        data = self.run_api('fund_manager', ts_code = ts_code)
+        if fields:
+            data = data[fields.strip().split(',')]
+        return data
+
     def income_sheet(self, ticker=None, start_period=None, end_period=None, period=None,
                      report_type=None, fields=None):
         """

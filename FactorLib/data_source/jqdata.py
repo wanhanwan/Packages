@@ -13,7 +13,7 @@ from jqdatasdk import *
 import pandas as pd
 from FactorLib.utils.tool_funcs import tradecode_to_uqercode
 
-jqdatasdk.auth('18516759861', '1991822929')
+jqdatasdk.auth('15001921877', '921877')
 
 
 class JQDataAPI(object):

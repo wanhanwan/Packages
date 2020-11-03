@@ -139,6 +139,7 @@ def PanelQuery(field_dict, start_date=None, end_date=None, dates=None,
     """
     data = [None] * len(dates)
     for i, date in enumerate(dates):
+        print("天软函数执行日期: %s" % date.strftime("%Y%m%d"))
         idata = CsQuery(field_dict, date, bk_name=bk_name, stock_list=stock_list, condition=condition,
                         code_transfer=code_transfer, **kwargs)
         data[i] = idata
@@ -150,6 +151,7 @@ def PanelQueryByStocks(field_dict, stocks, start_date=None, end_date=None, dates
                        code_transfer=True, **kwargs):
     data = [None] * len(stocks)
     for i, s in enumerate(stocks):
+        print("天软函数执行代码: %s" % s)
         idata = TsQuery(field_dict, dates, s, code_transfer, **kwargs)
         data[i] = idata
     return pd.concat(data).sort_index()

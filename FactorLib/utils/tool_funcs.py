@@ -1,5 +1,6 @@
 # coding: utf-8
 """一些工具函数"""
+import os
 import re
 import six
 import subprocess
@@ -7,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from collections import Iterable
+from PkgConstVars import FACTOR_PATH
 from ..const import INDUSTRY_NAME_DICT
 
 
@@ -74,11 +76,30 @@ def tslcode_to_tradecode(code):
         return match.group(1)
     return code
 
+@clru_cache()
+def _read_stock_names():
+    p = os.path.join(FACTOR_PATH, 'base', 'ashare_list_delist_date.csv')
+    names = pd.read_csv(p, header=0, converters={'IDs': lambda x: str(x).zfill(6)},
+                        index_col=0, encoding='GBK', usecols=[0,1,2])
+    names.set_index('IDs', inplace=True)
+    return names
+
+@clru_cache()
+def windcode_to_name(code):
+    """wind代码转股票名称"""
+    ashare_names = _read_stock_names()
+    code = windcode_to_tradecode(code)
+    try:
+        return ashare_names.at[code, 'name']
+    except:
+        return np.nan
+
+
 def drop_patch(code):
     return code.split(".")[0]
 
 # ------------日期相关----------------------------------------
-from FactorLib.data_source.trade_calendar import as_timestamp
+as_timestamp = pd.Timestamp
 
 @clru_cache()
 def date_to_str(date, format='%Y%m%d'):
@@ -195,7 +216,7 @@ def get_members_of_date(date, entry_dt_field, remove_dt_field, return_field, dat
     data : DataFrame
         一张包含纳入纳出日期的表, index为股票6位数字代码(String)。
     """
-    date = int(date)
+    # date = int(date)
     # data = data.sort_index()
     data.index.name = 'IDs'
     rslt = data.loc[(data[entry_dt_field]<=date)&
@@ -240,8 +261,11 @@ def dummy2name(dummy):
     dummy: DataFrame
         哑变量，索引是二维索引。
     """
-    columns = dummy.columns
-    names = dummy.apply(lambda x: columns[np.where(x)[0][0]], axis=1, raw=True)
+    dummy2 = dummy[dummy.sum(axis=1)>0]
+    names = pd.Series(
+        np.asarray(dummy2.columns)[np.nonzero(dummy2.to_numpy())[1]],
+        index=dummy2.index
+    ).reindex(dummy.index, fill_value=np.nan)
     return names
 
 

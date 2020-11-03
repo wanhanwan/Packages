@@ -1,7 +1,7 @@
 # coding: utf-8
 # author: wamhanwan
 from rqrisk import Risk, DAILY, MONTHLY, WEEKLY
-from pandas.tseries.offsets import as_timestamp
+from pandas import Timestamp as as_timestamp
 from functools import lru_cache
 from warnings import warn
 import pandas as pd

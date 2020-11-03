@@ -5,7 +5,6 @@ import re
 
 from datetime import datetime
 from pandas._libs import OutOfBoundsDatetime
-from pandas.tseries.offsets import as_timestamp
 
 
 def suffix_ids(ids):
@@ -57,14 +56,14 @@ class WindAddIn(object):
 
     def wss_convert_to_df(self, data, dt):
         ids = data.Codes
-        dates = [as_timestamp(dt)] * len(ids)
+        dates = [_as_timestamp(dt)] * len(ids)
         res = list(zip(*([ids, dates] + data.Data)))
         columns = ['IDs', 'date'] + [x.lower() for x in data.Fields]
         df = pd.DataFrame(res, columns=columns)
         return df
     
     def wsd_convert_to_df(self, data):
-        dates = [as_timestamp(x) for x in data.Times]
+        dates = [_as_timestamp(x) for x in data.Times]
         ids = data.Codes * len(dates)
         res = list(zip(*([ids, dates] + data.Data)))
         columns = ['IDs', 'date'] + [x.lower() for x in data.Fields]
@@ -72,7 +71,7 @@ class WindAddIn(object):
         return df
     
     def edb_convert_to_df(self, data):
-        dates = [as_timestamp(x) for x in data.Times]
+        dates = [_as_timestamp(x) for x in data.Times]
         if (len(dates) > 1 and len(data.Codes)>1) or len(data.Codes)==1:
             df = pd.DataFrame(np.asarray(data.Data, dtype='float').T,
                               columns=data.Codes,

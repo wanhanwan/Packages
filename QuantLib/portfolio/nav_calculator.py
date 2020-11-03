@@ -10,11 +10,13 @@ from typing import Tuple
 from numpy import ndarray
 from FactorLib.data_source.tseries import move_dtindex
 from FactorLib.data_source.base_data_source_h5 import h5_2
-from FactorLib.data_source.trade_calendar import traderule_alias_mapping
+from FactorLib.data_source.trade_calendar import bday_chn_ashare
 
 FQCLOSE = 'tushare_close_hfq'
 FQOPEN = 'tushare_open_hfq'
-BDAY = traderule_alias_mapping['d'] * 1
+# BDAY = traderule_alias_mapping['d'] * 1
+BDAY = bday_chn_ashare * 1
+
 
 
 def adjust_trade(

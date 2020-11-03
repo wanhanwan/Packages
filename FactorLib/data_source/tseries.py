@@ -1,7 +1,8 @@
 # coding: utf-8
-from empyrical.stats import cum_returns_final
-from .trade_calendar import _to_offset, tc
 from fastcache import clru_cache
+from empyrical.stats import cum_returns_final
+from FactorLib.data_source.trade_calendar import to_offset as _to_offset, tc, bday_chn_ashare
+
 import pandas as pd
 import numpy as np
 
@@ -59,9 +60,56 @@ def resample_returns(ret, convert_to, ret_freq=None):
     return p
 
 
+def resample_returns2(ret, convert_to, ret_freq=None):
+    """
+    resample收益率序列\n
+    目前只支持Downsample。
+
+    :param ret: series or dataframe. 收益率序列
+
+    :param convert_to: 目标频率。支持交易日频率和日历日频率
+
+    :param ret_freq: ret的频率
+
+    :return: p
+
+    """
+    ret = ret.copy()
+    is_mul = False
+    if isinstance(ret.index, pd.MultiIndex):
+        ret = _flaten(ret)
+        is_mul = True
+
+    if convert_to.endswith('d'):
+        offset = bday_chn_ashare * int(convert_to[:-1])
+    else:
+        offset = _to_offset(convert_to.upper())
+
+    if convert_to.endswith('d'):
+        if isinstance(ret, pd.Series):
+            ret.loc[ret.index[0]-bday_chn_ashare] = ret.iloc[0]
+        else:
+            ret.loc[ret.index[0]-bday_chn_ashare, :] = ret.iloc[0, :].values
+        p = (ret
+             .resample(rule=offset,label='right',closed='right')
+             .agg(cum_returns_final)
+             .iloc[1:]
+        )
+    else:
+        p = (ret
+             .resample(rule=offset,label='right',closed='right')
+             .agg(cum_returns_final)
+        )
+        p.index = p.index + bday_chn_ashare - bday_chn_ashare
+    if is_mul:
+        p = p.stack()
+    return p
+
+
 def resample_func(data, convert_to, func):
     """
-    应用任意一个重采样函数。
+    应用任意一个重采样函数\n
+    只支持Downsample
 
     :param data: dataframe or series
 
@@ -73,26 +121,39 @@ def resample_func(data, convert_to, func):
 
     """
     is_mul = False
-    offset = _to_offset(convert_to)
-    if isinstance(data.index, pd.MultiIndex):
-        if 'IDs' in data.index.names:
-            data = data.reset_index(level='IDs')
+    data = data.copy()
+
+    if isinstance(convert_to, str):
+        if convert_to.endswith('d'):
+            offset = bday_chn_ashare * int(convert_to[:-1])
         else:
-            raise KeyError("No index column named IDs")
-        is_mul = True
-        p = data.groupby('IDs', group_keys=False).resample(
-            rule=offset, closed='right', label='right').agg(func)
+            offset = _to_offset(convert_to.upper())
+    else:
+        offset = convert_to
+
+    if isinstance(data.index, pd.MultiIndex):
+        raise NotImplementedError
     elif isinstance(data.index, pd.DatetimeIndex):
-        p = data.resample(rule=_to_offset(convert_to), closed='right', label='right').agg(func)
+        if isinstance(convert_to, str) and convert_to.endswith('d'):
+            if isinstance(data, pd.Series):
+                data.loc[data.index[0] - bday_chn_ashare] = data.iloc[0]
+            else:
+                data.loc[data.index[0] - bday_chn_ashare, :] = data.iloc[0, :].values
+                p = (data
+                     .resample(rule=offset, label='right', closed='right')
+                     .agg(func)
+                     .iloc[1:]
+                )
+        else:
+            p = (data
+                 .resample(rule=offset, label='right', closed='right')
+                 .agg(func)
+            )
+            if len(func) > 1 and isinstance(func, dict):
+                p = p.swaplevel().unstack()
+            p.index = p.index + bday_chn_ashare - bday_chn_ashare
     else:
         raise ValueError("The index of data must be MultiIndex or DatetimeIndex")
-    if is_mul:
-        p = p.set_index('IDs', append=True).sort_index()
-    if len(func) > 1 and isinstance(func, dict):
-        p = p.swaplevel().unstack()
-    if offset.onOffset(data.index[-1]) and _is_nan(p.iloc[-1]):
-        p = p.iloc[:-1]
-    # p.index.freq = offset
     return p
 
 
@@ -164,3 +225,12 @@ def reindex_date_of_multiindex(series, dates, method='ffill'):
     else:
         raise NotImplementedError("reindexing a dataframe is not implemented.")
     return new_df
+
+
+if __name__ == '__main__':
+    ret = pd.Series(np.arange(100)/10,
+                    index=tc.get_trade_days('20100104', periods=100, retstr=None))
+    # resample_ret1 = resample_returns(ret, '1m')
+    resample_ret2 = resample_returns2(ret, '1m')
+    # print(pd.concat([resample_ret2, ret.rolling(3).agg(cum_returns_final).dropna()],axis=1))
+    print(resample_ret2)

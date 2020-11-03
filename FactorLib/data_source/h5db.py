@@ -181,8 +181,7 @@ class H5DB(object):
         factor_path = self.abs_factor_path(factor_dir, old_name)
         temp_factor_path = self.abs_factor_path(factor_dir, new_name)
 
-        factor_data = self._read_h5file(factor_path, old_name). \
-            to_frame().rename(columns={old_name: new_name}).to_panel()
+        factor_data = self._read_h5file(factor_path, old_name).rename(columns={old_name: new_name})
         self._save_h5file(factor_data, temp_factor_path, new_name)
         self.delete_factor(old_name, factor_dir)
 
@@ -226,26 +225,53 @@ class H5DB(object):
     @handle_ids
     def load_factor(self, factor_name, factor_dir=None, dates=None, ids=None, idx=None,
                     date_level=0):
+        """
+        加载一个因子
+
+        因子格式
+        -------
+        因子的存储格式是DataFrame(index=[date,IDs], columns=factor)
+
+        Parameters:
+        -----------
+        factor_name: str
+            因子名称
+        factor_dir: str
+            因子路径
+        dates: list
+            日期
+        ids: list
+            代码
+        idx: DataFrame or Series
+            索引
+        date_level: int
+            日期索引在多层次索引中的位置
+        """
         if idx is not None:
             dates = idx.index.get_level_values('date').unique()
-            return self.load_factor(factor_name, factor_dir=factor_dir, dates=dates).reindex(idx.index, copy=False)
+            return (self
+                    .load_factor(factor_name, factor_dir=factor_dir, dates=dates)
+                    .reindex(idx.index, copy=False)
+            )
         factor_path = self.abs_factor_path(factor_dir, factor_name)
         data = self._read_h5file(factor_path, factor_name)
-        if (ids is not None) and (not isinstance(ids, list)):
-            ids = [ids]
-        if dates is None:
-            dates = slice(None)
-        if ids is None:
-            ids = slice(None)
-        if date_level == 0:
-            s = pd.IndexSlice[dates, ids]
-        else:
-            s = pd.IndexSlice[ids, dates]
-        if dates is None and ids is None:
-            return data
-        else:
-            df = data.loc[s, :]
-            return df
+        
+        query_str = ""
+        if ids:
+            if isinstance(ids, list):
+                query_str += "IDs in @ids"
+            else:
+                query_str += "IDs == @ids"
+        if len(query_str) > 0:
+            query_str += " and "
+        if dates:
+            if isinstance(dates, list):
+                query_str += "date in @dates"
+            else:
+                query_str += "date == @dates"
+        query_str = query_str.strip(" and ")
+        df = data.query(query_str)
+        return df
 
     def load_factor2(self, factor_name, factor_dir=None, dates=None, ids=None, idx=None,
                      stack=False, check_A=False):
@@ -300,8 +326,8 @@ class H5DB(object):
         if data_source is None:
             data_source = 'D:/data/factors'
         import pandas as pd
-        names = pd.read_csv(os.path.join(data_source,'base','ashare_name.csv'),
-                            header=0,
+        names = pd.read_csv(os.path.join(data_source,'base','ashare_list_delist_date.csv'),
+                            header=0,index_col=0,usecols=[0,1,2],
                             converters={'IDs': lambda x: str(x).zfill(6)},
                             encoding='GBK')
         names.set_index('IDs', inplace=True)
@@ -451,14 +477,16 @@ class H5DB(object):
         return df
 
     
-    def save_factor(self, factor_data, factor_dir, if_exists='append'):
+    def save_factor(self, factor_data, factor_dir, if_exists='update'):
         """往数据库中写数据
         数据格式：DataFrame(index=[date,IDs],columns=data)
 
         Parameters:
         -----------
-        factor_data
+        factor_data: DataFrame
         """
+        if isinstance(factor_data, pd.Series):
+            factor_data = factor_data.to_frame()
         if factor_data.index.nlevels == 1:
             if isinstance(factor_data.index, pd.DatetimeIndex):
                 factor_data['IDs'] = '111111'
@@ -466,26 +494,28 @@ class H5DB(object):
             else:
                 factor_data['date'] = DateStr2Datetime('19000101')
                 factor_data.set_index('date', append=True, inplace=True)
-
+        factor_data.sort_index(inplace=True)
         self.create_factor_dir(factor_dir)
         for column in factor_data.columns:
             factor_path = self.abs_factor_path(factor_dir, column)
             if not self.check_factor_exists(column, factor_dir):
-                self._save_h5file(factor_data[[column]].dropna().to_panel(),
+                self._save_h5file(factor_data[[column]].dropna(),
                                   factor_path, column)
-            elif if_exists == 'append':
+            elif if_exists == 'update':
                 old_panel = self._read_h5file(factor_path, column)
-                new_frame = old_panel.to_frame().append(factor_data[[column]].dropna())
-                new_panel = new_frame[~new_frame.index.duplicated(keep='last')].to_panel()
-                available_name = self.get_available_factor_name(column, factor_dir)
+                new_frame = old_panel.append(factor_data[[column]].dropna())
+                new_panel = new_frame[~new_frame.index.duplicated(keep='last')].sort_index()
                 self._save_h5file(new_panel,
-                                  self.abs_factor_path(factor_dir, available_name), available_name)
-                self.rename_factor(available_name, column, factor_dir)
+                                  factor_path,
+                                  column
+                )
             elif if_exists == 'replace':
-                self._save_h5file(factor_data[[column]].dropna().to_panel(),
-                                  factor_path, column)
+                self._save_h5file(factor_data[[column]].dropna(),
+                                  factor_path,
+                                  column
+                )
             else:
-                raise KeyError("please make sure if_exists is valide")
+                raise KeyError("please make sure if_exists is validate")
 
     def save_factor2(self, factor_data, factor_dir, if_exists='append',
                      fillvalue=None, fillmethod=None):
@@ -582,8 +612,9 @@ class H5DB(object):
         factor_data = factor_data.drop('T00018', axis=0, level='IDs', errors='ignore').fillna(0)
         factor_data = factor_data.loc[(factor_data != 0).any(axis=1)]
         file_pth = self.abs_factor_path(factor_dir, indu_name)
-        if self.check_factor_exists(indu_name, factor_dir):
+        if self.check_factor_exists(indu_name, factor_dir) and if_exists=='append':
             mapping = self._read_pklfile(file_pth.replace('.h5', '_mapping.pkl'))
+            mapping = mapping + [x for x in factor_data.columns if x not in mapping] # 新增的哑变量后放
             factor_data = factor_data.reindex(columns=mapping, fill_value=0)
             new_saver = pd.DataFrame(np.argmax(factor_data.values, axis=1), columns=[indu_name],
                                      index=factor_data.index)
@@ -603,11 +634,19 @@ class H5DB(object):
         dummy[np.arange(len(data)), data[factor_name].values.astype('int')] = 1
         return pd.DataFrame(dummy, index=data.index, columns=mapping, dtype='int8')
 
-    def load_as_dummy2(self, factor_name, factor_dir, dates=None, ids=None, idx=None):
+    def load_as_dummy2(self, factor_name, factor_dir, dates=None, ids=None, idx=None, fill_method=None):
         """读取行业哑变量"""
         mapping_pth = self.data_path + factor_dir + factor_name + '_mapping.pkl'
         mapping = self._read_pklfile(mapping_pth)
-        data = self.load_factor2(factor_name, factor_dir, dates=dates, ids=ids, idx=idx).stack()
+        if fill_method and (dates or idx):
+            if idx:
+                ids = idx.index.get_level_values('IDs').unique().tolist()
+                dates = idx.index.get_level_values('IDs').unique()
+            data = self.load_factor2(
+                factor_name, factor_dir, ids=ids
+            ).reindex(pd.DatetimeIndex(dates), method='ffill').stack()
+        else:
+            data = self.load_factor2(factor_name, factor_dir, dates=dates, ids=ids, idx=idx).stack()
         dummy = np.zeros((len(data), len(mapping)))
         dummy[np.arange(len(data)), data.values.astype('int')] = 1
         return pd.DataFrame(dummy, index=data.index, columns=mapping, dtype='int8')

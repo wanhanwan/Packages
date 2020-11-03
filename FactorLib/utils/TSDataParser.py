@@ -42,9 +42,8 @@ def parseByStock(TSData, date_parse=None):
             stockData = pd.concat(stockData)
         else:
             continue
-        if iter_stock < _max_iter_stocks:
-            temp_table.append(stockData)
-        else:
+        temp_table.append(stockData)
+        if iter_stock >= _max_iter_stocks:
             _ = pd.concat(temp_table)
             table = pd.concat([table, _])
             temp_table = []
@@ -90,7 +89,7 @@ def parse2DArray(TSData, column_decode=None, encoding='utf8'):
     二维数组的第一列是股票代码(字符串)，行是指标名称
     """
     if TSData[0] != 0:
-        raise ValueError("天软数据提取失败！")
+        raise ValueError("天软数据提取失败：%s"%TSData[2].decode('GBK'))
     data = pd.DataFrame(TSData[1])
     data.rename(columns=lambda x: x.decode(encoding),
                 inplace=True)

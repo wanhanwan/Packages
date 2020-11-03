@@ -20,6 +20,6 @@ class RQDataAPI(object):
     
 
 id_convert = rqdatac.id_convert
-rq_data = RQDataAPI
+rq_data = RQDataAPI()
 
 import rqalpha

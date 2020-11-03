@@ -33,8 +33,14 @@ USER_INDEX_DICT = {'merge_acc': '并购指数', '_100003': '去壳指数', 'risk
                    '_100004': '风险壳指数', 'analyst_recommand_20d': '分析师推荐指数', 'msci_china': 'MSCI中国指数',
                    'risky_stocks_totalscore': '风险预警总指数', 'risky_stocks_subscore': '风险预警分项指数'}
 
-INDUSTRY_NAME_DICT = {'中信一级':'cs_level_1','申万一级':'sw_level_1', '中信二级': 'cs_level_2', '申万二级': 'sw_level_2',
-                      '万得一级':'wind_level_1', '中信细分非银':'diversified_finance_cs', '申万细分非银':'diversified_finance_sw'}
+INDUSTRY_NAME_DICT = {'中信一级':'cs_level_1',
+                      '中信二级': 'cs_level_2',
+                      '中信三级': 'cs_level_3',
+                      '申万一级':'sws_level_1',
+                      '申万二级': 'sws_level_2',
+                      '申万三级': 'sws_level_3',
+                      '万得一级':'wind_level_1'
+                      }
 
 MARKET_INDEX_WINDCODE = {"中证500": "000905.SH",
                          "沪深300": "000300.SH",

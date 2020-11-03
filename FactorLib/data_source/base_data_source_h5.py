@@ -60,12 +60,15 @@ class Sector(object):
             stocks = stocks[~stocks.index.isin(st.index)]
         return stocks
     
-    def get_industry_dummy(self, industry, ids=None, dates=None, idx=None, drop_first=True):
+    def get_industry_dummy(self, industry, ids=None, dates=None,
+                           idx=None, drop_first=True, fill_method=None):
         """行业哑变量
         :param industry: 中信一级、申万一级等
         """
         indu_id = parse_industry(industry)
-        indu_info = self.h5DB.load_as_dummy2(indu_id, '/base/dummy/', dates=dates, ids=ids, idx=idx)
+        indu_info = self.h5DB.load_as_dummy2(
+            indu_id, '/base/dummy/', dates=dates, ids=ids, idx=idx, fill_method=fill_method
+        )
         if isinstance(drop_first, bool) and drop_first:
             indu_info = indu_info.iloc[:, 1:]
         elif isinstance(drop_first, str):
@@ -73,11 +76,11 @@ class Sector(object):
         indu_info.rename_axis(['date', 'IDs'], inplace=True)
         return indu_info
 
-    def get_industry_info(self, industry, ids=None, dates=None, idx=None):
+    def get_industry_info(self, industry, ids=None, dates=None, idx=None, fill_method=None):
         """行业信息
         返回Series, value是行业名称, name是行业分类
         """
-        industry_dummy = self.get_industry_dummy(industry, ids, dates, idx, False)
+        industry_dummy = self.get_industry_dummy(industry, ids, dates, idx, False, fill_method)
         industry_info = dummy2name(industry_dummy)
         industry_info.name = industry
         return industry_info
@@ -104,33 +107,43 @@ class Sector(object):
     
     @lru_cache()
     def get_fund_file(self):
-
-        def to_trade_code(x: str):
-            if x[:2] in ['16', '15', '18']:
-                return x[:6] + '.SZ'
-            elif x[:2] in ['50', '51', '52']:
-                return x[:6] + '.SH'
-            else:
-                return x
-
         data =  pd.read_excel(
-            self.h5DB.abs_factor_path('/fund/', '基金基本资料').replace('.h5', '.xlsx'),
+            self.h5DB.abs_factor_path('/fund/', '基金基本资料new').replace('.h5', '.xlsx'),
             header=0,
-            parse_dates=['成立日期', '到期日期']
+            parse_dates=['基金成立日', '基金到期日', '上市日期']
         )
-        data['交易代码'] = data['代码'].apply(to_trade_code)
+        data.rename(
+            columns={
+                '证券代码': '代码',
+                '证券简称': '名称',
+                '基金管理人简称': '基金公司',
+                '基金成立日':'成立日期',
+                '基金到期日':'到期日期',
+                '基金经理(现任)':'现任基金经理',
+                '基金经理(历任)': '历任基金经理',
+                '发行份额\r\n[单位] 百万份':'发行规模',
+                '基金规模\r\n[单位] 百万元': '最新规模',
+                '业绩比较基准': '比较基准',
+                '投资类型(二级分类)': '投资类型'
+                },
+            inplace=True
+            )
+        data = data[data['代码'].apply(lambda x: len(x)==9)]
+        data[['发行规模','最新规模']] /= 100.0
         return data
 
-    def get_fund_info(self, fund_code=None, fund_type=None, start_date=None, fund_manager=None, benchmark=None):
+    def get_fund_info(self, fund_code=None, fund_type=None,
+                      start_date=None, fund_manager=None,
+                      invest_type_1=None, benchmark=None):
         """
         获取公募基金的基本信息
-        数据源来自Wind终端-基金-专题统计-报表收藏-基金基本资料-全部基金(只含主代码)。这个数据需要定时更新。
+        数据源来自Wind终端-基金数据浏览器-我的模板-全部基金基本信息(包含未成立、已到期)。这个数据需要定时更新。
 
         :param fund_code str or list
-            基金代码
+            基金代码(带后缀)
         :param fund_type str
             可用','连接
-            基金类型 偏股混合型基金  中长期纯债型基金 被动指数型基金 混合债券型一级基金
+            基金类型(二级分类) 偏股混合型基金  中长期纯债型基金 被动指数型基金 混合债券型一级基金
                      灵活配置型基金  增强指数型基金  普通股票型基金  偏债混合型基金
                      商品型基金      混合债券型二级基金 股票多空     平衡混合型基金
                      短期纯债型基金   国际(QDII)混合型基金        被动指数型债券基金
@@ -139,19 +152,25 @@ class Sector(object):
             基金成立起始日期
         :param fund_manager str
             基金经理
+        :param invest_type_1 str
+            可用','连接
+            一级投资类型：股票型基金、混合型基金、债券型基金、货币市场型基金、另类投资基金、QDII基金
         :param benchmark str
             基准
         :return DataFrame 代码 名称 现任基金 历任基金经理 基金公司 成立日期 到期日期 发行份额 最新规模 比较基准 投资类型
         """
         fund_info = self.get_fund_file()
         if fund_code:
-            fund_info = fund_info[fund_info['代码'].isin(fund_code)]
+            code = [x[:-3]+'.OF' for x in fund_code]
+            fund_info = fund_info[fund_info['代码'].isin(code)]
         if fund_type:
             fund_info = fund_info[fund_info['投资类型'].isin(fund_type.split(','))]
         if start_date:
             fund_info = fund_info[fund_info['成立日期'] <= pd.to_datetime(start_date)]
         if fund_manager:
             fund_info = fund_info[fund_info['现任基金经理'].str.contains(fund_manager)]
+        if invest_type_1:
+            fund_info = fund_info[fund_info['投资类型(一级分类)'].isin(invest_type_1.split(','))]
         if benchmark:
             fund_info = fund_info[fund_info['比较基准'].str.contains(benchmark)]
         return fund_info
@@ -260,13 +279,13 @@ class Fund(object):
         """
         data = h5_2.read_h5file('fund_portfolio', '/fund/')
         period = pd.to_datetime(period)
-        funds = data.query("symbol==@ticker & stk_mkv_ratio>=@min_ratio & date==@period")
+        funds = data.query("ticker==@ticker & ratio>=@min_ratio & date==@period")
         if not funds.empty:
             fund_info = sec.get_fund_info(funds['IDs'].tolist())
             funds = pd.merge(
                 funds, fund_info, left_on='IDs', right_on='代码'
-            ).sort_values('stk_mkv_ratio', ascending=False)
-            funds = funds[['IDs', 'ann_date', 'date', 'symbol', 'stk_mkv_ratio',
+            ).sort_values('ratio', ascending=False)
+            funds = funds[['IDs', 'report_date', 'ticker', 'ratio',
                            '名称', '现任基金经理', '成立日期', '最新规模(亿元)']]
         return funds
     
@@ -292,7 +311,8 @@ class Fund(object):
             持仓组合权重
         """
         file_name = ((datasource or '') + '_fund_portfolio').strip('_')
-        weight_name = 'stk_mkv_ratio' if datasource is None else 'proportion'
+        weight_name = 'ratio' if datasource == 'tsl' else 'proportion'
+        ticker += '.OF'
 
         data = h5_2.read_h5file(file_name, '/fund/')
         if period is None:
@@ -323,7 +343,7 @@ class Fund(object):
         Parameters:
         -----------
         ticker: str
-            基金代码
+            基金代码(无后缀)
         period: str
             财报日期 YYYYMMDD
         industry: str
@@ -352,15 +372,50 @@ class Fund(object):
     def get_fund_nav(tickers, start_date=None, end_date=None, field='adj_nav'):
         """
         基金净值提取
+
+        Parameters:
+        -----------
+        tickers: list of str
+            基金代码(无后缀)
         """
-        codes = sec.get_fund_info(tickers)[['代码', '交易代码']]
-        if len(codes) != len(tickers):
-            invalid_tickers = [x for x in tickers if x not in codes['代码'].tolist()]
-            raise RuntimeError("invalid tickers: %s" % invalid_tickers)
         dates = tc.get_trade_days(start_date, end_date)
-        nav = h5_2.load_factor2(field, '/fund/', ids=codes['交易代码'].tolist(), dates=dates)
-        nav.rename(columns=codes.set_index('交易代码')['代码'], inplace=True)
+        nav = h5_2.load_factor2(field, '/fund/', ids=tickers, dates=dates)
         return nav
+
+    @staticmethod
+    def get_fund_maneger(ticker=None, person_id=None, person_name=None, date=None):
+        """
+        基金经理信息
+
+        Parameters:
+        ticker: str
+            基金代码(无后缀)
+        person_id: int
+            基金经理代码(通联格式)
+        person_name: str
+            基金经理姓名
+        date: datetime-like
+            返回在改日期正在任职的基金经理
+        
+        Return:
+        -------
+        fund_info: DataFrame
+            secID ticker secShortName personID name accessionDate dimissionDate
+        """
+        from .fund import load_manager_info
+        from FactorLib.utils.tool_funcs import get_members_of_date
+        fund_info = load_manager_info(
+            personID=person_id, name=person_name, fund_ticker=ticker
+            )
+        if date:
+            fund_info = get_members_of_date(
+                date,
+                'accessionDate',
+                'dimissionDate',
+                fund_info.columns,
+                fund_info
+            )
+        return fund_info
 
 
 class Option(object):
