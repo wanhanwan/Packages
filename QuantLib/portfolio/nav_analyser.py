@@ -159,7 +159,7 @@ class Analyser(object):
                    '年化跟踪误差',
                    '信息比率'])
         return df
-    
+
     def plot_nav_year_by_year(self):
         fig, axes = plotting.plot_nav_year_by_year(self.returns, self.benchmark_returns)
         return fig, axes

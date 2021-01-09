@@ -8,6 +8,6 @@
         "**/*.pyc": true,
     },
     "python.linting.pylintEnabled": true,
-    "python.pythonPath": "/Users/wanshuai/opt/miniconda3/bin/python",
+    "python.pythonPath": "D:\\programs\\Anaconda\\python.exe",
     "restructuredtext.confPath": ""
 }

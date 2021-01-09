@@ -104,7 +104,7 @@ def calc_corr(mat1, mat2=None, weight=None, use_ewavg=True):
     return corr
 
 
-def get_percentile_at(arr, values=None, side='right'):
+def get_percentile_at(arr, values=None, side='right', value_type=1):
     """value在数组arr中的分位数(升序)
     如果value是空，默认取arr的最后一个元素.
     遇到重复值，尽量靠右排列(返回值尽可能大)
@@ -115,6 +115,10 @@ def get_percentile_at(arr, values=None, side='right'):
     value: float number or array, default None.
     side: 'left' or 'right'(default)
         如果遇到重复值，'left'会使返回值尽可能小；'right'反之。
+    value_type: int 1 or 2
+        计算分位数的方法。1代表先把数组排序，计算当前数值在数组中的分位数；2
+        代表先计算数组中的最大值和最小值，计算当前数值在最大值和最小值这个区间
+        中的分位数。
     """
     if isinstance(arr, pd.Series):
         arr = arr.to_numpy()
@@ -124,13 +128,18 @@ def get_percentile_at(arr, values=None, side='right'):
     if isinstance(values, float) and np.isnan(values):
         return np.nan
     arr = np.sort(arr)
-    if isinstance(values, float):
-        return np.searchsorted(arr, values, side='right')/np.isfinite(arr).sum()
-    pos = np.zeros_like(values) * np.nan
-    idx = np.isfinite(values)
-    pos[idx] = np.searchsorted(arr, values[idx], side='right')
-    return pos/np.isfinite(arr).sum()
-
+    if value_type == 1:
+        if isinstance(values, float):
+            return np.searchsorted(arr, values, side='right')/np.isfinite(arr).sum()
+        pos = np.zeros_like(values) * np.nan
+        idx = np.isfinite(values)
+        pos[idx] = np.searchsorted(arr, values[idx], side='right')
+        return pos / np.isfinite(arr).sum()
+    elif value_type == 2:
+        pos = (values - np.nanmin(arr)) / (np.nanmax(arr) - np.nanmin(arr))
+        pos = np.where(pos < 0, 0, pos)
+        pos = np.where(pos > 1, 1, pos)
+        return pos
 
 import statsmodels.api as sm
 def forward_regression(X, y,

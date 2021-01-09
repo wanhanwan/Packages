@@ -47,6 +47,10 @@ def _load_data_table():
 class EDBDataDict:
     data_dict = _load_data_table()
 
+    @classmethod
+    def update_data_dict(cls):
+        cls.data_dict = _load_data_table()
+
     @staticmethod
     def _find_an_element(filter_key, filter_value, search_key):
         return EDBDataDict.data_dict.loc[
@@ -71,11 +75,42 @@ class EDBDataDict:
 
 
 class DataYes(object):
-    username = '18516759861'
+    username = '13370297652'
     password = 'Ws1991822929'
 
     def __init__(self):
+        self.login()
+
+    def login(self):
         datayes.login(DataYes.username, DataYes.password)
+
+    def get_data_reference(self, item_id='402273', to_clipboard=False):
+        """
+        宏观数据目录索引
+
+        Parameters:
+        ----------
+        item_id: str
+            目录ID, 可以多次调用逐级查看。item_id起始于
+            几个根目录：
+                402273: '中国宏观',
+                771263: '行业经济',
+                1138921: '国际宏观',
+                632815: '特色数据'
+
+        Returns:
+        -------
+        data: DataFrame, 数据的索引目录 \n
+        info: DataFrame, 数据的属性信息
+        """
+        data, info = datayes.get_sub_items(item_id)
+        data.insert(0, 'pid', item_id)
+        data.drop(columns=['dataApiName','displayName','displayOrder','hasPrivilege', 'type'],
+                  inplace=True)
+        if to_clipboard:
+            data.to_clipboard()
+            print("数据已复制到粘贴板。")
+        return data, info
 
     def download_data(self, datayes_id, **kwargs):
         """
@@ -116,7 +151,7 @@ class Wind(object):
         data = Wind.api.edb(wind_id, start_date, end_date)
         if isinstance(data, pd.Series):
             data = data.to_frame()
-        return data
+        return data, None
 
 
 class CSVManager(object):
@@ -190,6 +225,7 @@ class CSVManager(object):
                 index_col=0, parse_dates=True,
                 encoding='GBK', dtype='float64'
             )
+        data = data[data.index.notnull()]
         return data
 
 
@@ -228,8 +264,13 @@ class EDB(object):
             class_loops.append(self.data_dict.find_name_cn('class_id', pid))
             pid = self.data_dict.find_class_pid('class_id', pid)
         return [top_class[pid]] + class_loops[::-1]
+
+    @classmethod
+    def update_data_dict(cls):
+        """更新宏观数据库的数据字典"""
+        cls.data_dict.update_data_dict()
     
-    def find_path(self, data_name):
+    def find_path(self, data_name, source):
         """
         查找一个指标的存放路径
 
@@ -238,8 +279,8 @@ class EDB(object):
         data_name: str
             指标中文名称
         """
-        data_id = self.data_dict.find_data_id('name_cn', data_name, 'datayes')
-        classifications = self._find_classifications(data_id)
+        data_id = self.data_dict.find_data_id('name_cn', data_name, source)
+        classifications = self._find_classifications(data_id, source)
         return '/'.join(classifications)
 
     def read_data(self, data_names, source='datayes'):
@@ -248,7 +289,7 @@ class EDB(object):
         """
         data_bag = {}
         for name in data_names:
-            path = self.find_path(name)
+            path = self.find_path(name, source)
             if path in data_bag:
                 data_bag[path].append(name)
             else:
@@ -259,21 +300,38 @@ class EDB(object):
             df.append(
                 self.data_manager.load_data(path, source)[names]
             )
-        df = pd.concat(df, axis=1)
+        df = pd.concat(df, axis=1).sort_index()
         return df
 
-    def download_data(self, data_names, source='datayes'):
+    def download_data(self, data_names, source='datayes',
+                      start_date=None, end_date=None):
         """
         下载数据到本地
+        
+        Parameters:
+        ----------
+        data_names: list of str
+            指标名称，详见edb_tableinfo.xlsx --> name_cn
+        source: str 'datayes' or 'wind'
+            数据源选择。如果是wind数据，在edb_tableinfo.xlsx中
+            需要补充wind_id
+        start_date: str
+            数据开始日期YYYYMMDD。只有在'wind'的数据源下，此参数
+            才生效。'datayes'的数据源只能对一个指标全量更新。
+        end_date: str
+            数据结束日期YYYYMMDD。只有在'wind'的数据源下，此参数
+            才生效。'datayes'的数据源只能对一个指标全量更新。
         """
         ds = EDB.data_sources[source]
         for name in data_names:
             data_id = EDB.data_dict.find_data_id('name_cn', name, source)
-            save_dir = self.find_path(name)
+            save_dir = self.find_path(name, source)
             data, meta = ds.download_data(data_id)
             data.columns = [name]
-            self.data_manager.save_data(data, save_dir, source, {name: meta})
-            print("%s 下载成功， 最新日期%s" % (name, data.index.max().strftime("%Y/%m/%d")))
+            meta = {name: meta}
+            self.data_manager.save_data(data, save_dir, source, meta)
+            print("%s 下载成功，最新日期%s，路径%s" % (
+                name, data.index.max().strftime("%Y/%m/%d"), save_dir))
             time.sleep(1.5)
 
 

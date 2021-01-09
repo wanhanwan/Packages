@@ -84,7 +84,7 @@ def parseCrossSection2DArray(TSData, date):
     return table.sort_index()
 
 
-def parse2DArray(TSData, column_decode=None, encoding='utf8'):
+def parse2DArray(TSData, column_decode=None, encoding='GBK'):
     """解析天软二维数组
     二维数组的第一列是股票代码(字符串)，行是指标名称
     """

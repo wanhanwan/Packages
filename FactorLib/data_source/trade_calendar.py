@@ -179,9 +179,8 @@ class trade_calendar(object):
             days = pd.to_datetime(today)
         else:
             days = pd.DatetimeIndex([pd.to_datetime(today)])
-
         raw_days = days.copy()
-
+        
         move_forward = n > 0
         begin_offset = freq.endswith('S')
         offset = to_offset(freq.upper())

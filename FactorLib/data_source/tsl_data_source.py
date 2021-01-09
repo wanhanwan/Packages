@@ -35,9 +35,21 @@ def run_script(script, sysparams):
     data = tsl.RemoteExecute(script, sysparams)
     return data
 
-def run_function(func_name, *args):
+def run_function(func_name, *args, **kwargs):
+    """
+    调用天软任意函数
+    
+    Parameters:
+    func_name: str
+        函数名称
+    args:
+        函数参数列表  
+        字符串类型的参数需要加单引号，例如"'SH600001'"
+    kwargs:
+        天软系统参数
+    """
     script_str = _gstr_from_func(func_name, args)
-    return run_script(script_str, {})
+    return run_script(script_str, kwargs)
 
 
 def CsQuery(field_dict, end_date, bk_name=_ashare, stock_list=None, condition="1",
@@ -45,7 +57,22 @@ def CsQuery(field_dict, end_date, bk_name=_ashare, stock_list=None, condition="1
     """对天软Query函数的封装
     Parameters:
     ===========
-    field_dict:
+    field_dict: dict
+        计算字段{字段名称: 函数名称},字段名称需自加单引号。  
+        例：{"'IDs'": 'DefaultStockID()'}
+    end_daet: str
+        截面日期
+    bk_name: str
+        天软板块名称，以分号分割。
+    stock_list: list
+        股票列表，默认的格式是6位代码
+    condition: str
+        天软Csquery参数
+    code_transfer: bool
+        是否要将股票列表的代码转为天软格式。如果stock_list中代码格式
+        没有后缀，那code_transfer需为True。
+    kwargs: dict
+        天软系统参数
     """
     field_dict.update({"'IDs'": 'DefaultStockID()'})
     if stock_list is None:

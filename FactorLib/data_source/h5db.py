@@ -11,6 +11,7 @@ from ..utils.tool_funcs import ensure_dir_exists
 from ..utils.disk_persist_provider import DiskPersistProvider
 from .helpers import handle_ids, FIFODict
 from pathlib import Path
+from FactorLib.utils.tool_funcs import is_non_string_iterable
 pd.options.compute.use_numexpr = True
 
 lock = Lock()
@@ -211,10 +212,11 @@ class H5DB(object):
         return min_date, max_date
 
     # 读取多列因子的属性
-    def read_h5file_attr(self, factor_name, factor_path, attr_name):
+    def read_h5file_attr(self, factor_name, factor_path):
         attr_file_path = self.abs_factor_attr_path(factor_path, factor_name)
+        print(attr_file_path)
         if os.path.isfile(attr_file_path):
-            return self._read_pklfile(attr_file_path)[attr_name]
+            return self._read_pklfile(attr_file_path)
         else:
             raise FileNotFoundError('找不到因子属性文件!')
 
@@ -257,21 +259,25 @@ class H5DB(object):
         data = self._read_h5file(factor_path, factor_name)
         
         query_str = ""
-        if ids:
+        if ids is not None:
             if isinstance(ids, list):
                 query_str += "IDs in @ids"
             else:
                 query_str += "IDs == @ids"
         if len(query_str) > 0:
             query_str += " and "
-        if dates:
-            if isinstance(dates, list):
+        if dates is not None:
+            if is_non_string_iterable(dates):
                 query_str += "date in @dates"
             else:
                 query_str += "date == @dates"
-        query_str = query_str.strip(" and ")
-        df = data.query(query_str)
-        return df
+        if query_str.endswith(" and "):
+            query_str = query_str.strip(" and ")
+        if query_str:
+            df = data.query(query_str)
+            return df
+        else:
+            return data
 
     def load_factor2(self, factor_name, factor_dir=None, dates=None, ids=None, idx=None,
                      stack=False, check_A=False):
@@ -301,10 +307,15 @@ class H5DB(object):
         with pd.HDFStore(factor_path, mode='r') as f:
             try:
                 data = pd.read_hdf(f, key='data', where=where_term, columns=ids_normalized)
-                if ids_normalized is not None and data.shape[1] != len(ids_normalized):
-                    data = data.reindex(columns=ids_normalized)
             except NotImplementedError as e:
                 data = pd.read_hdf(f, key='data').reindex(index=dates, columns=ids)
+            except KeyError as e:
+                f.close()
+                data = self.load_factor(factor_name, factor_dir, dates, ids)[factor_name].unstack()
+
+        if ids_normalized is not None and data.shape[1] != len(ids_normalized):
+            data = data.reindex(columns=ids_normalized)
+
         if not columns_mapping.empty:
             data.rename(columns=pd.Series(columns_mapping.index, index=columns_mapping.to_numpy()), inplace=True)
         data.name = factor_name
@@ -570,7 +581,7 @@ class H5DB(object):
         else:
             pass
 
-    def save_as_dummy(self, factor_data, factor_dir, indu_name=None, if_exists='append'):
+    def save_as_dummy(self, factor_data, factor_dir, indu_name=None, if_exists='update'):
         """往数据库中存入哑变量数据
         factor_data: pd.Series or pd.DataFrame
         当factor_data是Series时，首先调用pd.get_dummy()转成行业哑变量
@@ -585,7 +596,7 @@ class H5DB(object):
         factor_data = factor_data.drop('T00018', axis=0, level='IDs').fillna(0)
         factor_data = factor_data.loc[(factor_data != 0).any(axis=1)]
         file_pth = self.abs_factor_path(factor_dir, indu_name)
-        if self.check_factor_exists(indu_name, factor_dir):
+        if self.check_factor_exists(indu_name, factor_dir) and if_exists=='update':
             mapping = self._read_pklfile(file_pth.replace('.h5', '_mapping.pkl'))
             factor_data = factor_data.reindex(columns=mapping)
             new_saver = pd.DataFrame(np.argmax(factor_data.values, axis=1), columns=[indu_name],
@@ -597,7 +608,7 @@ class H5DB(object):
         self.save_factor(new_saver, factor_dir, if_exists=if_exists)
         self._save_pklfile(mapping, factor_dir, indu_name+'_mapping', protocol=2)
 
-    def save_as_dummy2(self, factor_data, factor_dir, indu_name=None, if_exists='append'):
+    def save_as_dummy2(self, factor_data, factor_dir, indu_name=None, if_exists='update'):
         """往数据库中存入哑变量数据
         factor_data: pd.Series or pd.DataFrame
         当factor_data是Series时，首先调用pd.get_dummy()转成行业哑变量
@@ -612,7 +623,7 @@ class H5DB(object):
         factor_data = factor_data.drop('T00018', axis=0, level='IDs', errors='ignore').fillna(0)
         factor_data = factor_data.loc[(factor_data != 0).any(axis=1)]
         file_pth = self.abs_factor_path(factor_dir, indu_name)
-        if self.check_factor_exists(indu_name, factor_dir) and if_exists=='append':
+        if self.check_factor_exists(indu_name, factor_dir) and if_exists=='update':
             mapping = self._read_pklfile(file_pth.replace('.h5', '_mapping.pkl'))
             mapping = mapping + [x for x in factor_data.columns if x not in mapping] # 新增的哑变量后放
             factor_data = factor_data.reindex(columns=mapping, fill_value=0)
@@ -638,13 +649,13 @@ class H5DB(object):
         """读取行业哑变量"""
         mapping_pth = self.data_path + factor_dir + factor_name + '_mapping.pkl'
         mapping = self._read_pklfile(mapping_pth)
-        if fill_method and (dates or idx):
+        if fill_method:
             if idx:
                 ids = idx.index.get_level_values('IDs').unique().tolist()
                 dates = idx.index.get_level_values('IDs').unique()
             data = self.load_factor2(
                 factor_name, factor_dir, ids=ids
-            ).reindex(pd.DatetimeIndex(dates), method='ffill').stack()
+            ).reindex(pd.DatetimeIndex(dates), method=fill_method).stack()
         else:
             data = self.load_factor2(factor_name, factor_dir, dates=dates, ids=ids, idx=idx).stack()
         dummy = np.zeros((len(data), len(mapping)))
@@ -689,7 +700,7 @@ class H5DB(object):
         return self.data_path + os.path.join(factor_path, factor_name+'.h5')
 
     def abs_factor_attr_path(self, factor_path, factor_name):
-        return self.data_path + factor_path + factor_name + '_attr.pkl'
+        return self.data_path + factor_path + factor_name + '.pkl'
     
     def get_available_factor_name(self, factor_name, factor_path):
         i = 2

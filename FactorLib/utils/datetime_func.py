@@ -4,6 +4,7 @@ from fastcache import clru_cache
 from collections import Iterable
 from datetime import datetime as pdDateTime
 from FactorLib.data_source.trade_calendar import tc
+from xlrd.xldate import xldate_as_datetime
 
 import pandas as pd
 import numpy as np
@@ -67,6 +68,12 @@ def MatlabDatetime2Datetime(dates):
     return pd.to_datetime(dates, unit='D')
 
 
+# excel数字格式转成datetime
+def ExcelDatetime2Datetime(dates):
+    datetimes = [xldate_as_datetime(x, 0) for x in dates]
+    return pd.to_datetime(datetimes)
+
+
 def DateRange2Dates(func):
     """
     函数装饰器。
@@ -92,3 +99,36 @@ def DateRange2Dates(func):
         kwargs = {k:v for k,v in kwargs.items() if k not in ['start_date','end_date','dates']}
         return func(*args, dates=dates, **kwargs)
     return wrapper
+
+
+# ******************财务相关**************************
+def GetDefaultAnnouncementDate(report_periods, adjusted=False):
+    """
+    根据财报披露的时间规则找到公告日期
+    
+    Parameters:
+    -----------
+    report_periods: str or list of str
+        报告期  
+    adjusted: bool
+        调整前的财报还是调整后的财报。
+    
+    Returns:
+        DatetimeIndex
+    """
+    from pandas.tseries.offsets import MonthEnd
+    periods = pd.to_datetime(report_periods)
+    quarters = periods.quarter
+    if isinstance(quarters, int):
+        quarters = 1 if quarters==3 else quarters
+    else:
+        quarters = np.where(quarters==3, 1, quarters)
+    announcements = periods + MonthEnd(1) * quarters
+    if adjusted:
+        announcements = announcements + MonthEnd(12)
+    return announcements
+
+    
+    
+    
+    

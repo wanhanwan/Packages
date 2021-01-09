@@ -14,7 +14,17 @@ from .csv_db import CsvDB
 from .bcolz_db import BcolzDB
 from .trade_calendar import tc
 from ..utils.tool_funcs import parse_industry, dummy2name, is_non_string_iterable
+from PkgConstVars import FACTOR_PATH
 
+def load_ashare_basic():
+    basic_file_path = os.path.join(FACTOR_PATH, 'base', 'ashare_list_delist_date.csv')
+    names = pd.read_csv(basic_file_path,
+                        header=0, index_col=0, usecols=[0, 1, 2, 3],
+                        converters={'IDs': lambda x: str(x).zfill(6)},
+                        encoding='GBK').set_index('IDs')
+    return names
+
+ashare_basic = load_ashare_basic()
 
 class Sector(object):
     def __init__(self, h5db):
@@ -27,6 +37,25 @@ class Sector(object):
         st_list = self.h5DB.load_factor2('ashare_st', '/base/', dates=dates, ids=ids, idx=idx,
                                          stack=True).query('ashare_st==1.0')
         return st_list
+
+    def get_stock_basic_info(self, ids=None):
+        """
+        股票基本信息
+        包含：股票代码、股票简称、上市日期、申万一级行业名称
+        """
+
+        if ids is None:
+            basic = ashare_basic
+        else:
+            basic = ashare_basic.reindex(ids)
+        sws_level_1 = sec.get_industry_info(
+            '申万一级',
+            basic.index.tolist(),
+            dates=[datetime.today().date()],
+            fill_method='ffill'
+        ).reset_index('date', drop=True)
+        basic = basic.join(sws_level_1)
+        return basic
 
     def get_history_ashare(self, dates, min_listdays=None,
                            drop_st=False, history=False):
@@ -97,12 +126,30 @@ class Sector(object):
         df.index.names = ['date', 'IDs']
         return df
 
-    def get_industry_members(self, industry_name, classification='中信一级', dates=None):
+    def get_industry_members(self, industry_name, classification='中信一级', dates=None,
+                             fill_method=None):
         """某个行业的股票列表
-        返回Series
+        Parameters:
+        ----------
+        industry_name: str or list of str
+            行业名称
+        classification: str
+            行业分类
+        dates: list
+            日期列表
+        fill_method: str
+            行业信息缺失值填充方式。通常用在提取非交易日期的行业信息上，因为
+            底层数据的是按照交易日存储的。
+        Returns:
+        ---------
+        Series(index=[date,IDs], value=行业名称)
         """
-        dummy = self.get_industry_dummy(classification, dates=dates, drop_first=False)
-        df = dummy[dummy[industry_name]==1]
+        dummy = self.get_industry_dummy(classification, dates=dates,
+                                        drop_first=False, fill_method=fill_method)
+        if isinstance(industry_name, str):
+            df = dummy[dummy[industry_name]==1]
+        else:
+            df = dummy[dummy[list(industry_name)].sum(axis=1)>0]
         return dummy2name(df)
     
     @lru_cache()
@@ -121,26 +168,28 @@ class Sector(object):
                 '基金到期日':'到期日期',
                 '基金经理(现任)':'现任基金经理',
                 '基金经理(历任)': '历任基金经理',
-                '发行份额\r\n[单位] 百万份':'发行规模',
-                '基金规模\r\n[单位] 百万元': '最新规模',
+                '发行份额(百万份)':'发行规模',
+                '基金规模(百万元)': '最新规模',
                 '业绩比较基准': '比较基准',
                 '投资类型(二级分类)': '投资类型'
                 },
             inplace=True
             )
         data = data[data['代码'].apply(lambda x: len(x)==9)]
-        data[['发行规模','最新规模']] /= 100.0
+        data[['发行规模', '最新规模']] /= 100.0
+        data['交易代码'] = data['代码'].str[:6]
         return data
 
     def get_fund_info(self, fund_code=None, fund_type=None,
                       start_date=None, fund_manager=None,
-                      invest_type_1=None, benchmark=None):
+                      invest_type_1=None, benchmark=None,
+                      ignore_A_or_C=False):
         """
         获取公募基金的基本信息
         数据源来自Wind终端-基金数据浏览器-我的模板-全部基金基本信息(包含未成立、已到期)。这个数据需要定时更新。
 
         :param fund_code str or list
-            基金代码(带后缀)
+            基金代码(后缀可带可不带)
         :param fund_type str
             可用','连接
             基金类型(二级分类) 偏股混合型基金  中长期纯债型基金 被动指数型基金 混合债券型一级基金
@@ -157,12 +206,17 @@ class Sector(object):
             一级投资类型：股票型基金、混合型基金、债券型基金、货币市场型基金、另类投资基金、QDII基金
         :param benchmark str
             基准
+        :param ignore_A_or_C bool
+            是否忽略基金的A、B、C类别
         :return DataFrame 代码 名称 现任基金 历任基金经理 基金公司 成立日期 到期日期 发行份额 最新规模 比较基准 投资类型
         """
         fund_info = self.get_fund_file()
         if fund_code:
-            code = [x[:-3]+'.OF' for x in fund_code]
-            fund_info = fund_info[fund_info['代码'].isin(code)]
+            if len(fund_code[0]) == 6:
+                fund_info = fund_info[fund_info['交易代码'].isin(fund_code)]
+            else:
+                code = [x[:-3]+'.OF' for x in fund_code]
+                fund_info = fund_info[fund_info['代码'].isin(code)]
         if fund_type:
             fund_info = fund_info[fund_info['投资类型'].isin(fund_type.split(','))]
         if start_date:
@@ -173,6 +227,10 @@ class Sector(object):
             fund_info = fund_info[fund_info['投资类型(一级分类)'].isin(invest_type_1.split(','))]
         if benchmark:
             fund_info = fund_info[fund_info['比较基准'].str.contains(benchmark)]
+        if ignore_A_or_C:
+            fund_info = fund_info.sort_values(['最新规模'])
+            names = fund_info['名称'].str.rstrip('ABCHRO')
+            fund_info = fund_info[~names.duplicated(keep='last')].sort_values('代码')
         return fund_info
     
     @lru_cache()
@@ -266,6 +324,45 @@ sec = Sector(h5_2)
 class Fund(object):
 
     @staticmethod
+    def get_fund_info(tickers=None,fund_type=None,
+                      start_date=None, fund_manager=None,
+                      invest_type_1=None, benchmark=None,
+                      ignore_A_or_C=False):
+        """获取公募基金的基本信息
+        数据源来自Wind终端-基金数据浏览器-我的模板-全部基金基本信息(包含未成立、已到期)。这个数据需要定时更新。
+
+        :param fund_code str or list
+            基金代码(后缀可带可不带)
+        :param fund_type str
+            可用','连接
+            基金类型(二级分类) 偏股混合型基金  中长期纯债型基金 被动指数型基金 混合债券型一级基金
+                     灵活配置型基金  增强指数型基金  普通股票型基金  偏债混合型基金
+                     商品型基金      混合债券型二级基金 股票多空     平衡混合型基金
+                     短期纯债型基金   国际(QDII)混合型基金        被动指数型债券基金
+                     国际(QDII)股票型基金  REITs
+        :param start_date str
+            基金成立起始日期
+        :param fund_manager str
+            基金经理
+        :param invest_type_1 str
+            可用','连接
+            一级投资类型：股票型基金、混合型基金、债券型基金、货币市场型基金、另类投资基金、QDII基金
+        :param benchmark str
+            基准
+        :param ignore_A_or_C bool
+            是否忽略基金的A、B、C类别
+        :return DataFrame 代码 名称 现任基金经理 历任基金经理 基金公司 成立日期 到期日期 发行份额 最新规模 比较基准 投资类型"""
+        return sec.get_fund_info(
+            fund_code=tickers,
+            fund_type=fund_type,
+            start_date=start_date,
+            fund_manager=fund_manager,
+            invest_type_1=invest_type_1,
+            benchmark=benchmark,
+            ignore_A_or_C=ignore_A_or_C
+        )
+
+    @staticmethod
     def get_fund_by_stock(ticker, period, min_ratio=0.05):
         """
         获取重仓某只股票的基金
@@ -279,18 +376,74 @@ class Fund(object):
         """
         data = h5_2.read_h5file('fund_portfolio', '/fund/')
         period = pd.to_datetime(period)
-        funds = data.query("ticker==@ticker & ratio>=@min_ratio & date==@period")
+        funds = data.query("ticker==@ticker & ratio>=@min_ratio & report_date==@period")
         if not funds.empty:
             fund_info = sec.get_fund_info(funds['IDs'].tolist())
             funds = pd.merge(
-                funds, fund_info, left_on='IDs', right_on='代码'
+                funds, fund_info, left_on='IDs', right_on='交易代码'
             ).sort_values('ratio', ascending=False)
             funds = funds[['IDs', 'report_date', 'ticker', 'ratio',
-                           '名称', '现任基金经理', '成立日期', '最新规模(亿元)']]
+                           '名称', '现任基金经理', '成立日期', '最新规模']]
         return funds
     
     @staticmethod
-    def get_fund_stock_portfolio(ticker, period=None, scale_weight=True, datasource='jq'):
+    def get_fund_asset_allocatio(tickers=None, periods=None, start_period=None, end_period=None):
+        """
+        基金在定期报告中公布的资产配置情况
+
+        Parameters:
+        ----------
+        tickers: list of str
+            基金代码
+        periods: DatetimeIndex
+            报告期
+        start_period: datetime-like object
+            起始报告期
+        end_period: datetime-like object
+            终止报告期
+
+        Returns: DataFrame
+            ['netAsset', 'equityMarketValue', 'bondMarketValue', 'cashMarketValue',
+             'otherMarketValue', 'equityRatioInTa', 'bondRatioInTa', 'cashRatioInTa',\n
+             'otherRatioInTa', 'equityRatioInNa', 'bondRatioInNa', 'cashRatioInNa',
+             'otherRatioInNa']
+        --------
+
+        """
+        if not periods:
+            periods = pd.date_range(start_period, end_period, freq='1Q')
+        df = h5_2.load_factor("fund_asset_allocation", "/fund/", ids=tickers, dates=list(periods))
+        return df
+
+    @staticmethod
+    def get_fund_stock_portfoio_winddb(tickers, period=None, end_date=None, field=None):
+        """
+        从winddb数据源基金的股票占比
+
+        Parameters:
+        -----------
+        tickers: list
+            基金代码(无后缀)
+        period: str
+            财报日期YYYYMMDD
+        end_date: str
+            公告日，返回在次日之前的公开数据
+        field: list
+            "IDs, report_date, ann_dt, ticker, hold_value, hold_vol, ratio, ratio_stk, ratio_flt_shr"
+        """
+        data = h5_2.read_h5file('winddb_fund_stock_portfolio', '/fund/')
+        query_str = "IDs in @tickers"
+        if period:
+            query_str += " and report_date==@period"
+        if end_date:
+            query_str += " and ann_dt<=@end_date"
+        query_result = data.query(query_str)
+        if field:
+            return query_result[field]
+        return query_result
+
+    @staticmethod
+    def get_fund_stock_portfolio(ticker, period=None, scale_weight=True):
         """
         获取基金的个股配比
 
@@ -302,28 +455,22 @@ class Fund(object):
             财报日期 YYYYMMDD
         scale_weight: bool
             权重是否归一化
-        datasource: str
-            数据源，可选jq、None(tushare)
-        
+
         Returns:
         --------
         DataFrame(index=[date, IDs],columns=ticker)
             持仓组合权重
         """
-        file_name = ((datasource or '') + '_fund_portfolio').strip('_')
-        weight_name = 'ratio' if datasource == 'tsl' else 'proportion'
-        ticker += '.OF'
-
-        data = h5_2.read_h5file(file_name, '/fund/')
+        data = h5_2.read_h5file('fund_portfolio', '/fund/')
         if period is None:
             funds = data.query("IDs==@ticker")
         else:
             period = pd.to_datetime(period)
-            funds = data.query("IDs==@ticker & date==@period")
+            funds = data.query("IDs==@ticker & report_date==@period")
         if not funds.empty:
             funds = (
                 funds
-                .set_index(['date', 'symbol'])
+                .set_index(['date', 'ticker'])
                 .sort_index()
                 .rename_axis(['date', 'IDs'])
             )[weight_name]
@@ -416,6 +563,41 @@ class Fund(object):
                 fund_info
             )
         return fund_info
+
+    def get_fund_manager_nav(self, person_ids=None, start_date=None, end_date=None,
+                             category=None):
+        """
+        基金经理净值
+
+        数据源：DataYes
+
+        Parameters:
+        -----------
+        person_ids: list of int
+            基金经理IDs，通联数据ID
+        start_date: str or datetime-like
+            起始日期
+        end_date: str or datetime-like
+            终止日期
+        category: str
+            基金类型,H代表混合基金；E代表股票基金
+
+        Returns：
+        ----------
+        DataFrame: [personID, name, category, endDate, return_rate_daily, return_rate_total]
+        """
+        manager_nav = h5_2.read_h5file('manager_nav', '/fund/')
+        if person_ids:
+            manager_nav = manager_nav.query("personID in @person_ids")
+        if start_date:
+            start_date = pd.to_datetime(start_date)
+            manager_nav = manager_nav.query("endDate >= @start_date")
+        if end_date:
+            end_date = pd.to_datetime(end_date)
+            manager_nav = manager_nav.query("endDate <= @end_date")
+        if category:
+            manager_nav = manager_nav.query("category == @category")
+        return manager_nav
 
 
 class Option(object):

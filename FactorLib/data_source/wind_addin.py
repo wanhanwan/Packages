@@ -81,11 +81,26 @@ class WindAddIn(object):
         return df
     
     def wss(self, filed_names, ids, dates, date_field='tradeDate', arg_dict=None):
-        """封装WindAPI的wss函数
+        """
+        封装WindAPI的wss函数  按日期循环，适合截面数据提取。
         
-        Return:
-        =======
+        Parameters:
+        -----------
+        field_names: str
+            字段名称,以逗号分隔
+        ids: list
+            股票代码
+        dates: list
+            日期序列
+        date_field: str
+            日期参数的名称
+        arg_dict: dict
+            wind系统参数
+
+        Returns:
+        -----------
         DataFrame:(index=[date, IDs], columns=fileds)
+        IDs带后缀
         """
         self.connect()
         ids = suffix_ids(ids)
@@ -107,6 +122,26 @@ class WindAddIn(object):
         return df
     
     def wsd(self, field_names, ids, start_dt, end_dt, arg_dict=None):
+        """
+        Wind API WSD函数封装  按股票循环，适合时间序列数据提取。
+
+        Parameters:
+        -----------
+        field_names: str
+            字段名称，以逗号分隔。
+        ids: list
+            股票代码。
+        start_date: str 
+            起始日期
+        end_date: str
+            终止日期
+        arg_dict: dict
+            wsd的系统参数
+        
+        Returns:
+        ----------
+        DataFrame(index=[date, IDs], columns=field_names) IDs带后缀
+        """
         self.connect()
         ids = suffix_ids(ids)
         arg_dict = {} if arg_dict is None else arg_dict
